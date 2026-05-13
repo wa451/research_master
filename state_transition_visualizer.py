@@ -9,19 +9,22 @@ Date: 2026-02-05
 """
 
 import os
+import json
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import timedelta
 from collections import Counter, defaultdict
 from typing import List, Tuple, Dict, Optional
 import networkx as nx
 import matplotlib.pyplot as plt
-from scipy.spatial.distance import hamming
+
+from experiment_config import DATASET_NAME, DAYS, HAMMING_THRESHOLD, N_STATES, ROOT_DIR
 
 # 定数定義
-DATA_DURATION_DAYS = 14                  # 使用するデータの期間（日数）。None で全期間を使用
-DEFAULT_N_STATES = 15                    # 代表状態の数（頻度上位K個を抽出）
-DEFAULT_HAMMING_THRESHOLD = 1            # 状態マッピング時のハミング距離閾値（異なるセンサー数の許容値）
+DATA_DURATION_DAYS = DAYS                # 使用するデータの期間（日数）。None の場合は全体日数×DATA_DURATION_RATIO
+DATA_DURATION_RATIO = 0.7                # DATA_DURATION_DAYS が None のときに使う日数比率
+DEFAULT_N_STATES = N_STATES              # 代表状態の数（頻度上位K個を抽出）
+DEFAULT_HAMMING_THRESHOLD = HAMMING_THRESHOLD  # 状態マッピング時のハミング距離の上限（この値以下を許可）
 DEFAULT_MIN_TRANSITION_PROB = 0.1        # グラフに表示する最小遷移確率（これ以下のエッジは非表示）
 SAMPLING_INTERVAL = '1s'                 # 状態ベクトルのサンプリング間隔
 
@@ -33,14 +36,15 @@ DEFAULT_TIME_MODES = {
     'Midnight': ('00:00', '06:00')
 }
 
-NODE_SIZE_MULTIPLIER = 100              # ノードサイズの倍率（出現回数 × この値 = ノードサイズ）
+NODE_SIZE_MULTIPLIER = 500              # ノードサイズの倍率（1日の平均滞在時間(分) × この値 = ノードサイズ）
+NODE_SIZE_MAX = 1000000                   # ノードの最大サイズ（ピクセル²）
 FIGURE_SIZE = (36, 32)                   # グラフの図のサイズ（幅, 高さ）インチ単位
 FONT_SIZE_LABEL = 24                     # ノードラベルのフォントサイズ
 FONT_SIZE_EDGE = 48                      # エッジラベルのフォントサイズ
 FONT_SIZE_TITLE = 48                     # タイトルのフォントサイズ
 
 # レイアウト調整パラメータ（ノードの重なりを防ぐ）
-LAYOUT_K = 2.5                          # spring_layoutのノード間距離（大きいほど離れる、デフォルト:1.0）
+LAYOUT_K = 0.5                         # spring_layoutのノード間距離（大きいほど離れる、デフォルト:1.0）
 LAYOUT_ITERATIONS = 100                 # レイアウト計算の反復回数（多いほど精度が高い）
 
 # センサー値のON/OFF判定用セット
@@ -60,7 +64,9 @@ class StateTransitionVisualizer:
                  min_transition_prob: float = DEFAULT_MIN_TRANSITION_PROB,
                  hamming_threshold: int = DEFAULT_HAMMING_THRESHOLD,
                  time_modes: Optional[Dict[str, Tuple[str, str]]] = None,
-                 data_duration_days: Optional[int] = DATA_DURATION_DAYS):
+                 data_duration_days: Optional[int] = DATA_DURATION_DAYS,
+                 data_duration_ratio: float = DATA_DURATION_RATIO,
+                 smoothing_window_sec: int = 180):
         """
         初期化
         
@@ -75,13 +81,22 @@ class StateTransitionVisualizer:
         time_modes : Optional[Dict[str, Tuple[str, str]]]
             時間帯モード定義（キー=モード名、値=(開始時刻, 終了時刻)）
         data_duration_days : Optional[int]
-            使用するデータの期間（日数）。Noneで全期間を使用
+            使用するデータの期間（日数）。Noneの場合は data_duration_ratio を適用
+        data_duration_ratio : float
+            data_duration_days が None の場合に適用する日数比率（0.0〜1.0）
+        smoothing_window_sec : int
+            チャタリング除去用の遅延OFF窓幅（秒）。
+            ONになったセンサーをこの間経過後まで ONのまま維持する。
+            0以下でスムージング無効。
         """
         self.n_representative_states = n_representative_states
         self.min_transition_prob = min_transition_prob
         self.hamming_threshold = hamming_threshold
         self.time_modes = time_modes if time_modes is not None else DEFAULT_TIME_MODES
         self.data_duration_days = data_duration_days
+        self.data_duration_ratio = data_duration_ratio
+        self.smoothing_window_sec = smoothing_window_sec
+        self.effective_data_duration_days = None
         
         # データ保持用
         self.sensor_list = []
@@ -92,12 +107,14 @@ class StateTransitionVisualizer:
         self.state_durations = {}
         self.state_occurrences = {}
         self.state_labels = {}
+        self.num_days = 1  # データの日数
         
         # モードごとのデータ保持用
         self.mode_transition_matrices = {}
         self.mode_state_occurrences = {}
         self.mode_state_sequences = {}
         self.mode_state_durations = {}
+        self.mode_num_days = {}  # モードごとの日数
 
 # データ読み込み        
     def load_data(self, filepath: str) -> pd.DataFrame:
@@ -240,15 +257,31 @@ class StateTransitionVisualizer:
         pd.DataFrame
             フィルタリング後のデータ
         """
-        if self.data_duration_days is None:
-            return df
-        
-        start_time = df['timestamp'].min()
-        end_time = start_time + timedelta(days=self.data_duration_days)
+        # 日付を深夜0時に正規化することで、カレンダー日数を正確に data_duration_days 日に揃える
+        start_time = df['timestamp'].min().normalize()  # 最初のイベント日の 00:00:00
+        last_day = df['timestamp'].max().normalize()
+        total_days = max((last_day - start_time).days + 1, 1)
+        use_ratio_mode = self.data_duration_days is None
+
+        if not use_ratio_mode:
+            target_days = max(1, self.data_duration_days)
+        else:
+            target_days = max(1, int(total_days * self.data_duration_ratio))
+            # 比率モードで確定した実日数を保持する
+            self.data_duration_days = target_days
+
+        self.effective_data_duration_days = target_days
+        end_time = start_time + timedelta(days=target_days)
         
         df_filtered = df[df['timestamp'] < end_time].copy()
         
-        print(f"\n  期間制限を適用: 最初の{self.data_duration_days}日間")
+        if use_ratio_mode:
+            print(
+                f"\n  期間制限を適用: 全{total_days}日中 {target_days}日"
+                f" (比率 {self.data_duration_ratio:.0%})"
+            )
+        else:
+            print(f"\n  期間制限を適用: 最初の{target_days}日間")
         print(f"  開始: {start_time}")
         print(f"  終了: {end_time}")
         print(f"  フィルタリング後のイベント数: {len(df_filtered)}")
@@ -276,8 +309,17 @@ class StateTransitionVisualizer:
         print(f"  対象センサー: {len(self.sensor_list)}個")
         
         # 時間範囲を決定（1秒刻み）
-        start_time = df['timestamp'].min().replace(microsecond=0)
-        end_time = df['timestamp'].max().replace(microsecond=0) + timedelta(seconds=1)
+        # 開始を深夜0時に正規化することで、カレンダー日数を data_duration_days に厳密に揃える
+        start_time = df['timestamp'].min().normalize()  # 最初のイベント日の 00:00:00
+        duration_days = self.effective_data_duration_days
+        if duration_days is None and self.data_duration_days is not None:
+            duration_days = self.data_duration_days
+
+        if duration_days is not None:
+            # end は exclusive にするため 1秒引く（day14 00:00:00 を含まず day13 23:59:59 まで）
+            end_time = start_time + timedelta(days=duration_days) - timedelta(seconds=1)
+        else:
+            end_time = df['timestamp'].max().replace(microsecond=0)
         time_range = pd.date_range(start=start_time, end=end_time, freq=SAMPLING_INTERVAL)
         
         print(f"  時間範囲: {len(time_range)}秒")
@@ -290,7 +332,12 @@ class StateTransitionVisualizer:
                                              columns=self.sensor_list)
         
         print(f"  状態ベクトル生成完了: {len(self.state_vectors_df)}行 × {len(self.sensor_list)}列")
-        
+        print("  状態ベクトルのサンプル（先頭5行）:")
+        print(self.state_vectors_df.head(5).to_string())
+
+        # チャタリング除去：圧縮前のフル解像度データに対して遅延OFF処理を適用
+        self._apply_smoothing()
+
         # 状態ベクトル全体として連続する同じものを除去
         self._compress_state_vectors()
         print(self.state_vectors_df.head(3))
@@ -311,9 +358,45 @@ class StateTransitionVisualizer:
                 event_idx += 1
             
             state_vectors.append(sensor_states.copy())
-        
         return state_vectors
     
+    def _apply_smoothing(self):
+        """
+        遅延OFF（チャタリング除去）処理
+
+        センサーが一度 ONになったら、OFF信号が来ても
+        `smoothing_window_sec` 秒間は ON を維持し続ける。
+        窓内に再度 ON が来た場合はそこから更に延長される。
+
+        実装: 1秒サンプリングの DataFrame を利用し、
+            rolling(window).max() で各センサーをベクトル化して高速処理する。
+
+        数学的意味:
+            時刻 t における状態 = max(t-W+1 ... t) の元の状態
+            (過去 W 秒のいずれかで ON なら引き続き ON)
+        """
+        if self.smoothing_window_sec <= 0:
+            return
+
+        w = self.smoothing_window_sec  # 1秒サンプリングなので秒数 = 行数
+        print(f"  チャタリング除去 (遅延OFF窓: {w}秒) を適用中...")
+
+        # 各センサー列に rolling max を適用して遅延OFFを実現する。
+        # rolling(w).max() は「異なる ON 信号が W 内にあれば ON を維持」する効果を持つ。
+        # min_periods=1 はデータ先頭でウィンドウが不足している際に NaN にしないため。
+        smoothed = (
+            self.state_vectors_df
+            .rolling(window=w, min_periods=1)
+            .max()
+            .astype(int)
+        )
+
+        before = (self.state_vectors_df == 0).sum().sum()  # 元のOFF数
+        after  = (smoothed == 0).sum().sum()               # 後のOFF数
+        print(f"  チャタリング除去完了: OFF状態が {before - after} 秒分 ONに変換")
+
+        self.state_vectors_df = smoothed
+
     def _compress_state_vectors(self):
         """連続する同じ状態ベクトルを除去"""
         original_length = len(self.state_vectors_df)
@@ -414,6 +497,9 @@ class StateTransitionVisualizer:
             self.state_durations[state] = 0
         self.state_durations['Other'] = 0
         
+        # データの日数を計算
+        self.num_days = max(len(self.state_vectors_df.index.normalize().unique()), 1)
+        
         # 時系列インデックスから時間差を計算
         timestamps = self.state_vectors_df.index
         
@@ -428,13 +514,15 @@ class StateTransitionVisualizer:
             
             self.state_durations[state] += duration
         
-        print(f"  滞在時間計算完了:")
+        print(f"  滞在時間計算完了 (データ日数: {self.num_days}日):")
         for state in self.representative_states:
             label = self.state_labels[state]
             duration = self.state_durations[state]
-            print(f"    {label}: {duration:.1f}秒 ({duration/60:.1f}分)")
+            daily = duration / self.num_days
+            print(f"    {label}: 合計{duration:.1f}秒 / 1日平均{daily:.1f}秒 ({daily/60:.1f}分)")
         if self.state_durations['Other'] > 0:
-            print(f"    その他: {self.state_durations['Other']:.1f}秒 ({self.state_durations['Other']/60:.1f}分)")
+            daily = self.state_durations['Other'] / self.num_days
+            print(f"    その他: 合計{self.state_durations['Other']:.1f}秒 / 1日平均{daily:.1f}秒 ({daily/60:.1f}分)")
     
     def map_to_representative_states(self) -> List:
         """
@@ -470,8 +558,8 @@ class StateTransitionVisualizer:
                         min_distance = distance
                         closest_state = rep_state
                 
-                # 距離が閾値以内なら代表状態に、そうでなければ"Other"
-                if min_distance < self.hamming_threshold:# 閾値未満 → 代表状態にマッピング
+                # 距離が閾値以下なら代表状態に、そうでなければ"Other"
+                if min_distance <= self.hamming_threshold:
                     mapped_states.append(closest_state)
                 else:
                     mapped_states.append('Other')
@@ -582,7 +670,7 @@ class StateTransitionVisualizer:
                             min_distance = distance
                             closest_state = rep_state
                     
-                    if min_distance < self.hamming_threshold:
+                    if min_distance <= self.hamming_threshold:
                         mode_sequence.append(closest_state)
                     else:
                         mode_sequence.append('Other')
@@ -625,6 +713,9 @@ class StateTransitionVisualizer:
             
             # モード別の滞在時間を保存
             self.mode_state_durations[mode_name] = mode_durations
+            
+            # このモードの日数を計算
+            self.mode_num_days[mode_name] = max(len(filtered_df.index.normalize().unique()), 1)
             
             # 遷移回数をカウント
             transition_counts = defaultdict(lambda: defaultdict(int))
@@ -688,6 +779,146 @@ class StateTransitionVisualizer:
                 f.write('\t'.join(other_row) + '\n')
         
         print(f"  状態テーブルを保存: {filepath}")
+
+    def export_to_json(self, filepath: str):
+        """
+        状態遷移ネットワークをLLM向けJSON形式で保存
+
+        Parameters:
+        -----------
+        filepath : str
+            保存先JSONファイルパス
+        """
+        print("\nJSONエクスポート")
+
+        if self.transition_matrix is None or not self.state_labels:
+            raise ValueError("遷移行列または状態ラベルが未作成です。main() または各処理を先に実行してください。")
+
+        # ノード情報の作成
+        nodes = []
+        all_states = list(self.representative_states)
+        if 'Other' in self.state_durations:
+            all_states.append('Other')
+
+        for state in all_states:
+            state_id = self._state_to_label(state)
+            duration_sec = self.state_durations.get(state, 0.0)
+            avg_minutes = (duration_sec / max(self.num_days, 1)) / 60.0
+
+            if state == 'Other':
+                active_sensors = []
+            else:
+                active_sensors = [
+                    sensor
+                    for sensor, value in zip(self.sensor_list, state)
+                    if int(value) == 1
+                ]
+
+            nodes.append({
+                "state_id": state_id,
+                "active_sensors": active_sensors,
+                "avg_duration_minutes_per_day": round(avg_minutes, 3)
+            })
+
+        # エッジ情報の作成
+        edges = []
+        for from_state, transitions in self.transition_matrix.items():
+            for to_state, prob in transitions.items():
+                edges.append({
+                    "from": self._state_to_label(from_state),
+                    "to": self._state_to_label(to_state),
+                    "probability": round(float(prob), 3)
+                })
+
+        export_data = {
+            "nodes": nodes,
+            "edges": edges
+        }
+
+        # 保存先ディレクトリが存在しない場合は作成
+        save_dir = os.path.dirname(filepath)
+        if save_dir and not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(export_data, f, ensure_ascii=False, indent=2)
+
+        print(f"  JSONを保存: {filepath}")
+
+    def export_mode_to_json(self, mode_name: str, filepath: str):
+        """
+        指定モードの状態遷移ネットワークをLLM向けJSON形式で保存
+
+        Parameters:
+        -----------
+        mode_name : str
+            モード名（例: Morning, Daytime）
+        filepath : str
+            保存先JSONファイルパス
+        """
+        print(f"\n  モード '{mode_name}' のJSONエクスポート")
+
+        if mode_name not in self.mode_transition_matrices:
+            raise ValueError(f"モード '{mode_name}' の遷移行列がありません。")
+
+        mode_transition_matrix = self.mode_transition_matrices[mode_name]
+        mode_durations = self.mode_state_durations.get(mode_name, {})
+        mode_occurrences = self.mode_state_occurrences.get(mode_name, {})
+        mode_days = max(self.mode_num_days.get(mode_name, 1), 1)
+
+        # ノード情報の作成（当該モードで出現した状態のみ）
+        nodes = []
+        all_states = list(self.representative_states)
+        if 'Other' in mode_occurrences:
+            all_states.append('Other')
+
+        for state in all_states:
+            if state not in mode_occurrences:
+                continue
+
+            state_id = self._state_to_label(state)
+            duration_sec = mode_durations.get(state, 0.0)
+            avg_minutes = (duration_sec / mode_days) / 60.0
+
+            if state == 'Other':
+                active_sensors = []
+            else:
+                active_sensors = [
+                    sensor
+                    for sensor, value in zip(self.sensor_list, state)
+                    if int(value) == 1
+                ]
+
+            nodes.append({
+                "state_id": state_id,
+                "active_sensors": active_sensors,
+                "avg_duration_minutes_per_day": round(avg_minutes, 3)
+            })
+
+        # エッジ情報の作成
+        edges = []
+        for from_state, transitions in mode_transition_matrix.items():
+            for to_state, prob in transitions.items():
+                edges.append({
+                    "from": self._state_to_label(from_state),
+                    "to": self._state_to_label(to_state),
+                    "probability": round(float(prob), 3)
+                })
+
+        export_data = {
+            "nodes": nodes,
+            "edges": edges
+        }
+
+        # 保存先ディレクトリが存在しない場合は作成
+        save_dir = os.path.dirname(filepath)
+        if save_dir and not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(export_data, f, ensure_ascii=False, indent=2)
+
+        print(f"    JSON保存完了: {filepath}")
 
 # グラフ可視化
     def _state_to_label(self, state) -> str:
@@ -768,10 +999,12 @@ class StateTransitionVisualizer:
             all_states.append('Other')
         
         for state in all_states:
+            duration = self.state_durations.get(state, 0)
             G.add_node(state, 
                       label=self._state_to_label(state),
                       occurrences=self.state_occurrences.get(state, 0),
-                      duration=self.state_durations.get(state, 0))
+                      duration=duration,
+                      daily_duration=duration / self.num_days)
         
         # エッジの追加（遷移確率が閾値以上のもののみ）
         for from_state, transitions in self.transition_matrix.items():
@@ -814,9 +1047,11 @@ class StateTransitionVisualizer:
         title_suffix : str
             タイトルに追加する文字列（モード名など）
         """
-        # ノードサイズの計算（滞在時間に基づく）
-        node_sizes = [G.nodes[node]['duration'] * NODE_SIZE_MULTIPLIER / 60  # 秒を分に変換して適切なサイズに
-                     for node in G.nodes()]
+        # ノードサイズの計算（1日の平均滞在時間(分)に比例、最大サイズでクリップ）
+        node_sizes = [
+            min(G.nodes[node]['daily_duration'] / 60 * NODE_SIZE_MULTIPLIER, NODE_SIZE_MAX)
+            for node in G.nodes()
+        ]
         
         # ノードの描画
         nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color='lightblue',
@@ -852,9 +1087,15 @@ class StateTransitionVisualizer:
         save_dir = os.path.dirname(save_path)
         if save_dir and not os.path.exists(save_dir):
             os.makedirs(save_dir)
-        
+
+        # PNG保存
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"  図を保存: {save_path}")
+
+        # EPS保存（同名・拡張子のみ変更）
+        eps_path = os.path.splitext(save_path)[0] + ".eps"
+        plt.savefig(eps_path, format='eps', bbox_inches='tight')
+        print(f"  図を保存: {eps_path}")
     
     def _get_state_color_mapping(self):
         """
@@ -884,6 +1125,59 @@ class StateTransitionVisualizer:
         
         return state_to_num, cmap
     
+    def _build_heatmap_data(self, full_timeline: pd.Series,
+                             dates: list,
+                             start_sec: int,
+                             end_sec: int) -> np.ndarray:
+        """
+        ヒートマップ用の2D配列を構築する。
+
+        全期間の状態タイムライン（圧縮済み）から、指定した日付リストと
+        時間帯 [start_sec, end_sec) の各秒における状態番号を返す。
+
+        前日以前のデータを引き継ぐことで、モード開始時刻に状態変化がなくても
+        空白にならない（Daytimeなど変化が少ない時間帯でも正しく塗られる）。
+
+        Parameters:
+        -----------
+        full_timeline : pd.Series
+            index=タイムスタンプ, values=state_num（整数）
+        dates : list
+            対象日付のリスト
+        start_sec : int
+            モード開始秒（例: 10*3600）
+        end_sec : int
+            モード終了秒（例: 18*3600）
+
+        Returns:
+        --------
+        np.ndarray, shape=(len(dates), end_sec - start_sec)
+        """
+        n_secs = end_sec - start_sec
+        heatmap = np.full((len(dates), n_secs), np.nan)
+
+        for day_idx, date in enumerate(dates):
+            # この日のモード開始・終了タイムスタンプ
+            start_ts = pd.Timestamp(date) + pd.Timedelta(seconds=start_sec)
+            end_ts   = pd.Timestamp(date) + pd.Timedelta(seconds=end_sec)
+
+            # モード終了時刻より前の全イベントを取得（前日以前も含む）
+            # → モード開始時刻に変化がない日でも、直前の状態を引き継げる
+            past = full_timeline[full_timeline.index < end_ts]
+            if len(past) == 0:
+                continue
+
+            # 出力する各秒のタイムスタンプ列
+            second_range = pd.date_range(start=start_ts, periods=n_secs, freq='1s')
+
+            # イベント時刻と出力時刻をまとめてリインデックス → 前方補完で状態を伝播
+            combined = past.reindex(past.index.union(second_range)).ffill()
+
+            # 必要な秒だけ抽出して行に格納
+            heatmap[day_idx] = combined.reindex(second_range).values
+
+        return heatmap
+
     def visualize_mode_timeline(self, figsize: Tuple[int, int] = (24, 8),
                                 save_path: Optional[str] = None):
         """
@@ -914,45 +1208,28 @@ class StateTransitionVisualizer:
         
         # 固定の色マッピングを取得
         state_to_num, cmap = self._get_state_color_mapping()
-        
-        state_nums = [state_to_num.get(state, 0) for state in self.state_sequence]
-        
-        # 日付ごとにデータを分割
-        df_timeline = pd.DataFrame({
-            'timestamp': original_indices,
-            'state_num': state_nums
-        })
-        df_timeline['date'] = df_timeline['timestamp'].dt.date
-        df_timeline['time'] = df_timeline['timestamp'].dt.hour * 3600 + df_timeline['timestamp'].dt.minute * 60 + df_timeline['timestamp'].dt.second
-        
-        dates = sorted(df_timeline['date'].unique())
+
+        # 全期間の状態タイムライン（圧縮済みインデックス → state_num）を構築
+        full_timeline = pd.Series(
+            [state_to_num.get(s, 0) for s in self.state_sequence],
+            index=original_indices
+        )
+
+        # 対象日付は state_vectors_df 全体の日付範囲から取得
+        dates = sorted(set(self.state_vectors_df.index.date))
         num_days = len(dates)
-        
-        # 1日を秒単位で表現（0-86399秒）
-        time_slots = np.arange(0, 86400)
-        
-        # ヒートマップ用の2D配列を作成（行=日、列=秒）
-        heatmap_data = np.full((num_days, len(time_slots)), np.nan)
-        
-        for day_idx, date in enumerate(dates):
-            day_data = df_timeline[df_timeline['date'] == date]
-            for _, row in day_data.iterrows():
-                time_sec = int(row['time'])
-                if time_sec < len(time_slots):
-                    heatmap_data[day_idx, time_sec] = row['state_num']
-        
-        # NaNを前方埋め（状態は次の変化まで継続）
-        for day_idx in range(num_days):
-            heatmap_data[day_idx] = pd.Series(heatmap_data[day_idx]).ffill().values
-        
+
+        # ヒートマップを構築（1日全体: 0秒〜86400秒）
+        heatmap_data = self._build_heatmap_data(full_timeline, dates, 0, 86400)
+
         # プロット作成
         fig, ax = plt.subplots(figsize=figsize)
-        
+
         # ヒートマップを描画（固定のカラーマップを使用）
-        im = ax.imshow(heatmap_data, aspect='auto', cmap=cmap, 
+        im = ax.imshow(heatmap_data, aspect='auto', cmap=cmap,
                       vmin=0, vmax=len(self.representative_states),
                       interpolation='nearest')
-        
+
         # X軸の設定（時刻）
         hour_ticks = [h * 3600 for h in range(0, 25, 3)]  # 3時間ごと
         hour_labels = [f'{h:02d}:00' for h in range(0, 25, 3)]
@@ -1026,76 +1303,44 @@ class StateTransitionVisualizer:
             
             # このモードの時間範囲を取得
             start_time, end_time = self.time_modes[mode_name]
-            filtered_df = self._filter_by_time_mode(mode_name, start_time, end_time)
-            
-            if len(filtered_df) == 0 or len(state_sequence) == 0:
-                print(f"    Warning: No data for mode '{mode_name}'. Skipping...")
-                continue
-            
-            if len(state_sequence) != len(filtered_df):
-                print(f"    Warning: Sequence length mismatch. Expected {len(filtered_df)}, got {len(state_sequence)}")
-                continue
-            
+
             # 固定の色マッピングを取得
             state_to_num, cmap = self._get_state_color_mapping()
-            
-            state_nums = [state_to_num.get(state, 0) for state in state_sequence]
-            time_indices = filtered_df.index
-            
-            # 日付ごとにデータを分割
-            df_timeline = pd.DataFrame({
-                'timestamp': time_indices,
-                'state_num': state_nums
-            })
-            df_timeline['date'] = df_timeline['timestamp'].dt.date
-            df_timeline['time'] = df_timeline['timestamp'].dt.hour * 3600 + df_timeline['timestamp'].dt.minute * 60 + df_timeline['timestamp'].dt.second
-            
-            dates = sorted(df_timeline['date'].unique())
+
+            # 全期間の状態タイムライン（圧縮済みインデックス → state_num）を構築
+            # ※ mode_state_sequences ではなく self.state_sequence（全期間）を使う。
+            #   モード外の時間帯のデータも前の状態引き継ぎに必要なため。
+            full_timeline = pd.Series(
+                [state_to_num.get(s, 0) for s in self.state_sequence],
+                index=self.state_vectors_df.index
+            )
+
+            # 対象日付は state_vectors_df 全体から取得（イベントがない日も含む）
+            dates = sorted(set(self.state_vectors_df.index.date))
             num_days = len(dates)
-            
+
             # モード時間帯の秒範囲を計算
             start_hour, start_minute = map(int, start_time.split(':'))
             end_hour, end_minute = map(int, end_time.split(':'))
             start_sec = start_hour * 3600 + start_minute * 60
             end_sec = end_hour * 3600 + end_minute * 60
-            
             if end_sec <= start_sec:  # 日をまたぐ場合
                 end_sec = 24 * 3600
-            
-            time_range = end_sec - start_sec
-            time_slots = np.arange(start_sec, end_sec)
-            
-            # ヒートマップ用の2D配列を作成（行=日、列=秒）
-            heatmap_data = np.full((num_days, len(time_slots)), np.nan)
-            
-            for day_idx, date in enumerate(dates):
-                day_data = df_timeline[df_timeline['date'] == date]
-                for _, row in day_data.iterrows():
-                    time_sec = int(row['time'])
-                    if start_sec <= time_sec < end_sec:
-                        col_idx = time_sec - start_sec
-                        if col_idx < len(time_slots):
-                            heatmap_data[day_idx, col_idx] = row['state_num']
-            
-            # NaNを前方埋め（状態は次の変化まで継続）
-            for day_idx in range(num_days):
-                heatmap_data[day_idx] = pd.Series(heatmap_data[day_idx]).ffill().values
-            
+
+            # ヒートマップを構築
+            heatmap_data = self._build_heatmap_data(full_timeline, dates, start_sec, end_sec)
+
             # プロット作成
             fig, ax = plt.subplots(figsize=figsize)
-            
+
             # ヒートマップを描画（固定のカラーマップを使用）
             im = ax.imshow(heatmap_data, aspect='auto', cmap=cmap,
                           vmin=0, vmax=len(self.representative_states),
                           interpolation='nearest')
-            
+
             # X軸の設定（時刻）
-            duration_hours = time_range / 3600
-            if duration_hours <= 6:
-                tick_interval = 3600  # 1時間ごと
-            else:
-                tick_interval = 2 * 3600  # 2時間ごと
-            
+            duration_secs = end_sec - start_sec
+            tick_interval = 3600 if duration_secs <= 6 * 3600 else 2 * 3600
             hour_ticks = [t - start_sec for t in range(start_sec, end_sec + 1, tick_interval)]
             hour_labels = [f'{(start_sec + t) // 3600:02d}:{((start_sec + t) % 3600) // 60:02d}' for t in hour_ticks]
             ax.set_xticks(hour_ticks)
@@ -1166,10 +1411,13 @@ class StateTransitionVisualizer:
             
             for state in all_states:
                 if state in self.mode_state_occurrences[mode_name]:
+                    duration = self.mode_state_durations[mode_name].get(state, 0)
+                    mode_days = self.mode_num_days.get(mode_name, 1)
                     G.add_node(state,
                               label=self._state_to_label(state),
                               occurrences=self.mode_state_occurrences[mode_name].get(state, 0),
-                              duration=self.mode_state_durations[mode_name].get(state, 0))
+                              duration=duration,
+                              daily_duration=duration / mode_days)
             
             # エッジの追加
             for from_state, transitions in transition_matrix.items():
@@ -1189,12 +1437,16 @@ class StateTransitionVisualizer:
             
             # 保存
             save_path = os.path.join(save_dir, f'state_transition_{mode_name}.png')
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            self._save_figure(save_path)
             plt.close()
             
             print(f"    保存完了: {save_path}")
+
+            # 同じフォルダにモード別JSONも保存
+            json_path = os.path.join(save_dir, f'state_transition_{mode_name}.json')
+            self.export_mode_to_json(mode_name, json_path)
     
-    def run_pipeline(self, filepath: str, save_figure: bool = True, mode_split: bool = False):
+    def main(self, filepath: str, mode_split: bool = False):
         """
         全パイプラインの実行
         
@@ -1202,8 +1454,6 @@ class StateTransitionVisualizer:
         -----------
         filepath : str
             ログファイルのパス
-        save_figure : bool
-            図を保存するかどうか
         mode_split : bool
             時間帯モード分割を行うかどうか
         """
@@ -1221,22 +1471,21 @@ class StateTransitionVisualizer:
         self.map_to_representative_states()
         self.compute_transition_matrix()
         
-        # 保存フォルダとパスの生成
-        if save_figure:
-            save_folder, save_path, state_table_path = self._generate_save_folder(filepath)
-        else:
-            save_folder, save_path, state_table_path = None, None, None
+        # 保存フォルダとパスを生成（常に保存）
+        save_folder, save_path, state_table_path = self._generate_save_folder(filepath)
         
         # 可視化と保存（全期間）
         plt_obj = self.visualize_transition_graph(save_path=save_path)
+
+        # JSONエクスポート（全期間）: 遷移図と同じフォルダに保存
+        json_path = os.path.join(save_folder, "state_transition_all.json")
+        self.export_to_json(json_path)
         
         # 時系列図の可視化（全期間）
-        if save_figure and save_folder:
-            timeline_path = os.path.join(save_folder, "timeline_all.png")
-            self.visualize_mode_timeline(save_path=timeline_path)
+        timeline_path = os.path.join(save_folder, "timeline_all.png")
+        self.visualize_mode_timeline(save_path=timeline_path)
         
-        if state_table_path:
-            self.save_state_table(state_table_path)
+        self.save_state_table(state_table_path)
         
         # モード分割処理（オプション）
         if mode_split:
@@ -1262,7 +1511,7 @@ class StateTransitionVisualizer:
         data_filename = os.path.splitext(os.path.basename(filepath))[0]
         
         # 保存先フォルダ: picture/データセット名_代表状態数_ハミング距離閾値/
-        save_folder = f"picture/{data_filename}_{self.n_representative_states}_{self.hamming_threshold}"
+        save_folder = f"picture/{data_filename}_{self.n_representative_states}_{self.hamming_threshold}_{self.data_duration_days}days"
         
         # フォルダを作成
         if not os.path.exists(save_folder):
@@ -1272,7 +1521,7 @@ class StateTransitionVisualizer:
         save_path = os.path.join(save_folder, "state_transition_all.png")
         
         # 状態テーブル保存パス
-        state_table_path = f"state/{data_filename}_{self.n_representative_states}_{self.hamming_threshold}.txt"
+        state_table_path = f"state/{data_filename}_{self.n_representative_states}_{self.hamming_threshold}_{self.data_duration_days}days.txt"
         
         return save_folder, save_path, state_table_path
 
@@ -1280,8 +1529,8 @@ class StateTransitionVisualizer:
 if __name__ == "__main__":
     # 実データファイルのパス
     # data_file = "openshs-datasets-ff6d87d/docs/datasets/openshs-classification/d1_1m_0tm.csv"
-    data_file = "openshs-datasets-ff6d87d/docs/datasets/openshs-classification/d2_1m_0tm.csv"
-    # data_file = "data/aruba.csv"
+    # data_file = "openshs-datasets-ff6d87d/docs/datasets/openshs-classification/d2_1m_0tm.csv"
+    data_file = str(ROOT_DIR / "data" / f"{DATASET_NAME}.csv")
     
     if not os.path.exists(data_file):
         print(f"エラー: データファイルが見つかりません: {data_file}")
@@ -1294,7 +1543,7 @@ if __name__ == "__main__":
     visualizer = StateTransitionVisualizer()
     
     # 時間帯別モード分割を有効にして実行
-    visualizer.run_pipeline(data_file, mode_split=True)
+    visualizer.main(data_file, mode_split=True)
     
     # カスタム時間帯定義の例（必要に応じて使用）
     # custom_modes = {
@@ -1303,4 +1552,4 @@ if __name__ == "__main__":
     #     'Evening': ('18:00', '24:00')
     # }
     # visualizer_custom = StateTransitionVisualizer(time_modes=custom_modes)
-    # visualizer_custom.run_pipeline(data_file, mode_split=True)
+    # visualizer_custom.main(data_file, mode_split=True)

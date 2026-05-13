@@ -135,7 +135,7 @@ visualizer.run_pipeline('path/to/sensor_data.csv', mode_split=True)
 ## サンプル実行
 
 ```bash
-uv run python main.py
+uv run python state_transition_visualizer.py
 ```
 
 ## 依存関係
@@ -211,3 +211,6 @@ uv sync
 uv lock --upgrade
 uv sync
 ```
+
+picture/
+    データセット名_代表状態数_ハミング距離
