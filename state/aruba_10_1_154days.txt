@@ -1,0 +1,12 @@
+状態	Bathroom	Bedroom	DiningRoom	GuestRoom	Kitchen	LivingRoom	LoungeChair	OtherRoom	OutsideDoor	WorkArea
+状態1	0	0	0	0	0	0	0	0	0	0
+状態2	0	0	0	0	0	0	1	0	0	0
+状態3	0	0	0	0	0	1	1	0	0	0
+状態4	0	0	1	0	0	1	1	0	0	0
+状態5	0	1	0	0	0	0	0	0	0	0
+状態6	0	0	1	0	1	1	1	0	0	0
+状態7	1	1	0	0	0	0	0	0	0	0
+状態8	1	1	0	0	0	1	0	1	0	0
+状態9	1	0	0	0	0	0	0	0	0	0
+状態10	0	0	1	0	1	1	0	0	0	0
+その他	-	-	-	-	-	-	-	-	-	-

@@ -1,0 +1,1253 @@
+{
+  "nodes": [
+    {
+      "state_id": "状態1",
+      "active_sensors": [],
+      "avg_duration_minutes_per_day": 785.702
+    },
+    {
+      "state_id": "状態2",
+      "active_sensors": [
+        "LoungeChair"
+      ],
+      "avg_duration_minutes_per_day": 200.276
+    },
+    {
+      "state_id": "状態3",
+      "active_sensors": [
+        "LivingRoom",
+        "LoungeChair"
+      ],
+      "avg_duration_minutes_per_day": 87.205
+    },
+    {
+      "state_id": "状態4",
+      "active_sensors": [
+        "DiningRoom",
+        "LivingRoom",
+        "LoungeChair"
+      ],
+      "avg_duration_minutes_per_day": 13.263
+    },
+    {
+      "state_id": "状態5",
+      "active_sensors": [
+        "Bedroom"
+      ],
+      "avg_duration_minutes_per_day": 52.272
+    },
+    {
+      "state_id": "状態6",
+      "active_sensors": [
+        "DiningRoom",
+        "Kitchen",
+        "LivingRoom",
+        "LoungeChair"
+      ],
+      "avg_duration_minutes_per_day": 30.554
+    },
+    {
+      "state_id": "状態7",
+      "active_sensors": [
+        "Bathroom",
+        "Bedroom"
+      ],
+      "avg_duration_minutes_per_day": 21.427
+    },
+    {
+      "state_id": "状態8",
+      "active_sensors": [
+        "Bathroom",
+        "Bedroom",
+        "LivingRoom",
+        "OtherRoom"
+      ],
+      "avg_duration_minutes_per_day": 18.978
+    },
+    {
+      "state_id": "状態9",
+      "active_sensors": [
+        "Bathroom"
+      ],
+      "avg_duration_minutes_per_day": 16.659
+    },
+    {
+      "state_id": "状態10",
+      "active_sensors": [
+        "DiningRoom",
+        "Kitchen",
+        "LivingRoom"
+      ],
+      "avg_duration_minutes_per_day": 11.046
+    },
+    {
+      "state_id": "状態11",
+      "active_sensors": [
+        "DiningRoom",
+        "GuestRoom",
+        "Kitchen",
+        "LivingRoom",
+        "LoungeChair"
+      ],
+      "avg_duration_minutes_per_day": 18.361
+    },
+    {
+      "state_id": "状態12",
+      "active_sensors": [
+        "DiningRoom",
+        "Kitchen"
+      ],
+      "avg_duration_minutes_per_day": 8.574
+    },
+    {
+      "state_id": "状態13",
+      "active_sensors": [
+        "Bathroom",
+        "Bedroom",
+        "GuestRoom",
+        "LivingRoom",
+        "OtherRoom"
+      ],
+      "avg_duration_minutes_per_day": 18.451
+    },
+    {
+      "state_id": "状態14",
+      "active_sensors": [
+        "DiningRoom",
+        "GuestRoom",
+        "Kitchen",
+        "LivingRoom"
+      ],
+      "avg_duration_minutes_per_day": 10.707
+    },
+    {
+      "state_id": "状態15",
+      "active_sensors": [
+        "LivingRoom"
+      ],
+      "avg_duration_minutes_per_day": 7.242
+    },
+    {
+      "state_id": "状態16",
+      "active_sensors": [
+        "Bathroom",
+        "Bedroom",
+        "DiningRoom",
+        "GuestRoom",
+        "Kitchen",
+        "LivingRoom",
+        "OtherRoom"
+      ],
+      "avg_duration_minutes_per_day": 16.617
+    },
+    {
+      "state_id": "状態17",
+      "active_sensors": [
+        "Kitchen"
+      ],
+      "avg_duration_minutes_per_day": 21.128
+    },
+    {
+      "state_id": "状態18",
+      "active_sensors": [
+        "Bedroom",
+        "LivingRoom",
+        "LoungeChair",
+        "OtherRoom"
+      ],
+      "avg_duration_minutes_per_day": 7.354
+    },
+    {
+      "state_id": "状態19",
+      "active_sensors": [
+        "Bedroom",
+        "DiningRoom",
+        "GuestRoom",
+        "Kitchen",
+        "LivingRoom",
+        "OtherRoom"
+      ],
+      "avg_duration_minutes_per_day": 11.053
+    },
+    {
+      "state_id": "状態20",
+      "active_sensors": [
+        "Bedroom",
+        "DiningRoom",
+        "GuestRoom",
+        "Kitchen",
+        "LivingRoom",
+        "LoungeChair",
+        "OtherRoom"
+      ],
+      "avg_duration_minutes_per_day": 9.34
+    },
+    {
+      "state_id": "その他",
+      "active_sensors": [],
+      "avg_duration_minutes_per_day": 73.71
+    }
+  ],
+  "edges": [
+    {
+      "from": "状態1",
+      "to": "状態5",
+      "probability": 0.233
+    },
+    {
+      "from": "状態1",
+      "to": "状態9",
+      "probability": 0.075
+    },
+    {
+      "from": "状態1",
+      "to": "状態7",
+      "probability": 0.039
+    },
+    {
+      "from": "状態1",
+      "to": "状態3",
+      "probability": 0.018
+    },
+    {
+      "from": "状態1",
+      "to": "その他",
+      "probability": 0.038
+    },
+    {
+      "from": "状態1",
+      "to": "状態4",
+      "probability": 0.028
+    },
+    {
+      "from": "状態1",
+      "to": "状態12",
+      "probability": 0.007
+    },
+    {
+      "from": "状態1",
+      "to": "状態17",
+      "probability": 0.002
+    },
+    {
+      "from": "状態1",
+      "to": "状態15",
+      "probability": 0.042
+    },
+    {
+      "from": "状態1",
+      "to": "状態2",
+      "probability": 0.517
+    },
+    {
+      "from": "状態1",
+      "to": "状態10",
+      "probability": 0.0
+    },
+    {
+      "from": "状態1",
+      "to": "状態14",
+      "probability": 0.001
+    },
+    {
+      "from": "状態5",
+      "to": "状態1",
+      "probability": 0.682
+    },
+    {
+      "from": "状態5",
+      "to": "状態7",
+      "probability": 0.219
+    },
+    {
+      "from": "状態5",
+      "to": "状態8",
+      "probability": 0.091
+    },
+    {
+      "from": "状態5",
+      "to": "状態13",
+      "probability": 0.002
+    },
+    {
+      "from": "状態5",
+      "to": "状態9",
+      "probability": 0.0
+    },
+    {
+      "from": "状態5",
+      "to": "その他",
+      "probability": 0.001
+    },
+    {
+      "from": "状態5",
+      "to": "状態2",
+      "probability": 0.003
+    },
+    {
+      "from": "状態5",
+      "to": "状態3",
+      "probability": 0.0
+    },
+    {
+      "from": "状態5",
+      "to": "状態15",
+      "probability": 0.001
+    },
+    {
+      "from": "状態7",
+      "to": "状態5",
+      "probability": 0.187
+    },
+    {
+      "from": "状態7",
+      "to": "状態9",
+      "probability": 0.336
+    },
+    {
+      "from": "状態7",
+      "to": "状態8",
+      "probability": 0.449
+    },
+    {
+      "from": "状態7",
+      "to": "その他",
+      "probability": 0.01
+    },
+    {
+      "from": "状態7",
+      "to": "状態1",
+      "probability": 0.009
+    },
+    {
+      "from": "状態7",
+      "to": "状態13",
+      "probability": 0.008
+    },
+    {
+      "from": "状態7",
+      "to": "状態2",
+      "probability": 0.001
+    },
+    {
+      "from": "状態7",
+      "to": "状態15",
+      "probability": 0.0
+    },
+    {
+      "from": "状態9",
+      "to": "状態1",
+      "probability": 0.51
+    },
+    {
+      "from": "状態9",
+      "to": "その他",
+      "probability": 0.199
+    },
+    {
+      "from": "状態9",
+      "to": "状態7",
+      "probability": 0.176
+    },
+    {
+      "from": "状態9",
+      "to": "状態13",
+      "probability": 0.002
+    },
+    {
+      "from": "状態9",
+      "to": "状態2",
+      "probability": 0.068
+    },
+    {
+      "from": "状態9",
+      "to": "状態3",
+      "probability": 0.008
+    },
+    {
+      "from": "状態9",
+      "to": "状態12",
+      "probability": 0.025
+    },
+    {
+      "from": "状態9",
+      "to": "状態17",
+      "probability": 0.012
+    },
+    {
+      "from": "状態9",
+      "to": "状態15",
+      "probability": 0.0
+    },
+    {
+      "from": "状態8",
+      "to": "その他",
+      "probability": 0.156
+    },
+    {
+      "from": "状態8",
+      "to": "状態5",
+      "probability": 0.092
+    },
+    {
+      "from": "状態8",
+      "to": "状態13",
+      "probability": 0.282
+    },
+    {
+      "from": "状態8",
+      "to": "状態7",
+      "probability": 0.309
+    },
+    {
+      "from": "状態8",
+      "to": "状態18",
+      "probability": 0.102
+    },
+    {
+      "from": "状態8",
+      "to": "状態16",
+      "probability": 0.045
+    },
+    {
+      "from": "状態8",
+      "to": "状態15",
+      "probability": 0.01
+    },
+    {
+      "from": "状態8",
+      "to": "状態9",
+      "probability": 0.001
+    },
+    {
+      "from": "状態8",
+      "to": "状態19",
+      "probability": 0.001
+    },
+    {
+      "from": "状態8",
+      "to": "状態3",
+      "probability": 0.002
+    },
+    {
+      "from": "その他",
+      "to": "状態4",
+      "probability": 0.038
+    },
+    {
+      "from": "その他",
+      "to": "状態19",
+      "probability": 0.063
+    },
+    {
+      "from": "その他",
+      "to": "状態9",
+      "probability": 0.073
+    },
+    {
+      "from": "その他",
+      "to": "状態14",
+      "probability": 0.118
+    },
+    {
+      "from": "その他",
+      "to": "状態11",
+      "probability": 0.09
+    },
+    {
+      "from": "その他",
+      "to": "状態16",
+      "probability": 0.102
+    },
+    {
+      "from": "その他",
+      "to": "状態20",
+      "probability": 0.082
+    },
+    {
+      "from": "その他",
+      "to": "状態12",
+      "probability": 0.019
+    },
+    {
+      "from": "その他",
+      "to": "状態1",
+      "probability": 0.042
+    },
+    {
+      "from": "その他",
+      "to": "状態13",
+      "probability": 0.117
+    },
+    {
+      "from": "その他",
+      "to": "状態8",
+      "probability": 0.07
+    },
+    {
+      "from": "その他",
+      "to": "状態17",
+      "probability": 0.015
+    },
+    {
+      "from": "その他",
+      "to": "状態10",
+      "probability": 0.013
+    },
+    {
+      "from": "その他",
+      "to": "状態7",
+      "probability": 0.006
+    },
+    {
+      "from": "その他",
+      "to": "状態18",
+      "probability": 0.045
+    },
+    {
+      "from": "その他",
+      "to": "状態3",
+      "probability": 0.069
+    },
+    {
+      "from": "その他",
+      "to": "状態15",
+      "probability": 0.01
+    },
+    {
+      "from": "その他",
+      "to": "状態6",
+      "probability": 0.008
+    },
+    {
+      "from": "その他",
+      "to": "状態5",
+      "probability": 0.002
+    },
+    {
+      "from": "その他",
+      "to": "状態2",
+      "probability": 0.017
+    },
+    {
+      "from": "状態4",
+      "to": "状態6",
+      "probability": 0.31
+    },
+    {
+      "from": "状態4",
+      "to": "状態10",
+      "probability": 0.036
+    },
+    {
+      "from": "状態4",
+      "to": "状態3",
+      "probability": 0.378
+    },
+    {
+      "from": "状態4",
+      "to": "状態15",
+      "probability": 0.018
+    },
+    {
+      "from": "状態4",
+      "to": "その他",
+      "probability": 0.088
+    },
+    {
+      "from": "状態4",
+      "to": "状態2",
+      "probability": 0.008
+    },
+    {
+      "from": "状態4",
+      "to": "状態11",
+      "probability": 0.044
+    },
+    {
+      "from": "状態4",
+      "to": "状態1",
+      "probability": 0.056
+    },
+    {
+      "from": "状態4",
+      "to": "状態14",
+      "probability": 0.028
+    },
+    {
+      "from": "状態4",
+      "to": "状態18",
+      "probability": 0.031
+    },
+    {
+      "from": "状態4",
+      "to": "状態20",
+      "probability": 0.003
+    },
+    {
+      "from": "状態6",
+      "to": "状態10",
+      "probability": 0.162
+    },
+    {
+      "from": "状態6",
+      "to": "状態4",
+      "probability": 0.391
+    },
+    {
+      "from": "状態6",
+      "to": "状態11",
+      "probability": 0.243
+    },
+    {
+      "from": "状態6",
+      "to": "状態20",
+      "probability": 0.055
+    },
+    {
+      "from": "状態6",
+      "to": "その他",
+      "probability": 0.028
+    },
+    {
+      "from": "状態6",
+      "to": "状態3",
+      "probability": 0.104
+    },
+    {
+      "from": "状態6",
+      "to": "状態12",
+      "probability": 0.014
+    },
+    {
+      "from": "状態6",
+      "to": "状態2",
+      "probability": 0.002
+    },
+    {
+      "from": "状態6",
+      "to": "状態19",
+      "probability": 0.0
+    },
+    {
+      "from": "状態6",
+      "to": "状態14",
+      "probability": 0.0
+    },
+    {
+      "from": "状態10",
+      "to": "状態12",
+      "probability": 0.262
+    },
+    {
+      "from": "状態10",
+      "to": "状態14",
+      "probability": 0.179
+    },
+    {
+      "from": "状態10",
+      "to": "状態6",
+      "probability": 0.255
+    },
+    {
+      "from": "状態10",
+      "to": "状態4",
+      "probability": 0.072
+    },
+    {
+      "from": "状態10",
+      "to": "状態17",
+      "probability": 0.092
+    },
+    {
+      "from": "状態10",
+      "to": "状態19",
+      "probability": 0.054
+    },
+    {
+      "from": "状態10",
+      "to": "その他",
+      "probability": 0.029
+    },
+    {
+      "from": "状態10",
+      "to": "状態3",
+      "probability": 0.049
+    },
+    {
+      "from": "状態10",
+      "to": "状態15",
+      "probability": 0.007
+    },
+    {
+      "from": "状態10",
+      "to": "状態16",
+      "probability": 0.001
+    },
+    {
+      "from": "状態12",
+      "to": "状態17",
+      "probability": 0.327
+    },
+    {
+      "from": "状態12",
+      "to": "状態1",
+      "probability": 0.062
+    },
+    {
+      "from": "状態12",
+      "to": "状態10",
+      "probability": 0.412
+    },
+    {
+      "from": "状態12",
+      "to": "その他",
+      "probability": 0.066
+    },
+    {
+      "from": "状態12",
+      "to": "状態14",
+      "probability": 0.089
+    },
+    {
+      "from": "状態12",
+      "to": "状態6",
+      "probability": 0.004
+    },
+    {
+      "from": "状態12",
+      "to": "状態9",
+      "probability": 0.038
+    },
+    {
+      "from": "状態12",
+      "to": "状態11",
+      "probability": 0.002
+    },
+    {
+      "from": "状態17",
+      "to": "状態10",
+      "probability": 0.189
+    },
+    {
+      "from": "状態17",
+      "to": "状態12",
+      "probability": 0.529
+    },
+    {
+      "from": "状態17",
+      "to": "その他",
+      "probability": 0.077
+    },
+    {
+      "from": "状態17",
+      "to": "状態14",
+      "probability": 0.156
+    },
+    {
+      "from": "状態17",
+      "to": "状態1",
+      "probability": 0.014
+    },
+    {
+      "from": "状態17",
+      "to": "状態3",
+      "probability": 0.002
+    },
+    {
+      "from": "状態17",
+      "to": "状態9",
+      "probability": 0.031
+    },
+    {
+      "from": "状態17",
+      "to": "状態2",
+      "probability": 0.002
+    },
+    {
+      "from": "状態14",
+      "to": "その他",
+      "probability": 0.289
+    },
+    {
+      "from": "状態14",
+      "to": "状態16",
+      "probability": 0.031
+    },
+    {
+      "from": "状態14",
+      "to": "状態10",
+      "probability": 0.176
+    },
+    {
+      "from": "状態14",
+      "to": "状態19",
+      "probability": 0.116
+    },
+    {
+      "from": "状態14",
+      "to": "状態12",
+      "probability": 0.063
+    },
+    {
+      "from": "状態14",
+      "to": "状態15",
+      "probability": 0.009
+    },
+    {
+      "from": "状態14",
+      "to": "状態17",
+      "probability": 0.09
+    },
+    {
+      "from": "状態14",
+      "to": "状態4",
+      "probability": 0.038
+    },
+    {
+      "from": "状態14",
+      "to": "状態11",
+      "probability": 0.183
+    },
+    {
+      "from": "状態14",
+      "to": "状態1",
+      "probability": 0.002
+    },
+    {
+      "from": "状態14",
+      "to": "状態6",
+      "probability": 0.001
+    },
+    {
+      "from": "状態19",
+      "to": "状態13",
+      "probability": 0.163
+    },
+    {
+      "from": "状態19",
+      "to": "状態10",
+      "probability": 0.065
+    },
+    {
+      "from": "状態19",
+      "to": "状態14",
+      "probability": 0.129
+    },
+    {
+      "from": "状態19",
+      "to": "その他",
+      "probability": 0.298
+    },
+    {
+      "from": "状態19",
+      "to": "状態20",
+      "probability": 0.138
+    },
+    {
+      "from": "状態19",
+      "to": "状態16",
+      "probability": 0.2
+    },
+    {
+      "from": "状態19",
+      "to": "状態8",
+      "probability": 0.005
+    },
+    {
+      "from": "状態19",
+      "to": "状態11",
+      "probability": 0.001
+    },
+    {
+      "from": "状態19",
+      "to": "状態6",
+      "probability": 0.001
+    },
+    {
+      "from": "状態13",
+      "to": "状態8",
+      "probability": 0.361
+    },
+    {
+      "from": "状態13",
+      "to": "状態16",
+      "probability": 0.149
+    },
+    {
+      "from": "状態13",
+      "to": "その他",
+      "probability": 0.306
+    },
+    {
+      "from": "状態13",
+      "to": "状態19",
+      "probability": 0.132
+    },
+    {
+      "from": "状態13",
+      "to": "状態7",
+      "probability": 0.015
+    },
+    {
+      "from": "状態13",
+      "to": "状態18",
+      "probability": 0.036
+    },
+    {
+      "from": "状態13",
+      "to": "状態9",
+      "probability": 0.001
+    },
+    {
+      "from": "状態13",
+      "to": "状態20",
+      "probability": 0.0
+    },
+    {
+      "from": "状態13",
+      "to": "状態15",
+      "probability": 0.0
+    },
+    {
+      "from": "状態16",
+      "to": "状態19",
+      "probability": 0.173
+    },
+    {
+      "from": "状態16",
+      "to": "状態8",
+      "probability": 0.075
+    },
+    {
+      "from": "状態16",
+      "to": "状態13",
+      "probability": 0.197
+    },
+    {
+      "from": "状態16",
+      "to": "状態20",
+      "probability": 0.109
+    },
+    {
+      "from": "状態16",
+      "to": "その他",
+      "probability": 0.407
+    },
+    {
+      "from": "状態16",
+      "to": "状態14",
+      "probability": 0.031
+    },
+    {
+      "from": "状態16",
+      "to": "状態10",
+      "probability": 0.001
+    },
+    {
+      "from": "状態16",
+      "to": "状態11",
+      "probability": 0.007
+    },
+    {
+      "from": "状態11",
+      "to": "状態14",
+      "probability": 0.167
+    },
+    {
+      "from": "状態11",
+      "to": "状態3",
+      "probability": 0.099
+    },
+    {
+      "from": "状態11",
+      "to": "状態20",
+      "probability": 0.149
+    },
+    {
+      "from": "状態11",
+      "to": "状態6",
+      "probability": 0.247
+    },
+    {
+      "from": "状態11",
+      "to": "その他",
+      "probability": 0.261
+    },
+    {
+      "from": "状態11",
+      "to": "状態4",
+      "probability": 0.068
+    },
+    {
+      "from": "状態11",
+      "to": "状態12",
+      "probability": 0.004
+    },
+    {
+      "from": "状態11",
+      "to": "状態16",
+      "probability": 0.005
+    },
+    {
+      "from": "状態11",
+      "to": "状態19",
+      "probability": 0.0
+    },
+    {
+      "from": "状態3",
+      "to": "状態2",
+      "probability": 0.543
+    },
+    {
+      "from": "状態3",
+      "to": "その他",
+      "probability": 0.05
+    },
+    {
+      "from": "状態3",
+      "to": "状態18",
+      "probability": 0.059
+    },
+    {
+      "from": "状態3",
+      "to": "状態4",
+      "probability": 0.225
+    },
+    {
+      "from": "状態3",
+      "to": "状態6",
+      "probability": 0.017
+    },
+    {
+      "from": "状態3",
+      "to": "状態15",
+      "probability": 0.065
+    },
+    {
+      "from": "状態3",
+      "to": "状態11",
+      "probability": 0.022
+    },
+    {
+      "from": "状態3",
+      "to": "状態1",
+      "probability": 0.011
+    },
+    {
+      "from": "状態3",
+      "to": "状態10",
+      "probability": 0.006
+    },
+    {
+      "from": "状態3",
+      "to": "状態9",
+      "probability": 0.002
+    },
+    {
+      "from": "状態3",
+      "to": "状態5",
+      "probability": 0.0
+    },
+    {
+      "from": "状態3",
+      "to": "状態17",
+      "probability": 0.0
+    },
+    {
+      "from": "状態2",
+      "to": "状態1",
+      "probability": 0.503
+    },
+    {
+      "from": "状態2",
+      "to": "状態3",
+      "probability": 0.46
+    },
+    {
+      "from": "状態2",
+      "to": "状態7",
+      "probability": 0.001
+    },
+    {
+      "from": "状態2",
+      "to": "その他",
+      "probability": 0.013
+    },
+    {
+      "from": "状態2",
+      "to": "状態4",
+      "probability": 0.002
+    },
+    {
+      "from": "状態2",
+      "to": "状態15",
+      "probability": 0.0
+    },
+    {
+      "from": "状態2",
+      "to": "状態9",
+      "probability": 0.017
+    },
+    {
+      "from": "状態2",
+      "to": "状態6",
+      "probability": 0.001
+    },
+    {
+      "from": "状態2",
+      "to": "状態5",
+      "probability": 0.001
+    },
+    {
+      "from": "状態2",
+      "to": "状態18",
+      "probability": 0.0
+    },
+    {
+      "from": "状態2",
+      "to": "状態17",
+      "probability": 0.0
+    },
+    {
+      "from": "状態20",
+      "to": "その他",
+      "probability": 0.312
+    },
+    {
+      "from": "状態20",
+      "to": "状態18",
+      "probability": 0.123
+    },
+    {
+      "from": "状態20",
+      "to": "状態16",
+      "probability": 0.14
+    },
+    {
+      "from": "状態20",
+      "to": "状態11",
+      "probability": 0.152
+    },
+    {
+      "from": "状態20",
+      "to": "状態19",
+      "probability": 0.166
+    },
+    {
+      "from": "状態20",
+      "to": "状態6",
+      "probability": 0.105
+    },
+    {
+      "from": "状態20",
+      "to": "状態4",
+      "probability": 0.003
+    },
+    {
+      "from": "状態20",
+      "to": "状態13",
+      "probability": 0.001
+    },
+    {
+      "from": "状態18",
+      "to": "その他",
+      "probability": 0.217
+    },
+    {
+      "from": "状態18",
+      "to": "状態20",
+      "probability": 0.126
+    },
+    {
+      "from": "状態18",
+      "to": "状態8",
+      "probability": 0.247
+    },
+    {
+      "from": "状態18",
+      "to": "状態3",
+      "probability": 0.264
+    },
+    {
+      "from": "状態18",
+      "to": "状態13",
+      "probability": 0.079
+    },
+    {
+      "from": "状態18",
+      "to": "状態4",
+      "probability": 0.061
+    },
+    {
+      "from": "状態18",
+      "to": "状態5",
+      "probability": 0.002
+    },
+    {
+      "from": "状態18",
+      "to": "状態2",
+      "probability": 0.002
+    },
+    {
+      "from": "状態18",
+      "to": "状態19",
+      "probability": 0.001
+    },
+    {
+      "from": "状態15",
+      "to": "状態3",
+      "probability": 0.394
+    },
+    {
+      "from": "状態15",
+      "to": "状態9",
+      "probability": 0.001
+    },
+    {
+      "from": "状態15",
+      "to": "状態14",
+      "probability": 0.014
+    },
+    {
+      "from": "状態15",
+      "to": "状態4",
+      "probability": 0.06
+    },
+    {
+      "from": "状態15",
+      "to": "状態1",
+      "probability": 0.427
+    },
+    {
+      "from": "状態15",
+      "to": "その他",
+      "probability": 0.05
+    },
+    {
+      "from": "状態15",
+      "to": "状態8",
+      "probability": 0.034
+    },
+    {
+      "from": "状態15",
+      "to": "状態13",
+      "probability": 0.001
+    },
+    {
+      "from": "状態15",
+      "to": "状態10",
+      "probability": 0.014
+    },
+    {
+      "from": "状態15",
+      "to": "状態5",
+      "probability": 0.001
+    },
+    {
+      "from": "状態15",
+      "to": "状態2",
+      "probability": 0.002
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "nodes": [
+    {
+      "state_id": "状態1",
+      "active_sensors": [],
+      "avg_duration_minutes_per_day": 733.868
+    },
+    {
+      "state_id": "状態2",
+      "active_sensors": [
+        "LoungeChair"
+      ],
+      "avg_duration_minutes_per_day": 184.414
+    },
+    {
+      "state_id": "状態3",
+      "active_sensors": [
+        "LivingRoom",
+        "LoungeChair"
+      ],
+      "avg_duration_minutes_per_day": 121.435
+    },
+    {
+      "state_id": "その他",
+      "active_sensors": [],
+      "avg_duration_minutes_per_day": 392.403
+    }
+  ],
+  "edges": [
+    {
+      "from": "状態1",
+      "to": "その他",
+      "probability": 0.764
+    },
+    {
+      "from": "状態1",
+      "to": "状態3",
+      "probability": 0.051
+    },
+    {
+      "from": "状態1",
+      "to": "状態2",
+      "probability": 0.185
+    },
+    {
+      "from": "その他",
+      "to": "状態1",
+      "probability": 0.659
+    },
+    {
+      "from": "その他",
+      "to": "状態3",
+      "probability": 0.331
+    },
+    {
+      "from": "その他",
+      "to": "状態2",
+      "probability": 0.01
+    },
+    {
+      "from": "状態3",
+      "to": "その他",
+      "probability": 0.427
+    },
+    {
+      "from": "状態3",
+      "to": "状態2",
+      "probability": 0.517
+    },
+    {
+      "from": "状態3",
+      "to": "状態1",
+      "probability": 0.057
+    },
+    {
+      "from": "状態2",
+      "to": "状態1",
+      "probability": 0.343
+    },
+    {
+      "from": "状態2",
+      "to": "その他",
+      "probability": 0.014
+    },
+    {
+      "from": "状態2",
+      "to": "状態3",
+      "probability": 0.642
+    }
+  ]
+}
