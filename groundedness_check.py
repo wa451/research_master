@@ -8,13 +8,13 @@ Checks:
 """
 from __future__ import annotations
 
-import csv
 import json
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 import re
 
 from experiment_config import DATASET_NAME, DAYS, HAMMING_THRESHOLD, N_STATES, ROOT_DIR
+from utils.io_utils import write_csv
 
 
 # =============================
@@ -113,13 +113,6 @@ def check_sequence(
         "low_prob_edges": low_prob_edges,
     }
     return ok, details
-
-
-def write_csv(path: Path, rows: List[dict], fieldnames: List[str]) -> None:
-    with open(path, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
 
 
 def main() -> None:

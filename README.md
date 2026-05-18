@@ -214,3 +214,9 @@ uv sync
 
 picture/
     データセット名_代表状態数_ハミング距離
+
+###　評価
+experiment_config.pyを書き換える
+run_all.py
+llm_extractor_direct_log.py
+evaluate_direct_log.py

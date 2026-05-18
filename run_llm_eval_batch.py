@@ -101,7 +101,7 @@ def main() -> None:
             f"{DAYS}days_{run_idx}.txt"
         )
         print(f"Run {run_idx}: Evaluating metrics...")
-        prob_result, state_result = evaluate_metrics.evaluate_modes_only(
+        prob_result, state_result = evaluate_metrics.main(
             llm_output_path, report_path
         )
 
