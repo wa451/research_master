@@ -1,0 +1,69 @@
+# Current experiment defaults. experiment_config.py reads this file and exposes
+# backward-compatible constants for existing scripts.
+
+dataset:
+  name: aruba
+  input_csv: data/aruba.csv
+  days: 154
+  duration_ratio_when_days_is_null: 0.7
+
+state_extraction:
+  representative_states_k: 15
+  hamming_threshold: 1
+  sampling_interval: 1s
+  smoothing_window_sec: 180
+  unknown_state: その他
+
+time_modes:
+  Morning: ["06:00", "10:00"]
+  Daytime: ["10:00", "18:00"]
+  Night: ["18:00", "24:00"]
+  Midnight: ["00:00", "06:00"]
+
+transition_network:
+  min_transition_probability_for_visualization: 0.1
+  exclude_consecutive_self_loops: true
+
+baselines:
+  transition_probability:
+    threshold: 0.2
+    min_sequence_length: 2
+    max_sequence_length: 4
+    excluded_states: ["その他"]
+    allow_revisit: false
+    top_n: 0
+  frequency:
+    min_sequence_length: 2
+    max_sequence_length: 4
+    top_k: 50
+    use_hamming_grouping: true
+
+llm:
+  provider: google_gemini
+  model: gemini-2.5-pro
+  temperature: 0.2
+  runs_default: 1
+  batch_runs: 5
+  max_retries_per_run: 3
+
+evaluation:
+  allow_baseline_contains_llm: false
+  allow_llm_contains_baseline: false
+  groundedness:
+    probability_threshold: 0.2
+    min_length: 2
+    max_length: 4
+  condition_metrics:
+    support_min: 0.75
+    support_max: 0.85
+    support_samples: 20
+    confidence_min: 0.75
+    confidence_max: 0.85
+    confidence_samples: 20
+    max_interval_minutes: 60.0
+
+paths:
+  state_dir: state
+  network_and_figures_dir: picture
+  legacy_output_dir: output
+  future_output_dir: outputs

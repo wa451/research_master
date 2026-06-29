@@ -1,5 +1,6 @@
 data
 openshs-datasets-ff6d87d
+new_labeled_data
 .venv
 *.docx
 .DS_Store
@@ -9,3 +10,8 @@ __pycache__
 *.ipynb
 *.pyc
 all
+outputs/tmp/*
+!outputs/tmp/.gitkeep
+outputs/logs/*
+!outputs/logs/.gitkeep
+results/

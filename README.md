@@ -1,222 +1,164 @@
-# スマートホーム状態遷移可視化システム
+# Smart Home Behavior Pattern Mining
 
-スマートホームのセンサーログ（CSV形式）を読み込み、家全体の状態遷移ネットワークを可視化するPythonシステムです。
+スマートホームのセンサログから代表状態を抽出し、状態遷移ネットワーク、LLMによる生活行動パターン抽出、ベースライン比較、評価、可視化を行う研究コードです。
 
-## 機能
+## 処理パイプライン
 
-- CSV形式のセンサーログ読み込み
-- イベント駆動型ログの状態ベクトル化（1秒サンプリング）
-- 連続する同じ状態の圧縮
-- 代表状態の自動抽出（頻度ベース）
-- ハミング距離による状態マッピング
-- 遷移確率計算
-- NetworkXによる状態遷移グラフ可視化
-- 時間帯別モード分割（Morning/Daytime/Night/Midnightの4区分）
+1. `data/aruba.csv` を読み込む。
+2. 1秒サンプリング、遅延OFFスムージング、連続同一状態の圧縮を行う。
+3. 出現頻度上位K個の代表状態を抽出し、ハミング距離で状態をマッピングする。
+4. 状態遷移確率を計算し、全期間/時間帯別ネットワークを `picture/` に出力する。
+5. 遷移確率ベースライン、頻度ベースライン、LLM抽出を実行する。
+6. Precision/Recall/F1、Groundedness、条件ベース評価を計算する。
 
-## 処理フロー（関数呼び出し順序）
+詳細は `docs/pipeline.md` と `docs/code_inventory.md` を参照してください。生成物の管理方針は `docs/artifact_policy.md` にまとめています。
+Pythonファイルごとの役割は `docs/python_file_inventory.md` にまとめています。
 
-`run_pipeline()`メソッドが以下の順序で各処理を実行します：
+## フォルダ構成
 
-### Step 1: `load_data(filepath)`
-**データ読み込みと前処理**
-- CSV形式のセンサーログファイルを読み込み
-- タイムスタンプ列とセンサー列を自動検出
-- 全データをイベント駆動形式のDataFrameに変換
+```text
+configs/    主要設定値の集約候補
+data/       入力データ（Git管理外）
+docs/       コード台帳、再現手順、リファクタリング計画
+output/     現行の評価・LLM・ベースライン出力
+outputs/    将来の統合出力先
+picture/    現行の図・状態遷移JSON出力
+prompts/    LLMプロンプトの外部化コピー
+scripts/    実験・評価のCLI入口
+src/        実装本体のPythonパッケージ
+state/      代表状態テーブル
+support/    補助スクリプト
+tests/      最低限の回帰テスト
+```
 
-### Step 2: `create_state_vectors(df)`
-**状態ベクトル化と圧縮**
-- イベント駆動型ログを1秒ごとの状態ベクトルに変換（Sample-and-Hold方式）
-- 各時刻における全センサーの状態（0/1）をベクトル化
-- 連続する同じ状態ベクトルを圧縮（状態変化のみ保持）
+実装本体は `src/behavior_pattern_mining/` に移動済みです。実験の実行入口は `scripts/` 配下に集約しています。
 
-### Step 3: `extract_representative_states()`
-**代表状態の抽出**
-- 全状態パターンの出現頻度を集計
-- 頻度上位K個を代表状態として選定
-- 各代表状態にラベル（状態1, 状態2, ...）を付与
-
-### Step 4: `map_to_representative_states()`
-**状態マッピング**
-- 全時刻の状態を代表状態にマッピング
-- ハミング距離を用いて最も近い代表状態に割り当て
-- 距離が閾値以上の場合は「その他」に分類
-
-### Step 5: `compute_transition_matrix()`
-**遷移確率行列の計算**
-- マッピング後の自己遷移を圧縮（同じ代表状態が連続する場合を圧縮）
-- 各状態の出現回数をカウント（圧縮後シーケンス内）
-- 状態間の遷移回数をカウントして確率に変換
-
-### オプション: `compute_transition_matrix_by_modes()`
-**時間帯別の遷移確率行列計算（mode_split=True時）**
-- 各時間帯（Morning/Daytime/Night/Midnight）でデータをフィルタリング
-- 時間帯ごとに独立して遷移確率行列を計算
-- データが存在しない時間帯は自動的にスキップ
-
-### Step 6: `visualize_transition_graph(save_path)`
-**グラフ可視化**
-- NetworkXで有向グラフを作成
-- ノードサイズは出現回数に比例
-- エッジの太さは遷移確率に比例
-- Spring layoutでノード配置を最適化
-- matplotlib/日本語フォントで描画・保存
-- 保存先: `picture/{データセット名}_{日時}/state_transition_all.png`
-
-### オプション: `visualize_transition_graph_by_modes(save_dir)`
-**時間帯別グラフ可視化（mode_split=True時）**
-- 各時間帯ごとに個別のグラフを生成
-- 保存先: `picture/{データセット名}_{日時}/state_transition_{モード名}.png`
-
-### Step 7: `save_state_table(filepath)`
-**状態テーブル保存**
-- 各代表状態のセンサー値（0/1）を表形式で保存
-- stateフォルダにTSV形式で出力
-- ファイル名: `{データセット名}_{代表状態数}_{ハミング距離}.txt`
-
-## インストール
+## 環境構築
 
 ```bash
 uv sync
 ```
 
-## 使用方法
+Gemini APIを使う場合は、リポジトリ直下に `.env` を置きます。
 
-### 基本的な使用方法
+```text
+GEMINI_API_KEY=...
+```
+
+`.env` と `data/` は `.gitignore` で除外されています。
+
+## データ配置
+
+既定では以下を使います。
+
+```text
+data/aruba.csv
+```
+
+主な設定は `configs/default.yaml` にあります。`experiment_config.py` は、既存コードとの互換性を保つためにYAMLを読み込んで定数として公開する薄いレイヤーです。
 
 ```python
-from main import StateTransitionVisualizer
-import matplotlib.pyplot as plt
-
-# 全期間の状態遷移グラフを作成
-visualizer = StateTransitionVisualizer(
-    n_representative_states=20,
-    min_transition_prob=0.1,
-    hamming_threshold=1
-)
-
-visualizer.run_pipeline('path/to/sensor_data.csv')
-plt.show()
+DATASET_NAME = "aruba"
+N_STATES = 15
+HAMMING_THRESHOLD = 1
+DAYS = 154
 ```
 
-### 時間帯別モード分割を使用する場合
+現時点では `src/behavior_pattern_mining/` 配下の複数モジュールも `experiment_config.py` を参照しているため、削除しないでください。
 
-```python
-from main import StateTransitionVisualizer
+## 実験の実行
 
-# 時間帯別の状態遷移グラフを作成
-visualizer = StateTransitionVisualizer(
-    n_representative_states=20,
-    min_transition_prob=0.1,
-    hamming_threshold=1
-)
-
-# mode_split=Trueで時間帯別分析を有効化
-visualizer.run_pipeline('path/to/sensor_data.csv', mode_split=True)
-```
-
-### カスタム時間帯定義
-
-```python
-# 独自の時間帯を定義
-custom_modes = {
-    'Morning': ('06:00', '12:00'),
-    'Afternoon': ('12:00', '18:00'),
-    'Evening': ('18:00', '24:00')
-}
-
-visualizer = StateTransitionVisualizer(
-    n_representative_states=20,
-    time_modes=custom_modes
-)
-
-visualizer.run_pipeline('path/to/sensor_data.csv', mode_split=True)
-```
-
-## サンプル実行
+個別実行:
 
 ```bash
-uv run python state_transition_visualizer.py
+uv run python scripts/run_build_network.py
+uv run python scripts/run_baselines.py
+uv run python scripts/run_llm_eval_batch.py
+uv run python scripts/run_groundedness.py
+uv run python scripts/evaluate_condition_metrics.py
 ```
 
-## 依存関係
-
-- pandas >= 2.0.0
-- numpy >= 1.24.0
-- networkx >= 3.0
-- matplotlib >= 3.7.0
-- scipy >= 1.10.0
-
-## uv の使い方
-
-### Pythonバージョンの変更
+まとめて実行:
 
 ```bash
-# 利用可能なPythonバージョンを確認
-uv python list
-
-# 特定のバージョンをインストール
-uv python install 3.11
-
-# プロジェクトで使用するPythonバージョンを指定
-uv python pin 3.11
-
-# pyproject.tomlで指定
-# requires-python = ">=3.11"
+uv run python scripts/run_all.py
 ```
 
-### ライブラリの追加
+LLMを使わない範囲のネットワーク構築とベースラインは、Gemini APIキーなしでも実行できます。
+
+ADLラベル付きCASASデータで後段評価を行う場合:
 
 ```bash
-# ライブラリを追加（自動でpyproject.tomlに追記される）
-uv add seaborn
-
-# 特定のバージョンを指定
-uv add "scikit-learn>=1.3.0"
-
-# 開発用の依存関係として追加
-uv add --dev pytest
-
-# 複数同時に追加
-uv add seaborn scikit-learn plotly
+uv run python scripts/evaluate_adl_labels.py \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --event-log data/aruba.csv \
+  --state-table state/aruba_15_1_154days.txt \
+  --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
+  --output-dir results/adl_evaluation \
+  --iou-thresholds 0.3 0.5 \
+  --wake-window-minutes 30 \
+  --match-mode exact
 ```
 
-### ライブラリの削除
+## 主要スクリプト
+
+- `scripts/run_build_network.py`: 前処理、代表状態抽出、遷移ネットワーク構築、可視化、JSON出力。
+- `scripts/run_baselines.py`: 遷移確率ベースラインと頻度ベースラインを生成。
+- `scripts/run_llm_extraction.py`: モード別遷移JSONからLLMで行動パターンを抽出。
+- `scripts/run_llm_eval_batch.py`: LLM抽出と評価を5回実行しExcelに集計。
+- `scripts/run_evaluation.py`: LLM出力とベースラインをPrecision/Recall/F1で比較。
+- `scripts/run_groundedness.py`: LLM系列がグラフ上で根拠を持つか検証。
+- `scripts/evaluate_condition_metrics.py`: support/confidence/時間間隔条件でLLM系列を評価。
+- `scripts/evaluate_adl_labels.py`: ラベル付きCASASデータのADL区間とLLM系列パターンを照合し、ADLカテゴリ別Precision/Recall/F1と境界誤差を評価。
+
+新しい実行では `scripts/` 側を使ってください。
+
+## 主要設定値
+
+- 代表状態数 K: `15`
+- ハミング距離閾値: `1`
+- 分析期間: `154`日
+- サンプリング間隔: `1s`
+- 遅延OFF窓幅: `180`秒
+- 可視化の最小遷移確率: `0.1`
+- ベースライン遷移確率閾値: `0.2`
+- パターン長: `2-4`
+- LLMモデル: `gemini-2.5-pro`
+- Temperature: `0.2`
+- 時間帯: Morning `06:00-10:00`, Daytime `10:00-18:00`, Night `18:00-24:00`, Midnight `00:00-06:00`
+
+## 出力ファイル
+
+- `state/aruba_15_1_154days.txt`: 代表状態テーブル。
+- `picture/aruba_15_1_154days/state_transition_all.json`: 全期間の状態遷移ネットワーク。
+- `picture/aruba_15_1_154days/state_transition_{mode}.json`: 時間帯別ネットワーク。
+- `picture/aruba_15_1_154days/*.png`, `*.eps`: 遷移図とタイムライン。
+- `output/aruba_15_1_154days/prob_threshold_sequences_15_1_154days.json`: 遷移確率ベースライン。
+- `output/aruba_15_1_154days/state_sequence_counts_15_1_154days.json`: 頻度ベースライン。
+- `output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_*.json`: LLM抽出結果。
+- `output/aruba_15_1_154days/evaluation_report_15_1_154days_*.txt`: 評価レポート。
+- `results/adl_evaluation/*.csv`, `evaluation_summary.json`: ADLラベル付き評価の出力。
+
+## 再現実験
+
+論文・発表用の再現手順は `docs/experiment_reproduction.md` にまとめています。論文記載用パラメータは `docs/paper_parameters.md` も参照してください。
+
+評価ごとの詳細:
+
+- `docs/evaluation_1_parameter_sensitivity.md`: 代表状態数K・ハミング距離の感度分析。
+- `docs/evaluation_2_proposed_method_5runs.md`: 提案手法の5回実行評価。
+- `docs/evaluation_3_direct_log_baseline_comparison.md`: 提案手法とLLM単独ベースラインの比較。
+- `docs/evaluation_4_labeled_casas_adl.md`: ラベル付きCASASデータによるADL評価。
+
+## テスト
+
+最低限のロジック確認は標準ライブラリの `unittest` で実行できます。
 
 ```bash
-# ライブラリを削除
-uv remove seaborn
-
-# 複数同時に削除
-uv remove seaborn plotly
+uv run python -m unittest discover -s tests
 ```
 
-### その他の便利なコマンド
+## 注意点
 
-```bash
-# 依存関係の再同期（pyproject.tomlに合わせる）
-uv sync
-
-# インストール済みパッケージの一覧表示
-uv pip list
-
-# 仮想環境でコマンドを実行
-uv run python script.py
-uv run pytest
-
-# 仮想環境を削除して再構築
-rm -rf .venv
-uv sync
-
-# 依存関係のアップグレード
-uv lock --upgrade
-uv sync
-```
-
-picture/
-    データセット名_代表状態数_ハミング距離
-
-###　評価
-experiment_config.pyを書き換える
-run_all.py
-llm_extractor_direct_log.py
-evaluate_direct_log.py
+- 既存の `output/`, `picture/`, `state/` には生成済み結果が含まれ、一部はGit追跡されています。再実行すると差分が大きく出る可能性があります。
+- `scripts/run_llm_eval_batch.py` は評価対象と同じ `llm_sequences_modes_{K}_{hamming}_{days}days_{run}.json` を生成するように揃えています。
