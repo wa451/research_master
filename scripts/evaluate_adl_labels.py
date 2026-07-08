@@ -18,12 +18,18 @@ from src.behavior_pattern_mining.evaluation.adl import (
     boundary_rows,
     build_predictions,
     build_state_series_from_event_log,
+    build_state_series_from_labeled_casas,
+    compute_interval_hit_evaluation,
+    filter_predictions_by_duration,
     filter_intervals_by_period,
     find_pattern_occurrences,
     greedy_match_by_category,
+    load_min_duration_config,
     load_patterns,
     load_state_series_csv,
     macro_micro_average,
+    merge_prediction_intervals,
+    merged_to_prediction_intervals,
     metrics_rows_from_counts,
     parse_labeled_casas_intervals,
     parse_timestamp,
@@ -34,7 +40,7 @@ from src.behavior_pattern_mining.evaluation.adl import (
 
 
 def default_output_dir() -> Path:
-    return ROOT_DIR / "results" / "adl_evaluation"
+    return ROOT_DIR / "results" / "4_adl_evaluation"
 
 
 def parse_args() -> argparse.Namespace:
@@ -55,14 +61,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--event-log",
         type=Path,
-        default=ROOT_DIR / "data" / f"{DATASET_NAME}.csv",
-        help="Event log used to rebuild representative-state intervals when --state-series is omitted",
+        default=None,
+        help="Optional unlabeled event log used to rebuild representative-state intervals. If omitted, --labeled-casas is used.",
     )
     parser.add_argument(
         "--state-table",
         type=Path,
         default=ROOT_DIR / "state" / f"{DATASET_NAME}_{param_suffix}.txt",
         help="Representative state table TSV",
+    )
+    parser.add_argument(
+        "--sensor-map",
+        type=Path,
+        default=ROOT_DIR / "configs" / "aruba_sensor_map.json",
+        help="JSON map from labeled CASAS sensor IDs to representative-state sensor names",
     )
     parser.add_argument(
         "--patterns",
@@ -105,7 +117,7 @@ def parse_args() -> argparse.Namespace:
         "--hamming-threshold",
         type=int,
         default=HAMMING_THRESHOLD,
-        help="Hamming threshold used when rebuilding state intervals from --event-log",
+        help="Hamming threshold used when rebuilding state intervals",
     )
     parser.add_argument(
         "--split-date",
@@ -125,6 +137,24 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional path to save rebuilt state intervals as CSV",
     )
+    parser.add_argument(
+        "--merge-gap-minutes",
+        type=float,
+        default=5.0,
+        help="Merge predictions with the same ADL when the time gap is within this many minutes. Use 0 to disable merging.",
+    )
+    parser.add_argument(
+        "--min-duration-config",
+        type=Path,
+        default=None,
+        help="Optional JSON mapping ADL category to minimum prediction duration in seconds after merge.",
+    )
+    parser.add_argument(
+        "--hit-tolerance-minutes",
+        type=float,
+        default=10.0,
+        help="Tolerance window before/after each true ADL interval for interval-hit evaluation.",
+    )
     return parser.parse_args()
 
 
@@ -140,6 +170,14 @@ def main() -> None:
     if args.state_series is not None:
         state_intervals = load_state_series_csv(args.state_series)
         state_series_source = str(args.state_series)
+    elif args.event_log is None:
+        state_intervals = build_state_series_from_labeled_casas(
+            labeled_casas_path=args.labeled_casas,
+            state_table_path=args.state_table,
+            hamming_threshold=args.hamming_threshold,
+            sensor_map_path=args.sensor_map if args.sensor_map.exists() else None,
+        )
+        state_series_source = f"{args.labeled_casas} + {args.state_table}"
     else:
         state_intervals = build_state_series_from_event_log(
             event_log_path=args.event_log,
@@ -178,7 +216,19 @@ def main() -> None:
         match_mode=args.match_mode,
         max_skip_duration_minutes=args.max_skip_duration_minutes,
     )
-    predictions = build_predictions(eval_occurrences, mappings)
+    raw_predictions = build_predictions(eval_occurrences, mappings)
+    merged_predictions = merge_prediction_intervals(raw_predictions, merge_gap_minutes=args.merge_gap_minutes)
+    min_duration_by_adl = load_min_duration_config(args.min_duration_config)
+    filtered_predictions, removed_by_duration_filter = filter_predictions_by_duration(
+        merged_predictions,
+        min_duration_by_adl,
+    )
+    predictions = merged_to_prediction_intervals(filtered_predictions)
+    hit_metric_rows, hit_detail_rows = compute_interval_hit_evaluation(
+        filtered_predictions,
+        eval_labels,
+        hit_tolerance_minutes=args.hit_tolerance_minutes,
+    )
 
     metrics_by_threshold = {}
     boundary_by_threshold = {}
@@ -195,7 +245,8 @@ def main() -> None:
         "state_series_source": state_series_source,
         "patterns_path": str(args.patterns),
         "state_table_path": str(args.state_table),
-        "event_log_path": str(args.event_log),
+        "event_log_path": str(args.event_log) if args.event_log else None,
+        "sensor_map_path": str(args.sensor_map) if args.sensor_map else None,
         "output_dir": str(args.output_dir),
         "match_mode": args.match_mode,
         "max_skip_duration_minutes": args.max_skip_duration_minutes,
@@ -209,6 +260,33 @@ def main() -> None:
         "num_predictions": len(predictions),
         "adl_category_map": ADL_CATEGORY_MAP,
         "averages_by_iou_threshold": averages_by_threshold,
+        "prediction_postprocess": {
+            "merge_gap_minutes": args.merge_gap_minutes,
+            "min_duration_config_path": str(args.min_duration_config) if args.min_duration_config else None,
+            "min_duration_by_adl_seconds": min_duration_by_adl,
+            "hit_tolerance_minutes": args.hit_tolerance_minutes,
+            "num_predictions_before_merge": len(raw_predictions),
+            "num_predictions_after_merge": len(merged_predictions),
+            "num_predictions_after_duration_filter": len(filtered_predictions),
+            "removed_by_duration_filter": removed_by_duration_filter,
+        },
+        "interval_hit_evaluation": {
+            hit_type: {
+                row["adl_category"]: {
+                    "true_intervals": row["true_intervals"],
+                    "hit_intervals": row["hit_intervals"],
+                    "missed_intervals": row["missed_intervals"],
+                    "hit_rate": row["hit_rate"],
+                    "prediction_intervals": row["prediction_intervals"],
+                    "matched_prediction_intervals": row["matched_prediction_intervals"],
+                    "unmatched_prediction_intervals": row["unmatched_prediction_intervals"],
+                    "prediction_hit_precision": row["prediction_hit_precision"],
+                }
+                for row in hit_metric_rows
+                if row["hit_type"] == hit_type
+            }
+            for hit_type in sorted({row["hit_type"] for row in hit_metric_rows})
+        },
     }
 
     write_evaluation_outputs(
@@ -218,10 +296,20 @@ def main() -> None:
         metrics_by_threshold=metrics_by_threshold,
         boundary_by_threshold=boundary_by_threshold,
         summary=summary,
+        merged_predictions=merged_predictions,
+        filtered_predictions=filtered_predictions,
+        hit_metric_rows=hit_metric_rows,
+        hit_detail_rows=hit_detail_rows,
     )
 
     print(f"ADL evaluation outputs saved to: {args.output_dir}")
-    print(f"Patterns: {len(patterns)} / occurrences: {len(eval_occurrences)} / predictions: {len(predictions)}")
+    print(
+        "Patterns: "
+        f"{len(patterns)} / occurrences: {len(eval_occurrences)} / "
+        f"raw predictions: {len(raw_predictions)} / "
+        f"merged: {len(merged_predictions)} / "
+        f"filtered: {len(filtered_predictions)}"
+    )
 
 
 if __name__ == "__main__":

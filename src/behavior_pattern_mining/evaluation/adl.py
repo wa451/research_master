@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import json
 import statistics
+import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -38,6 +39,74 @@ ADL_CATEGORY_MAP = {
     "Relax": "Relax",
     "Housekeeping": "Housework",
     "Work": "Work",
+}
+
+ADL_CATEGORY_SET_MAP = {
+    "Sleeping": ("Sleep",),
+    # Bed_to_Toilet is a wake-up marker in this project, but it also has a hygiene aspect.
+    "Bed_to_Toilet": ("Wake-up", "Hygiene"),
+    "Bathroom": ("Hygiene",),
+    "Personal_Hygiene": ("Hygiene",),
+    "Bathing": ("Hygiene",),
+    "Toileting": ("Hygiene",),
+    # Meal_Preparation can become Wake-up through apply_wake_up_rule when it occurs right after sleep.
+    "Meal_Preparation": ("Meal",),
+    "Eating": ("Meal",),
+    "Wash_Dishes": ("Meal", "Housework"),
+    "Leave_Home": ("Outing",),
+    "Enter_Home": ("Outing",),
+    "Relax": ("Relax",),
+    "Housekeeping": ("Housework",),
+    "Work": ("Work",),
+}
+
+DEFAULT_MIN_DURATION_BY_ADL = {
+    "Sleep": 10 * 60,
+    "Relax": 3 * 60,
+    "Meal": 2 * 60,
+    "Wake-up": 30,
+    "Outing": 60,
+    "Housework": 60,
+    "Work": 60,
+    "Other": 0,
+    "Other_ADL": 0,
+}
+
+DEFAULT_ARUBA_SENSOR_ID_MAP = {
+    "M001": "Bedroom",
+    "M002": "Bedroom",
+    "M003": "Bedroom",
+    "M004": "Bathroom",
+    "M005": "Bedroom",
+    "M006": "Bedroom",
+    "M007": "Bedroom",
+    "M008": "OtherRoom",
+    "M009": "LoungeChair",
+    "M010": "LoungeChair",
+    "M011": "OutsideDoor",
+    "M012": "LivingRoom",
+    "M013": "LivingRoom",
+    "M014": "DiningRoom",
+    "M015": "Kitchen",
+    "M016": "Kitchen",
+    "M017": "Kitchen",
+    "M018": "Kitchen",
+    "M019": "Kitchen",
+    "M020": "LivingRoom",
+    "M021": "GuestRoom",
+    "M022": "GuestRoom",
+    "M023": "GuestRoom",
+    "M024": "Bathroom",
+    "M025": "WorkArea",
+    "M026": "WorkArea",
+    "M027": "WorkArea",
+    "M028": "WorkArea",
+    "M029": "Bathroom",
+    "M030": "OutsideDoor",
+    "M031": "OtherRoom",
+    "D001": "OutsideDoor",
+    "D002": "OutsideDoor",
+    "D004": "OutsideDoor",
 }
 
 WAKE_UP_CANDIDATE_LABELS = {
@@ -103,6 +172,17 @@ class PredictionInterval:
 
 
 @dataclass(frozen=True)
+class MergedPredictionInterval:
+    prediction_id: str
+    start_time: datetime
+    end_time: datetime
+    assigned_adl: str
+    num_merged_occurrences: int
+    source_pattern_ids: tuple[str, ...]
+    source_pattern_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class MatchRecord:
     category: str
     prediction_index: int
@@ -128,7 +208,39 @@ def normalize_label(label: str) -> str:
 
 
 def adl_category_for_label(raw_label: str) -> str:
-    return ADL_CATEGORY_MAP.get(normalize_label(raw_label), "Other")
+    return ADL_CATEGORY_MAP.get(normalize_label(raw_label), "Other_ADL")
+
+
+def lookup_adl_category_set(raw_label: str) -> tuple[str, ...] | None:
+    normalized = normalize_label(raw_label)
+    if normalized in ADL_CATEGORY_SET_MAP:
+        return ADL_CATEGORY_SET_MAP[normalized]
+    normalized_lower = normalized.lower()
+    for key, labels in ADL_CATEGORY_SET_MAP.items():
+        if key.lower() == normalized_lower:
+            return labels
+    return None
+
+
+def adl_category_set_for_label(
+    raw_label: str,
+    primary_category: str | None = None,
+) -> tuple[str, ...]:
+    """Return one or more ADL labels for set-based interpretation evaluation."""
+    labels = list(lookup_adl_category_set(raw_label) or ())
+    if primary_category and primary_category not in {"Other_ADL", "Other"}:
+        labels.append(primary_category)
+    if not labels:
+        labels.append("Other")
+
+    seen = set()
+    unique = []
+    for label in labels:
+        if label in seen:
+            continue
+        seen.add(label)
+        unique.append(label)
+    return tuple(unique)
 
 
 def parse_labeled_casas_intervals(
@@ -139,7 +251,7 @@ def parse_labeled_casas_intervals(
     active_by_label: dict[str, list[datetime]] = defaultdict(list)
     intervals: list[ADLInterval] = []
 
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
+    for line_number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         line = raw_line.strip()
         if not line:
             continue
@@ -161,9 +273,17 @@ def parse_labeled_casas_intervals(
             continue
 
         if not active_by_label[label]:
+            print(
+                f"[WARN] {path}:{line_number}: activity end without begin: {label}",
+                file=sys.stderr,
+            )
             continue
         start_time = active_by_label[label].pop()
         if timestamp <= start_time:
+            print(
+                f"[WARN] {path}:{line_number}: activity end is not after begin: {label}",
+                file=sys.stderr,
+            )
             continue
         intervals.append(
             ADLInterval(
@@ -173,6 +293,13 @@ def parse_labeled_casas_intervals(
                 adl_category=adl_category_for_label(label),
             )
         )
+
+    for label, starts in sorted(active_by_label.items()):
+        for start_time in starts:
+            print(
+                f"[WARN] {path}: activity begin without end: {label} at {start_time.isoformat(sep=' ')}",
+                file=sys.stderr,
+            )
 
     intervals.sort(key=lambda item: (item.start_time, item.end_time, item.raw_label))
     return apply_wake_up_rule(intervals, wake_window_minutes=wake_window_minutes)
@@ -326,6 +453,82 @@ def build_state_series_from_event_log(
     return intervals
 
 
+def load_sensor_id_map(path: Path | None) -> dict[str, str]:
+    if path is None:
+        return dict(DEFAULT_ARUBA_SENSOR_ID_MAP)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Sensor map must be a JSON object: {path}")
+    return {str(key).strip(): str(value).strip() for key, value in payload.items()}
+
+
+def build_state_series_from_labeled_casas(
+    labeled_casas_path: Path,
+    state_table_path: Path,
+    hamming_threshold: int,
+    sensor_map_path: Path | None = None,
+) -> list[StateInterval]:
+    """Build representative-state intervals directly from a labeled CASAS text file."""
+    sensor_id_map = load_sensor_id_map(sensor_map_path)
+    sensor_cols, state_mapping = load_state_mapping(state_table_path)
+    current_sensor_state = {sensor: 0 for sensor in sensor_cols}
+
+    intervals: list[StateInterval] = []
+    current_label: str | None = None
+    current_start: datetime | None = None
+    last_timestamp: datetime | None = None
+
+    for raw_line in labeled_casas_path.read_text(encoding="utf-8").splitlines():
+        parts = raw_line.strip().split()
+        if len(parts) < 4:
+            continue
+
+        sensor = sensor_id_map.get(parts[2].strip(), parts[2].strip())
+        value = parts[3].strip().upper()
+        if sensor not in current_sensor_state:
+            continue
+
+        timestamp = parse_timestamp(parts[0], parts[1])
+        if value in {"ON", "OPEN", "PRESENT", "1", "TRUE"}:
+            current_sensor_state[sensor] = 1
+        elif value in {"OFF", "CLOSE", "ABSENT", "0", "FALSE"}:
+            current_sensor_state[sensor] = 0
+        else:
+            continue
+
+        vector = tuple(current_sensor_state[sensor_name] for sensor_name in sensor_cols)
+        state_id = map_vector_to_state(vector, state_mapping, hamming_threshold=hamming_threshold)
+
+        if current_label is None:
+            current_label = state_id
+            current_start = timestamp
+        elif state_id != current_label:
+            if current_start is not None and timestamp > current_start:
+                intervals.append(
+                    StateInterval(
+                        start_time=current_start,
+                        end_time=timestamp,
+                        state_id=current_label,
+                    )
+                )
+            current_label = state_id
+            current_start = timestamp
+
+        last_timestamp = timestamp
+
+    if current_label is not None and current_start is not None and last_timestamp is not None:
+        if last_timestamp > current_start:
+            intervals.append(
+                StateInterval(
+                    start_time=current_start,
+                    end_time=last_timestamp,
+                    state_id=current_label,
+                )
+            )
+
+    return intervals
+
+
 def write_state_series_csv(intervals: Sequence[StateInterval], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
@@ -349,7 +552,7 @@ def load_patterns(path: Path) -> list[PatternRecord]:
     patterns: list[PatternRecord] = []
     for index, item in enumerate(payload, start=1):
         if isinstance(item, dict):
-            sequence = item.get("遷移のシーケンス") or item.get("sequence")
+            sequence = item.get("遷移のパターン") or item.get("遷移のシーケンス") or item.get("sequence")
             pattern_name = item.get("パターン名") or item.get("pattern_name") or f"P{index}"
         elif isinstance(item, list):
             sequence = item
@@ -568,6 +771,273 @@ def build_predictions(
     return predictions
 
 
+def unique_preserve_order(values: Iterable[str]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    unique = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        unique.append(value)
+    return tuple(unique)
+
+
+def merge_prediction_intervals(
+    predictions: Sequence[PredictionInterval],
+    merge_gap_minutes: float,
+) -> list[MergedPredictionInterval]:
+    """Merge nearby predictions within the same assigned ADL category."""
+    if merge_gap_minutes < 0:
+        raise ValueError("merge_gap_minutes must be non-negative")
+
+    sorted_predictions = sorted(
+        predictions,
+        key=lambda item: (item.assigned_adl, item.start_time, item.end_time, item.pattern_id),
+    )
+    if merge_gap_minutes == 0:
+        return [
+            MergedPredictionInterval(
+                prediction_id=f"MP{index:06d}",
+                start_time=item.start_time,
+                end_time=item.end_time,
+                assigned_adl=item.assigned_adl,
+                num_merged_occurrences=1,
+                source_pattern_ids=(item.pattern_id,),
+                source_pattern_names=(item.pattern_name,),
+            )
+            for index, item in enumerate(sorted_predictions, start=1)
+        ]
+
+    max_gap = timedelta(minutes=merge_gap_minutes)
+    merged: list[MergedPredictionInterval] = []
+    current_category: str | None = None
+    current_start: datetime | None = None
+    current_end: datetime | None = None
+    current_pattern_ids: list[str] = []
+    current_pattern_names: list[str] = []
+    current_count = 0
+
+    def flush_current() -> None:
+        if current_category is None or current_start is None or current_end is None:
+            return
+        merged.append(
+            MergedPredictionInterval(
+                prediction_id=f"MP{len(merged) + 1:06d}",
+                start_time=current_start,
+                end_time=current_end,
+                assigned_adl=current_category,
+                num_merged_occurrences=current_count,
+                source_pattern_ids=unique_preserve_order(current_pattern_ids),
+                source_pattern_names=unique_preserve_order(current_pattern_names),
+            )
+        )
+
+    for prediction in sorted_predictions:
+        if current_category is None:
+            current_category = prediction.assigned_adl
+            current_start = prediction.start_time
+            current_end = prediction.end_time
+            current_pattern_ids = [prediction.pattern_id]
+            current_pattern_names = [prediction.pattern_name]
+            current_count = 1
+            continue
+
+        assert current_end is not None
+        same_category = prediction.assigned_adl == current_category
+        close_enough = prediction.start_time - current_end <= max_gap
+        if same_category and close_enough:
+            current_end = max(current_end, prediction.end_time)
+            current_pattern_ids.append(prediction.pattern_id)
+            current_pattern_names.append(prediction.pattern_name)
+            current_count += 1
+            continue
+
+        flush_current()
+        current_category = prediction.assigned_adl
+        current_start = prediction.start_time
+        current_end = prediction.end_time
+        current_pattern_ids = [prediction.pattern_id]
+        current_pattern_names = [prediction.pattern_name]
+        current_count = 1
+
+    flush_current()
+    return merged
+
+
+def load_min_duration_config(path: Path | None) -> dict[str, float]:
+    config = {key: float(value) for key, value in DEFAULT_MIN_DURATION_BY_ADL.items()}
+    if path is None:
+        return config
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Min-duration config must be a JSON object: {path}")
+    for key, value in payload.items():
+        try:
+            config[str(key)] = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid min-duration value for {key!r}: {value!r}") from exc
+    if "Other" in config and "Other_ADL" not in payload:
+        config["Other_ADL"] = config["Other"]
+    return config
+
+
+def min_duration_for_adl(adl_category: str, min_duration_by_adl: dict[str, float]) -> float:
+    if adl_category in min_duration_by_adl:
+        return min_duration_by_adl[adl_category]
+    return min_duration_by_adl.get("Other_ADL", min_duration_by_adl.get("Other", 0.0))
+
+
+def filter_predictions_by_duration(
+    predictions: Sequence[MergedPredictionInterval],
+    min_duration_by_adl: dict[str, float],
+) -> tuple[list[MergedPredictionInterval], dict[str, int]]:
+    kept: list[MergedPredictionInterval] = []
+    removed_by_category: dict[str, int] = defaultdict(int)
+    for prediction in predictions:
+        duration = duration_seconds(prediction.start_time, prediction.end_time)
+        minimum_duration = min_duration_for_adl(prediction.assigned_adl, min_duration_by_adl)
+        if duration >= minimum_duration:
+            kept.append(prediction)
+        else:
+            removed_by_category[prediction.assigned_adl] += 1
+    return kept, dict(sorted(removed_by_category.items()))
+
+
+def prediction_duration_row(prediction: MergedPredictionInterval, include_duration: bool) -> dict:
+    row = {
+        "predicted_adl": prediction.assigned_adl,
+        "start_time": prediction.start_time.isoformat(sep=" "),
+        "end_time": prediction.end_time.isoformat(sep=" "),
+        "num_merged_occurrences": prediction.num_merged_occurrences,
+        "source_pattern_ids": "|".join(prediction.source_pattern_ids),
+        "source_pattern_names": "|".join(prediction.source_pattern_names),
+    }
+    if include_duration:
+        row["duration_seconds"] = f"{duration_seconds(prediction.start_time, prediction.end_time):.3f}"
+    return row
+
+
+def merged_to_prediction_intervals(
+    predictions: Sequence[MergedPredictionInterval],
+) -> list[PredictionInterval]:
+    converted: list[PredictionInterval] = []
+    for prediction in predictions:
+        converted.append(
+            PredictionInterval(
+                pattern_id=prediction.prediction_id,
+                pattern_name="|".join(prediction.source_pattern_names),
+                sequence=(),
+                start_time=prediction.start_time,
+                end_time=prediction.end_time,
+                assigned_adl=prediction.assigned_adl,
+            )
+        )
+    return converted
+
+
+def compute_interval_hit_evaluation(
+    predictions: Sequence[MergedPredictionInterval],
+    truths: Sequence[ADLInterval],
+    hit_tolerance_minutes: float,
+) -> tuple[list[dict], list[dict]]:
+    if hit_tolerance_minutes < 0:
+        raise ValueError("hit_tolerance_minutes must be non-negative")
+
+    rows: list[dict] = []
+    details: list[dict] = []
+    for hit_type, tolerance in (
+        ("overlap", timedelta(minutes=0)),
+        ("tolerance", timedelta(minutes=hit_tolerance_minutes)),
+    ):
+        truth_hit_counts: dict[int, set[str]] = defaultdict(set)
+        matched_prediction_ids: set[str] = set()
+        categories = sorted(
+            {truth.adl_category for truth in truths}
+            | {prediction.assigned_adl for prediction in predictions}
+        )
+
+        for category in categories:
+            truth_indices = [
+                index for index, truth in enumerate(truths)
+                if truth.adl_category == category
+            ]
+            prediction_indices = [
+                index for index, prediction in enumerate(predictions)
+                if prediction.assigned_adl == category
+            ]
+            truth_indices.sort(key=lambda index: truths[index].start_time)
+            prediction_indices.sort(key=lambda index: predictions[index].start_time)
+
+            prediction_cursor = 0
+            for truth_index in truth_indices:
+                truth = truths[truth_index]
+                expanded_start = truth.start_time - tolerance
+                expanded_end = truth.end_time + tolerance
+                while (
+                    prediction_cursor < len(prediction_indices)
+                    and predictions[prediction_indices[prediction_cursor]].end_time <= expanded_start
+                ):
+                    prediction_cursor += 1
+                cursor = prediction_cursor
+                while cursor < len(prediction_indices):
+                    prediction = predictions[prediction_indices[cursor]]
+                    if prediction.start_time >= expanded_end:
+                        break
+                    if interval_overlap_seconds(
+                        prediction.start_time,
+                        prediction.end_time,
+                        expanded_start,
+                        expanded_end,
+                    ) > 0:
+                        truth_hit_counts[truth_index].add(prediction.prediction_id)
+                        matched_prediction_ids.add(prediction.prediction_id)
+                    cursor += 1
+
+        for truth_index, truth in enumerate(truths):
+            matched_ids = sorted(truth_hit_counts.get(truth_index, set()))
+            details.append(
+                {
+                    "hit_type": hit_type,
+                    "true_adl": truth.adl_category,
+                    "start_time": truth.start_time.isoformat(sep=" "),
+                    "end_time": truth.end_time.isoformat(sep=" "),
+                    "is_hit": bool(matched_ids),
+                    "matched_prediction_count": len(matched_ids),
+                    "matched_prediction_ids": "|".join(matched_ids),
+                }
+            )
+
+        for category in categories:
+            truth_indices = [
+                index for index, truth in enumerate(truths)
+                if truth.adl_category == category
+            ]
+            prediction_ids = {
+                prediction.prediction_id
+                for prediction in predictions
+                if prediction.assigned_adl == category
+            }
+            hit_intervals = sum(1 for index in truth_indices if truth_hit_counts.get(index))
+            matched_prediction_count = len(prediction_ids & matched_prediction_ids)
+            rows.append(
+                {
+                    "hit_type": hit_type,
+                    "adl_category": category,
+                    "true_intervals": len(truth_indices),
+                    "hit_intervals": hit_intervals,
+                    "missed_intervals": len(truth_indices) - hit_intervals,
+                    "hit_rate": safe_divide(hit_intervals, len(truth_indices)),
+                    "prediction_intervals": len(prediction_ids),
+                    "matched_prediction_intervals": matched_prediction_count,
+                    "unmatched_prediction_intervals": len(prediction_ids) - matched_prediction_count,
+                    "prediction_hit_precision": safe_divide(matched_prediction_count, len(prediction_ids)),
+                }
+            )
+
+    return rows, details
+
+
 def greedy_match_by_category(
     predictions: Sequence[PredictionInterval],
     truths: Sequence[ADLInterval],
@@ -777,6 +1247,10 @@ def write_evaluation_outputs(
     metrics_by_threshold: dict[float, list[dict]],
     boundary_by_threshold: dict[float, list[dict]],
     summary: dict,
+    merged_predictions: Sequence[MergedPredictionInterval] | None = None,
+    filtered_predictions: Sequence[MergedPredictionInterval] | None = None,
+    hit_metric_rows: Sequence[dict] | None = None,
+    hit_detail_rows: Sequence[dict] | None = None,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -820,6 +1294,41 @@ def write_evaluation_outputs(
         ],
     )
 
+    if merged_predictions is not None:
+        write_csv_rows(
+            output_dir / "merged_predictions.csv",
+            [
+                prediction_duration_row(item, include_duration=False)
+                for item in merged_predictions
+            ],
+            [
+                "predicted_adl",
+                "start_time",
+                "end_time",
+                "num_merged_occurrences",
+                "source_pattern_ids",
+                "source_pattern_names",
+            ],
+        )
+
+    if filtered_predictions is not None:
+        write_csv_rows(
+            output_dir / "filtered_predictions.csv",
+            [
+                prediction_duration_row(item, include_duration=True)
+                for item in filtered_predictions
+            ],
+            [
+                "predicted_adl",
+                "start_time",
+                "end_time",
+                "num_merged_occurrences",
+                "source_pattern_ids",
+                "source_pattern_names",
+                "duration_seconds",
+            ],
+        )
+
     for threshold, rows in metrics_by_threshold.items():
         suffix = str(threshold)
         write_csv_rows(
@@ -838,6 +1347,39 @@ def write_evaluation_outputs(
                 "median_abs_end_error",
                 "mean_iou",
                 "matched_count",
+            ],
+        )
+
+    if hit_metric_rows is not None:
+        write_csv_rows(
+            output_dir / "adl_interval_hit_metrics.csv",
+            hit_metric_rows,
+            [
+                "hit_type",
+                "adl_category",
+                "true_intervals",
+                "hit_intervals",
+                "missed_intervals",
+                "hit_rate",
+                "prediction_intervals",
+                "matched_prediction_intervals",
+                "unmatched_prediction_intervals",
+                "prediction_hit_precision",
+            ],
+        )
+
+    if hit_detail_rows is not None:
+        write_csv_rows(
+            output_dir / "adl_interval_hit_details.csv",
+            hit_detail_rows,
+            [
+                "hit_type",
+                "true_adl",
+                "start_time",
+                "end_time",
+                "is_hit",
+                "matched_prediction_count",
+                "matched_prediction_ids",
             ],
         )
 

@@ -20,14 +20,17 @@
 |---|---|
 | `scripts/run_all.py` | 提案手法の主要パイプラインを一括実行する。`run_build_network -> run_baselines -> run_llm_eval_batch` の順に呼ぶ。 |
 | `scripts/run_build_network.py` | センサログの前処理、代表状態抽出、状態遷移ネットワーク構築、図・JSON・状態テーブル出力を実行する。 |
+| `scripts/run_build_network_from_labeled_casas.py` | ラベル付きCASAS txtからセンサーイベントを抽出し、センサーIDを代表状態テーブル用の部屋名へ変換して、状態遷移ネットワークと代表状態テーブルを生成する。評価6では `--days 30` で30日版成果物を生成し、条件変更時は `--n-states` と `--hamming-threshold` を指定する。 |
 | `scripts/run_baselines.py` | 遷移確率ベースラインと頻度ベースラインをまとめて実行する。 |
-| `scripts/run_llm_extraction.py` | 提案手法のLLMパターン抽出のみを実行する。 |
+| `scripts/run_llm_extraction.py` | 提案手法のLLMパターン抽出のみを実行する。`--days`, `--n-states`, `--hamming-threshold` で評価6用の条件別ネットワークを入力にでき、`--runs` で複数回分を生成できる。 |
 | `scripts/run_llm_eval_batch.py` | 提案手法のLLM抽出とベースライン比較評価を複数回実行し、Excelへ集計する。 |
-| `scripts/run_direct_log_baseline.py` | 直接ログLLMベースラインを実行し、その出力を評価する。 |
+| `scripts/run_direct_log_baseline.py` | ラベル付きCASAS txtからactivity labelを除いたセンサーイベントを使い、直接ログLLMベースラインを実行し、その出力を評価する。評価6では `--log-days 30 --extract-only` で30日分のみ抽出し、`--n-states`, `--hamming-threshold`, `--runs` で条件別・複数回分を生成できる。 |
 | `scripts/run_evaluation.py` | 既存のLLM出力JSONを、遷移確率ベースライン・頻度ベースラインと比較評価する。 |
 | `scripts/run_groundedness.py` | LLM出力系列が状態遷移グラフ上の根拠を持つかを評価する。 |
 | `scripts/evaluate_condition_metrics.py` | support, confidence, 時間間隔条件を用いた系列評価を実行する。 |
 | `scripts/evaluate_adl_labels.py` | ラベル付きCASASデータを使い、抽出パターンとADL区間の対応付け、ADLカテゴリ別Precision/Recall/F1、境界誤差を評価する。 |
+| `scripts/evaluate_adl_correspondence.py` | frequency, rule-filtered frequency, FP-Growth系baseline, proposed method のパターンを共通形式に正規化し、パターン単位のADL-grounded/Useless指標を手法別に比較する。 |
+| `scripts/evaluate_6_compare_adl_interpretation_set.py` | 評価6について、30日版の提案手法とLLM単独ベースラインを同じ状態系列・同じADL正解区間で比較する。`--runs` で複数run平均も出力する。 |
 
 ## 3. src/behavior_pattern_mining/
 
@@ -69,20 +72,22 @@
 | `src/behavior_pattern_mining/llm/__init__.py` | LLM関連パッケージの初期化ファイル。 |
 | `src/behavior_pattern_mining/llm/client.py` | `.env` 読み込み、Gemini API呼び出し、LLM応答JSONパース、token使用量抽出を行う共通クライアント。 |
 | `src/behavior_pattern_mining/llm/pattern_extractor.py` | 時間帯別状態遷移ネットワークJSONをLLMへ渡し、生活行動パターンを抽出・統合する提案手法のLLM抽出モジュール。 |
-| `src/behavior_pattern_mining/llm/direct_log_extractor.py` | 代表状態系列を直接LLMへ渡す、LLM単独ベースライン用の抽出モジュール。 |
+| `src/behavior_pattern_mining/llm/direct_log_extractor.py` | ラベル付きCASAS txtからセンサーイベントだけを抽出し、代表状態系列を直接LLMへ渡すLLM単独ベースライン用の抽出モジュール。 |
 
 ### evaluation/
 
 | ファイル | 役割 |
 |---|---|
 | `src/behavior_pattern_mining/evaluation/__init__.py` | 評価パッケージの初期化ファイル。 |
-| `src/behavior_pattern_mining/evaluation/metrics.py` | シーケンス読み込み、完全一致・部分一致判定、Precision/Recall/F1計算、評価レポート生成の共通処理。 |
+| `src/behavior_pattern_mining/evaluation/metrics.py` | パターン読み込み、完全一致・部分一致判定、Precision/Recall/F1計算、評価レポート生成の共通処理。 |
 | `src/behavior_pattern_mining/evaluation/compare_patterns.py` | 提案手法LLM出力を、遷移確率ベースライン・頻度ベースラインと比較する評価モジュール。 |
 | `src/behavior_pattern_mining/evaluation/direct_log.py` | 直接ログLLMベースライン出力をベースラインと比較し、レポート・Excelを生成する。 |
 | `src/behavior_pattern_mining/evaluation/groundedness.py` | Markov graphの読み込み、LLM系列のエッジ存在・確率閾値・系列長・自己ループ条件の判定を行う純粋ロジック。 |
 | `src/behavior_pattern_mining/evaluation/groundedness_check.py` | Groundedness評価を実行し、CSV出力する実行寄りモジュール。 |
 | `src/behavior_pattern_mining/evaluation/condition_metrics.py` | support, confidence, 最大時間間隔などの条件グリッドでLLM系列を評価するモジュール。 |
-| `src/behavior_pattern_mining/evaluation/adl.py` | ラベル付きCASASデータを区間化し、抽出パターンとの時間重なり、ADL割当、Temporal IoU、境界誤差を計算するADL評価ロジック。 |
+| `src/behavior_pattern_mining/evaluation/adl.py` | ラベル付きCASASデータを区間化し、抽出パターンとの時間重なり、ADL割当、同一ADL予測のマージ、短時間予測除外、Temporal IoU、区間内hit、境界誤差を計算するADL評価ロジック。 |
+| `src/behavior_pattern_mining/evaluation/adl_correspondence.py` | 複数手法の系列パターンCSV/JSON読み込み、FP-Growth系baseline生成、評価5のパターン単位ADL-grounded/Useless-A/B/C指標を計算する後段評価ロジック。 |
+| `src/behavior_pattern_mining/evaluation/adl_interpretation_set.py` | LLM解釈ラベル集合とADL重なりラベル集合を比較し、Exact Set Match, Jaccard, multi-label Precision/Recall/F1を計算する評価6ロジック。 |
 
 ### pipelines/
 
@@ -127,7 +132,8 @@
 | ファイル | 役割 |
 |---|---|
 | `tests/test_core_logic.py` | 設定読み込み、センサログ読み込み、前処理、代表状態マッピング、遷移確率、パターン長、Groundedness、Precision/Recall/F1などの基本ロジックを検証する。 |
-| `tests/test_adl_evaluation.py` | ラベル付きCASAS ADL評価について、ラベル区間化、パターン出現検出、overlap/IoU、TP/FP/FN、重複マッチ防止などを検証する。 |
+| `tests/test_adl_evaluation.py` | ラベル付きCASAS ADL評価について、ラベル区間化、パターン出現検出、予測マージ、短時間除外、区間内hit、overlap/IoU、TP/FP/FN、重複マッチ防止などを検証する。 |
+| `tests/test_adl_correspondence.py` | ADL対応比較評価について、複数形式の系列パース、手法別パターン読み込み、時系列train/test split、multi-label ADL、ADL-grounded/Useless判定を検証する。 |
 
 ## 6. 削除・整理候補
 

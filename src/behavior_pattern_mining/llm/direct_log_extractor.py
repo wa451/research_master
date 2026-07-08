@@ -6,6 +6,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import tempfile
 from datetime import timedelta
 from pathlib import Path
 from typing import List, Tuple
@@ -23,6 +24,7 @@ from experiment_config import (
     N_STATES,
     ROOT_DIR,
 )
+from src.behavior_pattern_mining.evaluation.adl import load_sensor_id_map
 from src.behavior_pattern_mining.llm.client import call_gemini, load_dotenv, parse_pattern_records
 from src.behavior_pattern_mining.visualization import state_transition_visualizer as stv
 
@@ -42,9 +44,10 @@ MAX_ROWS = 0
 RUNS = LLM_RUNS_DEFAULT
 # 1回の実行で失敗した場合の最大リトライ回数
 MAX_RETRIES_PER_RUN = LLM_MAX_RETRIES_PER_RUN
-# 入力CSV（イベントログ形式）
-INPUT_CSV_PATH = ROOT_DIR / "data" / f"{DATASET_NAME}.csv"
-# 出力ルート（デフォルトで llm_direct_{LOG_DAYS} 配下になるよう設定）
+# 入力ログ。現在の評価ではラベル付きCASASを入力元にし、activity begin/endは使わずセンサーイベントのみを抽出する。
+INPUT_LOG_PATH = ROOT_DIR / "new_labeled_data" / f"{DATASET_NAME}.txt"
+SENSOR_MAP_PATH = ROOT_DIR / "configs" / "aruba_sensor_map.json"
+# 出力ルート（評価6の30日条件では llm_direct_{K}_{H}_{DAYS}days 配下に保存する）
 OUTPUT_DIR = ROOT_DIR / "output" / f"llm_direct_{LOG_DAYS}"
 
 PROMPT_TEMPLATE = """
@@ -62,43 +65,89 @@ PROMPT_TEMPLATE = """
 - 各行は日時と、その時点での代表状態を示しています
 - 状態は「状態1」「状態2」...「状態{N_STATES}」のように番号付けされています（ただしすべてが表れるとは限りません）
 
+## ADL系列ラベル
+各パターンには、解釈に対応するADLラベル集合を `ADL系列ラベル` として付けてください。
+使用できるラベルは次の10種類だけです。
+
+```text
+Sleep
+Wake-up
+Meal
+Relax
+Outing
+Hygiene
+Housework
+Other
+Noise
+Ambiguous
+```
+
+ラベルの意味:
+- `Sleep`: 睡眠、就寝、ベッド上での長時間休息
+- `Wake-up`: 起床直後の移動、朝の身支度、起床後の家内移動
+- `Meal`: 食事準備、調理、食事、食後の片付け
+- `Relax`: リビングや椅子での休息、くつろぎ
+- `Outing`: 外出、帰宅、玄関を中心とする移動
+- `Hygiene`: トイレ、浴室、洗面などの衛生行動
+- `Housework`: 掃除、洗濯、片付け、換気などの家事
+- `Other`: 上記に分類できるが明確でない行動
+- `Noise`: 生活文脈を持たない無意味な往復やノイズ
+- `Ambiguous`: 複数候補があり、ADLとして明確に判断できないもの
+
 ## 入力データ（状態の時系列）
 {LOG_DATA}
 
 ## 実行タスク
-以下の3つのステップに沿って推論を行ってください。出力はStep 3のJSONのみを自動処理で読み取ります。
+以下の3つのステップに沿って内部で推論してください。
+ただし、最終回答にはStep 1 / Step 2の説明文を一切出力しないでください。
+最終回答はStep 3のJSON配列のみです。
 
-### Step 1: 代表状態の解釈（テキスト出力）
+### Step 1: 代表状態の解釈（内部推論のみ）
 上記の状態定義表を参考に、各状態がどのような生活シーン（例: 就寝、起床、食事など）に対応するかを推測してください。
 各状態のON/OFF状態の組み合わせから、居住者がどこで何をしているのかを推測します。
 
-### Step 2: 頻出する行動シーケンスの抽出（テキスト出力）
+### Step 2: 頻出する行動パターンの抽出（内部推論のみ）
 状態の時系列から、居住者がどのような意図を持って行動しているか、
-ストーリーとして解釈できるシーケンスを抽出してください。
+ストーリーとして解釈できるパターンを抽出してください。
 【厳守事項】
-1. 各シーケンスの長さは必ず「2〜4個」の範囲内。
+1. 各パターンの長さは必ず「2〜4個」の範囲内。
 2. 同じ状態が連続するもの（状態1→状態1）は圧縮されているため除外。
 3. 上記の条件を満たす意味のある行動ルートは、件数の制限を設けず、網羅的にすべて抽出してください。
 
 ### Step 3: JSONフォーマットでの最終出力（絶対厳守）
 Step 2で抽出した「すべて」のパターンについて、後続のプログラムで読み込むためのJSON配列として出力してください。
-必ずコードブロック（```json ... ```）を使用し、以下の3つのキーを持つオブジェクトの配列にしてください。
+
+出力ルール:
+- 最終回答はJSON配列だけにしてください。
+- Markdownのコードブロック（```json ... ```）は禁止です。
+- JSON配列の前後に説明文、見出し、注釈、謝罪、箇条書き、自然言語を絶対に付けないでください。
+- 各要素は必ず以下の4つのキーだけを持つJSONオブジェクトにしてください。
+  - `パターン名`
+  - `ADL系列ラベル`
+  - `解釈の根拠`
+  - `遷移のパターン`
+- `ADL系列ラベル` は必ず文字列配列にしてください。単一ADLでも `["Sleep"]` のように配列にしてください。
+- `ADL系列ラベル` には上記10種類の許可ラベル以外を入れないでください。
+- `順序タイプ` や `ラベル信頼度` は出力しないでください。
+- `遷移のパターン` は必ず文字列配列にしてください。例: `["状態4", "状態6"]`
+- 末尾カンマ、コメント、未エスケープの改行、JSON以外の文字は禁止です。
+- 抽出できるパターンがない場合も、空配列 `[]` だけを返してください。
 
 出力例：
-```json
 [
   {{
     "パターン名": "深夜のトイレ往復行動",
+    "ADL系列ラベル": ["Sleep", "Hygiene"],
     "解釈の根拠": "就寝状態から廊下を経てトイレへ行き戻っているため。",
-    "遷移のシーケンス": ["状態4", "状態6", "状態5", "状態1"]
+    "遷移のパターン": ["状態4", "状態6", "状態5", "状態1"]
   }},
   {{
     "パターン名": "起床から朝食までのルーチン",
+    "ADL系列ラベル": ["Wake-up", "Meal"],
     "解釈の根拠": "寝室の反応から洗面所、キッチンへ移動しているため。",
-    "遷移のシーケンス": ["状態4", "状態10", "状態13"]
+    "遷移のパターン": ["状態4", "状態10", "状態13"]
   }}
 ]
-```
 """.strip()
 
 
@@ -137,6 +186,68 @@ def read_event_log(csv_path: Path) -> pd.DataFrame:
     df = df.dropna(subset=["timestamp", "sensor", "value"]).copy()
     df = df.sort_values("timestamp").reset_index(drop=True)
     return df[["timestamp", "sensor", "value"]]
+
+
+def convert_labeled_casas_to_event_csv(
+    labeled_casas_path: Path,
+    output_csv_path: Path,
+    sensor_map_path: Path,
+) -> int:
+    """Extract sensor events from labeled CASAS txt, dropping activity labels."""
+    sensor_map = load_sensor_id_map(sensor_map_path if sensor_map_path.exists() else None)
+    output_csv_path.parent.mkdir(parents=True, exist_ok=True)
+    row_count = 0
+    with labeled_casas_path.open("r", encoding="utf-8") as src:
+        with output_csv_path.open("w", encoding="utf-8", newline="") as dst:
+            writer = csv.writer(dst)
+            for raw_line in src:
+                parts = raw_line.strip().split()
+                if len(parts) < 4:
+                    continue
+                value = parts[3].strip().upper()
+                if value not in {"ON", "OFF", "OPEN", "CLOSE", "PRESENT", "ABSENT"}:
+                    continue
+                sensor = sensor_map.get(parts[2].strip(), parts[2].strip())
+                writer.writerow([parts[0], parts[1], sensor, value])
+                row_count += 1
+    return row_count
+
+
+def is_labeled_casas_path(path: Path) -> bool:
+    return path.suffix.lower() == ".txt"
+
+
+def records_have_adl_sequence_labels(records: list[dict]) -> bool:
+    return all(
+        isinstance(record.get("ADL系列ラベル"), list)
+        and bool(record.get("ADL系列ラベル"))
+        for record in records
+    )
+
+
+def output_has_adl_sequence_labels(path: Path) -> bool:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return isinstance(payload, list) and records_have_adl_sequence_labels(payload)
+
+
+def prepare_input_csv(input_path: Path) -> tuple[Path, tempfile.TemporaryDirectory | None, int | None]:
+    """Return an event CSV path, converting labeled CASAS txt when needed."""
+    if not input_path.exists():
+        raise FileNotFoundError(f"Input log not found: {input_path}")
+    if not is_labeled_casas_path(input_path):
+        return input_path, None, None
+
+    tmpdir = tempfile.TemporaryDirectory()
+    converted_csv = Path(tmpdir.name) / f"{DATASET_NAME}.csv"
+    event_count = convert_labeled_casas_to_event_csv(
+        labeled_casas_path=input_path,
+        output_csv_path=converted_csv,
+        sensor_map_path=SENSOR_MAP_PATH,
+    )
+    return converted_csv, tmpdir, event_count
 
 
 def build_log_text(df: pd.DataFrame, max_rows: int) -> Tuple[str, bool]:
@@ -293,11 +404,30 @@ def map_vectors_to_states(state_vectors_df: pd.DataFrame, vector_to_label: dict)
     return state_labels, state_labels_dict
 
 
-def main() -> None:
-    if LOG_DAYS <= 0:
-        raise ValueError("LOG_DAYS must be >= 1")
-    if RUNS <= 0:
-        raise ValueError("RUNS must be >= 1")
+def main(
+    log_days: int | None = None,
+    state_days: int | None = None,
+    output_dir: Path | None = None,
+    runs: int | None = None,
+    n_states: int | None = None,
+    hamming_threshold: int | None = None,
+) -> None:
+    effective_log_days = log_days if log_days is not None else LOG_DAYS
+    if effective_log_days <= 0:
+        raise ValueError("log_days must be >= 1")
+    if state_days is not None and state_days <= 0:
+        raise ValueError("state_days must be >= 1")
+    effective_runs = runs if runs is not None else RUNS
+    if effective_runs <= 0:
+        raise ValueError("runs must be >= 1")
+    effective_n_states = n_states if n_states is not None else N_STATES
+    if effective_n_states <= 0:
+        raise ValueError("n_states must be >= 1")
+    effective_hamming_threshold = (
+        hamming_threshold if hamming_threshold is not None else HAMMING_THRESHOLD
+    )
+    if effective_hamming_threshold < 0:
+        raise ValueError("hamming_threshold must be >= 0")
     if MAX_RETRIES_PER_RUN <= 0:
         raise ValueError("MAX_RETRIES_PER_RUN must be >= 1")
     if MAX_ROWS < 0:
@@ -309,157 +439,187 @@ def main() -> None:
     if not api_key:
         raise RuntimeError(".env に GEMINI_API_KEY が未設定です。")
 
-    # 入力ログに対して state_transition_visualizer の前処理を適用する
-    # これにより 0/1 ベクトル化、チャタリング除去、状態区間圧縮が行われる
-    csv_path = INPUT_CSV_PATH
-    output_dir = OUTPUT_DIR
-
-    # visualizer を初期化（experiment_config から設定を取得）
-    visualizer = stv.StateTransitionVisualizer(
-        n_representative_states=N_STATES,
-        hamming_threshold=HAMMING_THRESHOLD,
-        data_duration_days=LOG_DAYS
-    )
-    
-    # load_data はイベント形式の DataFrame を返す
-    events_df = visualizer.load_data(str(csv_path))
-    
-    # create_state_vectors で 1 秒解像度→スムージング→圧縮 を実行し、
-    # self.state_vectors_df に圧縮後の時刻ごとの 0/1 ベクトルが入る
-    state_vectors_df = visualizer.create_state_vectors(events_df)
-
-    # state フォルダから対応する状態定義ファイルを読み込む
-    effective_days = visualizer.effective_data_duration_days
-    state_file = find_state_file(DATASET_NAME, N_STATES, HAMMING_THRESHOLD, effective_days)
-    print(f"状態定義ファイルを読み込み中: {state_file}")
-    
-    state_label_to_vector, vector_to_label = load_state_definition(state_file)
-    
-    # 圧縮された状態ベクトル DataFrame を状態ラベルにマッピング
-    state_labels_list, state_labels_count = map_vectors_to_states(state_vectors_df, vector_to_label)
-    
-    print(f"状態マッピング完了:")
-    for label, count in sorted(state_labels_count.items()):
-        print(f"  {label}: {count}回")
-
-    # マッピング後の状態シーケンスをテキスト形式に変換
-    # 出力形式: "タイムスタンプ<TAB>状態ラベル（例: 状態1）"
-    lines = []
-    for timestamp, state_label in zip(visualizer.state_vectors_df.index, state_labels_list):
-        lines.append(f"{timestamp}\t{state_label}")
-    
-    log_text = "\n".join(lines)
-    
-    # MAX_ROWS が設定されていれば先頭からその行数だけ使用
-    log_lines = lines
-    if MAX_ROWS > 0 and len(lines) > MAX_ROWS:
-        log_lines = lines[:MAX_ROWS]
-        log_text = "\n".join(log_lines)
-        truncated = True
+    # 入力ログに対して state_transition_visualizer の前処理を適用する。
+    # ラベル付きCASAS txtを指定した場合は activity begin/end を捨て、
+    # センサーイベントだけを一時CSVへ変換してから既存処理に渡す。
+    csv_path, input_tmpdir, converted_event_count = prepare_input_csv(INPUT_LOG_PATH)
+    if output_dir is not None:
+        effective_output_dir = output_dir
+    elif effective_log_days != DAYS or n_states is not None or hamming_threshold is not None:
+        effective_output_dir = (
+            ROOT_DIR
+            / "output"
+            / f"llm_direct_{effective_n_states}_{effective_hamming_threshold}_{effective_log_days}days"
+        )
     else:
-        truncated = False
+        effective_output_dir = ROOT_DIR / "output" / f"llm_direct_{effective_log_days}"
+
+    try:
+        if converted_event_count is not None:
+            print(
+                f"ラベル付きCASASからセンサーイベントを抽出しました: "
+                f"{converted_event_count} events -> {csv_path}"
+            )
+
+        # visualizer を初期化（experiment_config から設定を取得）
+        visualizer = stv.StateTransitionVisualizer(
+            n_representative_states=effective_n_states,
+            hamming_threshold=effective_hamming_threshold,
+            data_duration_days=effective_log_days
+        )
     
-    prompt_log_lines = len(log_lines)
-
-    # プロンプトを構築（N_STATES と STATE_TABLE を埋め込む）
-    state_table_text = state_table_to_text(state_file)
-    user_message = build_prompt(
-        dataset_name=DATASET_NAME,
-        days=LOG_DAYS,
-        log_text=log_text,
-        truncated=truncated
-    ).replace("{N_STATES}", str(N_STATES)).replace("{STATE_TABLE}", state_table_text)
-# print(user_message)
-# 2010-11-06 23:40:04     状態1
-# 2010-11-06 23:40:14     その他
+        # load_data はイベント形式の DataFrame を返す
+        events_df = visualizer.load_data(str(csv_path))
     
-    output_dir.mkdir(parents=True, exist_ok=True)
+        # create_state_vectors で 1 秒解像度→スムージング→圧縮 を実行し、
+        # self.state_vectors_df に圧縮後の時刻ごとの 0/1 ベクトルが入る
+        state_vectors_df = visualizer.create_state_vectors(events_df)
 
-    backend_name = "unknown"
-    metrics_rows: List[dict] = []
-    for run_idx in range(1, RUNS + 1):
-        output_path = output_dir / f"{run_idx}.json"
-        if output_path.exists():
-            print(f"Run {run_idx}: 出力が既に存在するためスキップします -> {output_path}")
-            continue
+        # state フォルダから対応する状態定義ファイルを読み込む
+        effective_days = visualizer.effective_data_duration_days
+        state_file_days = state_days if state_days is not None else effective_days
+        state_file = find_state_file(
+            DATASET_NAME,
+            effective_n_states,
+            effective_hamming_threshold,
+            state_file_days,
+        )
+        print(f"状態定義ファイルを読み込み中: {state_file}")
+    
+        state_label_to_vector, vector_to_label = load_state_definition(state_file)
+    
+        # 圧縮された状態ベクトル DataFrame を状態ラベルにマッピング
+        state_labels_list, state_labels_count = map_vectors_to_states(state_vectors_df, vector_to_label)
+    
+        print("状態マッピング完了:")
+        for label, count in sorted(state_labels_count.items()):
+            print(f"  {label}: {count}回")
 
-        # Geminiに問い合わせ
-        attempt = 0
-        while True:
-            try:
-                llm_text, backend, usage, duration_sec = call_gemini(
-                    api_key=api_key,
-                    model_name=MODEL_NAME,
-                    user_message=user_message,
-                    temperature=TEMPERATURE,
-                )
+        # マッピング後の状態パターンをテキスト形式に変換
+        # 出力形式: "タイムスタンプ<TAB>状態ラベル（例: 状態1）"
+        lines = []
+        for timestamp, state_label in zip(visualizer.state_vectors_df.index, state_labels_list):
+            lines.append(f"{timestamp}\t{state_label}")
+    
+        log_text = "\n".join(lines)
+    
+        # MAX_ROWS が設定されていれば先頭からその行数だけ使用
+        log_lines = lines
+        if MAX_ROWS > 0 and len(lines) > MAX_ROWS:
+            log_lines = lines[:MAX_ROWS]
+            log_text = "\n".join(log_lines)
+            truncated = True
+        else:
+            truncated = False
+    
+        prompt_log_lines = len(log_lines)
 
-                if not llm_text:
-                    raise RuntimeError("Geminiから空の応答が返されました。")
+        # プロンプトを構築（N_STATES と STATE_TABLE を埋め込む）
+        state_table_text = state_table_to_text(state_file)
+        user_message = build_prompt(
+            dataset_name=DATASET_NAME,
+            days=effective_log_days,
+            log_text=log_text,
+            truncated=truncated
+        ).replace("{N_STATES}", str(effective_n_states)).replace("{STATE_TABLE}", state_table_text)
+    
+        effective_output_dir.mkdir(parents=True, exist_ok=True)
 
-                # 応答をJSON配列として解釈し保存
-                records = parse_pattern_records(llm_text)
-                output_path.write_text(
-                    json.dumps(records, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-                metrics_rows.append(
-                    {
-                        "run": run_idx,
-                        "model": MODEL_NAME,
-                        "backend": backend,
-                        "duration_sec": duration_sec,
-                        "prompt_tokens": usage.get("prompt_tokens"),
-                        "response_tokens": usage.get("response_tokens"),
-                        "total_tokens": usage.get("total_tokens"),
-                        "attempts": attempt + 1,
-                    }
-                )
-                break
-            except Exception as exc:
-                attempt += 1
-                print(f"Run {run_idx} failed (attempt {attempt}/{MAX_RETRIES_PER_RUN}): {exc}")
-                if attempt >= MAX_RETRIES_PER_RUN:
-                    print(f"Run {run_idx} exceeded max retries. Aborting.")
-                    raise
+        backend_name = "unknown"
+        metrics_rows: List[dict] = []
+        for run_idx in range(1, effective_runs + 1):
+            output_path = effective_output_dir / f"{run_idx}.json"
+            if output_path.exists() and output_has_adl_sequence_labels(output_path):
+                print(f"Run {run_idx}: ADL系列ラベル付き出力が既に存在するためスキップします -> {output_path}")
+                continue
+            if output_path.exists():
+                print(f"Run {run_idx}: 既存出力にADL系列ラベルが無いため再生成します -> {output_path}")
 
-        backend_name = backend
-        print("=" * 80)
-        print("LLM系列抽出（状態定義ファイル利用）")
-        print("=" * 80)
-        print(f"入力ファイル          : {csv_path}")
-        print(f"対象日数              : {LOG_DAYS}")
-        print(f"代表状態数            : {N_STATES}")
-        print(f"ハミング距離閾値      : {HAMMING_THRESHOLD}")
-        print(f"状態定義ファイル      : {state_file}")
-        print(f"状態シーケンス長      : {len(state_labels_list)}")
-        print(f"使用するシーケンス行数: {prompt_log_lines}")
-        print(f"最大行数              : {MAX_ROWS}")
-        print(f"モデル                : {MODEL_NAME}")
-        print(f"利用SDK               : {backend}")
-        print(f"出力ファイル          : {output_path}")
-        print(f"抽出パターン数        : {len(records)}")
-        print(f"実行回数              : {run_idx}/{RUNS}")
-        print("=" * 80)
+            # Geminiに問い合わせ
+            attempt = 0
+            while True:
+                try:
+                    llm_text, backend, usage, duration_sec = call_gemini(
+                        api_key=api_key,
+                        model_name=MODEL_NAME,
+                        user_message=user_message,
+                        temperature=TEMPERATURE,
+                    )
 
-    # メトリクスをCSVに保存
-    if metrics_rows:
-        metrics_path = output_dir / f"llm_direct_metrics_{LOG_DAYS}days.csv"
-        with open(metrics_path, "w", encoding="utf-8", newline="") as f:
-            fieldnames = [
-                "run",
-                "model",
-                "backend",
-                "duration_sec",
-                "prompt_tokens",
-                "response_tokens",
-                "total_tokens",
-                "attempts",
-            ]
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(metrics_rows)
-        print(f"トークン使用量と応答時間を保存しました: {metrics_path}")
+                    if not llm_text:
+                        raise RuntimeError("Geminiから空の応答が返されました。")
+
+                    # 応答をJSON配列として解釈し保存
+                    records = parse_pattern_records(llm_text)
+                    if not records_have_adl_sequence_labels(records):
+                        raise RuntimeError("LLM応答にADL系列ラベルが含まれていません。")
+                    output_path.write_text(
+                        json.dumps(records, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                    metrics_rows.append(
+                        {
+                            "run": run_idx,
+                            "model": MODEL_NAME,
+                            "backend": backend,
+                            "duration_sec": duration_sec,
+                            "prompt_tokens": usage.get("prompt_tokens"),
+                            "response_tokens": usage.get("response_tokens"),
+                            "total_tokens": usage.get("total_tokens"),
+                            "attempts": attempt + 1,
+                        }
+                    )
+                    break
+                except Exception as exc:
+                    attempt += 1
+                    print(f"Run {run_idx} failed (attempt {attempt}/{MAX_RETRIES_PER_RUN}): {exc}")
+                    if attempt >= MAX_RETRIES_PER_RUN:
+                        print(f"Run {run_idx} exceeded max retries. Aborting.")
+                        raise
+
+            backend_name = backend
+            print("=" * 80)
+            print("LLM系列抽出（状態定義ファイル利用）")
+            print("=" * 80)
+            print(f"入力ファイル          : {INPUT_LOG_PATH}")
+            if converted_event_count is not None:
+                print(f"一時イベントCSV       : {csv_path}")
+            print(f"対象日数              : {effective_log_days}")
+            print(f"代表状態数            : {effective_n_states}")
+            print(f"ハミング距離閾値      : {effective_hamming_threshold}")
+            print(f"状態定義ファイル      : {state_file}")
+            print(f"状態定義日数          : {state_file_days}")
+            print(f"状態パターン長      : {len(state_labels_list)}")
+            print(f"使用するパターン行数: {prompt_log_lines}")
+            print(f"最大行数              : {MAX_ROWS}")
+            print(f"モデル                : {MODEL_NAME}")
+            print(f"利用SDK               : {backend}")
+            print(f"出力ファイル          : {output_path}")
+            print(f"抽出パターン数        : {len(records)}")
+            print(f"実行回数              : {run_idx}/{effective_runs}")
+            print("=" * 80)
+
+        # メトリクスをCSVに保存
+        if metrics_rows:
+            metrics_path = effective_output_dir / f"llm_direct_metrics_{effective_log_days}days.csv"
+            with open(metrics_path, "w", encoding="utf-8", newline="") as f:
+                fieldnames = [
+                    "run",
+                    "model",
+                    "backend",
+                    "duration_sec",
+                    "prompt_tokens",
+                    "response_tokens",
+                    "total_tokens",
+                    "attempts",
+                ]
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(metrics_rows)
+            print(f"トークン使用量と応答時間を保存しました: {metrics_path}")
+    finally:
+        if input_tmpdir is not None:
+            input_tmpdir.cleanup()
 
 
 if __name__ == "__main__":

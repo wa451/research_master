@@ -10,7 +10,7 @@
 - `PAPER_PARAMETERS.md` を `docs/paper_parameters.md` へ移動。
 - `configs/default.yaml` を追加し、`experiment_config.py` 経由で主要設定値を読むようにした。
 - `prompts/` を追加し、LLM抽出スクリプトがプロンプトを外部ファイルから読むようにした。
-- `scripts/`, `outputs/`, `src/`, `tests/` を追加し、将来の移行先を明示。
+- `scripts/`, `output/`, `src/`, `tests/` を追加し、将来の移行先を明示。
 - 既存の `data/`, `state/`, `picture/`, `output/` は移動しない。現在の実行コマンドが壊れるため。
 
 ## 追加実施したパッケージ化整理
@@ -70,7 +70,7 @@ project/
 ├── state/                 # 現行の代表状態テーブル出力
 ├── picture/               # 現行の図・ネットワークJSON出力
 ├── output/                # 現行のパターン・評価出力
-├── outputs/               # 将来の統合出力先
+├── output/               # 将来の統合出力先
 ├── support/
 ├── tests/
 ```
@@ -107,7 +107,7 @@ project/
    - 現在は `configs/default.yaml` 依存が中心。実験ごとの差分指定をCLIでもできるようにする。
 6. `src/behavior_pattern_mining/visualization/state_transition_visualizer.py` を分割する。
    - データ読み込み、状態ベクトル化、代表状態、遷移計算、可視化の順に分ける。
-7. `output/`, `picture/`, `state/` を `outputs/` 配下へ移行する。
+7. `output/`, `picture/`, `state/` を `output/` 配下へ移行する。
    - 既存結果はアーカイブとして残し、新規出力だけを切り替える。
 
 ## リスクと注意点

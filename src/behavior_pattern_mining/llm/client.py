@@ -8,7 +8,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, Iterable, List, Tuple
 
 
 def load_dotenv(env_file_path: Path) -> None:
@@ -36,53 +36,213 @@ def load_dotenv(env_file_path: Path) -> None:
         os.environ.setdefault(key, value)
 
 
-def parse_pattern_records(response_text: str) -> List[dict]:
-    """Normalize LLM response into a list of pattern records."""
-    candidates = [response_text.strip()]
+def _balanced_json_snippets(text: str) -> Iterable[str]:
+    """Yield balanced JSON-looking object/array snippets from mixed text."""
+    starts = [i for i, ch in enumerate(text) if ch in "[{"]
+    for start in starts:
+        stack: List[str] = []
+        in_string = False
+        escape = False
+        for idx in range(start, len(text)):
+            ch = text[idx]
+            if in_string:
+                if escape:
+                    escape = False
+                elif ch == "\\":
+                    escape = True
+                elif ch == '"':
+                    in_string = False
+                continue
+
+            if ch == '"':
+                in_string = True
+            elif ch in "[{":
+                stack.append(ch)
+            elif ch in "]}":
+                if not stack:
+                    break
+                opener = stack.pop()
+                if (opener, ch) not in {("[", "]"), ("{", "}")}:
+                    break
+                if not stack:
+                    yield text[start : idx + 1].strip()
+                    break
+
+
+def _response_json_candidates(response_text: str) -> List[str]:
+    """Return JSON parse candidates in a forgiving, deterministic order."""
+    candidates: List[str] = []
+    stripped = response_text.strip()
+    if stripped:
+        candidates.append(stripped)
 
     for match in re.findall(r"```(?:json)?\s*([\s\S]*?)```", response_text, flags=re.IGNORECASE):
-        candidates.append(match.strip())
+        snippet = match.strip()
+        if snippet:
+            candidates.append(snippet)
 
+    candidates.extend(_balanced_json_snippets(response_text))
+
+    deduped: List[str] = []
+    seen = set()
     for candidate in candidates:
+        if candidate not in seen:
+            seen.add(candidate)
+            deduped.append(candidate)
+    return deduped
+
+
+def _unwrap_pattern_container(data: Any) -> Any:
+    """Accept common wrapper objects around the pattern list."""
+    if isinstance(data, list):
+        return data
+    if not isinstance(data, dict):
+        return data
+
+    for key in (
+        "patterns",
+        "pattern_records",
+        "results",
+        "items",
+        "sequences",
+        "パターン",
+        "抽出パターン",
+        "系列パターン",
+    ):
+        value = data.get(key)
+        if isinstance(value, list):
+            return value
+    return data
+
+
+def _first_string(item: dict, keys: Iterable[str], default: str = "") -> str:
+    for key in keys:
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return default
+
+
+def _normalize_sequence(raw_sequence: Any) -> List[str]:
+    """Normalize list or arrow-separated sequence text into state labels."""
+    if isinstance(raw_sequence, list):
+        return [str(part).strip() for part in raw_sequence if str(part).strip()]
+
+    if isinstance(raw_sequence, str):
+        text = raw_sequence.strip()
+        if not text:
+            return []
+
+        try:
+            decoded = json.loads(text)
+        except json.JSONDecodeError:
+            decoded = None
+        if isinstance(decoded, list):
+            return [str(part).strip() for part in decoded if str(part).strip()]
+
+        parts = re.split(r"\s*(?:->|→|⇒|,|、|\||/|\n)\s*", text)
+        return [part.strip() for part in parts if part.strip()]
+
+    return []
+
+
+def _normalize_adl_label_values(raw_labels: Any) -> List[str]:
+    """Keep ADL interpretation labels as a string list if the LLM provided them."""
+    if raw_labels is None:
+        return []
+    if isinstance(raw_labels, list):
+        return [str(label).strip() for label in raw_labels if str(label).strip()]
+    if isinstance(raw_labels, str):
+        text = raw_labels.strip()
+        if not text:
+            return []
+        try:
+            decoded = json.loads(text)
+        except json.JSONDecodeError:
+            decoded = None
+        if isinstance(decoded, list):
+            return [str(label).strip() for label in decoded if str(label).strip()]
+        return [label.strip() for label in re.split(r"\s*(?:,|、|;|；|\||/|\n)\s*", text) if label.strip()]
+    return []
+
+
+def _normalize_pattern_records(data: Any) -> List[dict]:
+    """Normalize parsed JSON data into the canonical pattern schema."""
+    data = _unwrap_pattern_container(data)
+    if not isinstance(data, list):
+        return []
+
+    extracted: List[dict] = []
+    for index, item in enumerate(data, start=1):
+        if not isinstance(item, dict):
+            continue
+
+        raw_sequence = None
+        for key in (
+            "遷移のパターン",
+            "遷移のシーケンス",
+            "sequence",
+            "パターン",
+            "系列",
+            "states",
+            "state_sequence",
+        ):
+            if key in item:
+                raw_sequence = item[key]
+                break
+
+        sequence = _normalize_sequence(raw_sequence)
+        if not sequence:
+            continue
+
+        pattern_name = _first_string(
+            item,
+            ("パターン名", "pattern_name", "name", "名称", "title"),
+            default=f"Pattern {index}",
+        )
+        reason = _first_string(
+            item,
+            ("解釈の根拠", "reason", "根拠", "explanation", "説明", "description"),
+            default="",
+        )
+        raw_adl_labels = None
+        for key in ("ADL系列ラベル", "adl_sequence_labels", "adl_labels", "ADLラベル"):
+            if key in item:
+                raw_adl_labels = item[key]
+                break
+        adl_labels = _normalize_adl_label_values(raw_adl_labels)
+
+        record = {
+            "パターン名": pattern_name,
+            "解釈の根拠": reason,
+            "遷移のパターン": sequence,
+        }
+        if adl_labels:
+            record["ADL系列ラベル"] = adl_labels
+        extracted.append(record)
+
+    return extracted
+
+
+def parse_pattern_records(response_text: str) -> List[dict]:
+    """Normalize LLM response into a list of pattern records."""
+    for candidate in _response_json_candidates(response_text):
         try:
             data = json.loads(candidate)
         except json.JSONDecodeError:
             continue
 
-        if isinstance(data, list) and all(isinstance(item, dict) for item in data):
-            extracted: List[dict] = []
-            for item in data:
-                seq = item.get("遷移のシーケンス")
-                if seq is None:
-                    seq = item.get("sequence")
-                if not isinstance(seq, list) or not all(isinstance(s, str) for s in seq):
-                    extracted = []
-                    break
+        unwrapped = _unwrap_pattern_container(data)
+        if isinstance(unwrapped, list) and not unwrapped:
+            return []
 
-                pattern_name = item.get("パターン名")
-                if not isinstance(pattern_name, str) or not pattern_name.strip():
-                    extracted = []
-                    break
-
-                reason = item.get("解釈の根拠")
-                if reason is None:
-                    reason = item.get("reason")
-                if not isinstance(reason, str):
-                    reason = ""
-
-                extracted.append(
-                    {
-                        "パターン名": pattern_name.strip(),
-                        "解釈の根拠": reason.strip(),
-                        "遷移のシーケンス": seq,
-                    }
-                )
-            if extracted:
-                return extracted
+        extracted = _normalize_pattern_records(data)
+        if extracted:
+            return extracted
 
     raise RuntimeError(
         "LLM応答をパターン配列として解釈できませんでした。"
-        "JSON配列（例: [{\"パターン名\":\"...\",\"遷移のシーケンス\":[\"状態1\",\"状態2\"]}]）"
+        "JSON配列（例: [{\"パターン名\":\"...\",\"遷移のパターン\":[\"状態1\",\"状態2\"]}]）"
         "を返すようプロンプトを確認してください。"
     )
 

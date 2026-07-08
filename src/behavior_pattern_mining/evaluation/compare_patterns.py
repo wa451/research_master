@@ -9,12 +9,12 @@
     - output/llm_sequences.json
 
 出力:
-    Precision: TP / (TP + FP) LLMが提案したシーケンスが、実際のデータ（ベースライン）に本当に存在し、かつ統計的に有意か
-    Recall: TP / (TP + FN) ベースラインが見つけた「明らかに頻出するシーケンス」を、LLMがちゃんと拾い上げているか
+    Precision: TP / (TP + FP) LLMが提案したパターンが、実際のデータ（ベースライン）に本当に存在し、かつ統計的に有意か
+    Recall: TP / (TP + FN) ベースラインが見つけた「明らかに頻出するパターン」を、LLMがちゃんと拾い上げているか
     F1-score: 2 * Precision * Recall / (Precision + Recall)
-    TP: LLMが生成したシーケンスのうち、ベースラインにも存在するもの
-    FP: LLMが生成したシーケンスのうち、ベースラインに存在しないもの
-    FN: ベースラインに存在するシーケンスのうち、LLMが生成しなかったもの
+    TP: LLMが生成したパターンのうち、ベースラインにも存在するもの
+    FP: LLMが生成したパターンのうち、ベースラインに存在しないもの
+    FN: ベースラインに存在するパターンのうち、LLMが生成しなかったもの
 """
 
 from __future__ import annotations

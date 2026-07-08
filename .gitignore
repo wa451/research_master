@@ -10,8 +10,6 @@ __pycache__
 *.ipynb
 *.pyc
 all
-outputs/tmp/*
-!outputs/tmp/.gitkeep
-outputs/logs/*
-!outputs/logs/.gitkeep
+output
+picture
 results/

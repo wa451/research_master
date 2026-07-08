@@ -1,126 +1,123 @@
 # 評価3: 提案手法とLLM単独ベースラインの比較
 
-この評価では、提案手法と、センサログまたは代表状態系列を直接LLMに渡すベースラインを比較する。提案手法は状態遷移ネットワークを構造化してLLMに渡すのに対し、LLM単独ベースラインは遷移ネットワーク化を介さず、時系列ログに近い入力からパターンを抽出する。
+## 評価の要約
 
-## 目的
+提案手法と、センサログに近い入力を直接LLMへ渡すLLM単独ベースラインを比較する。提案手法は状態遷移ネットワークを構造化してLLMに渡す。LLM単独ベースラインは、状態遷移ネットワーク化を介さず、ラベル付きCASASからactivityラベルを除いたセンサーイベント由来の入力で系列パターンを抽出する。
 
-- 状態遷移ネットワークをLLM入力にする効果を確認する。
-- 直接ログ入力だけで抽出した場合と、構造化ネットワーク入力で抽出した場合のPrecision, Recall, F1を比較する。
-- LLM単独では長いログや局所的な揺らぎに引っ張られやすいかを確認する。
+## RQ
 
-## 比較する手法
+| RQ | 内容 |
+|---|---|
+| RQ3-1 | 状態遷移ネットワークをLLM入力にすることで、直接ログ入力より良い系列抽出ができるか。 |
+| RQ3-2 | 提案手法とLLM単独ベースラインでPrecision / Recall / F1はどう変わるか。 |
+| RQ3-3 | 直接ログ入力では、長いログや局所的な揺らぎにより不安定な系列が増えるか。 |
 
-| 手法 | 入力 | 主なスクリプト | 出力 |
-|---|---|---|---|
-| 提案手法 | 時間帯別状態遷移ネットワークJSON | `scripts/run_llm_eval_batch.py` | `output/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx` |
-| LLM単独ベースライン | 代表状態系列を直接プロンプト化したログ | `scripts/run_direct_log_baseline.py` | `output/llm_direct_{DAYS}/evaluate_direct_log_metrics_{DAYS}days.xlsx` |
+## 評価指標
 
-## 前提
+| 指標 | 確認すること |
+|---|---|
+| 遷移確率ベースラインに対するPrecision / Recall / F1 | 遷移確率に基づく系列との一致度。 |
+| 頻度ベースラインに対するPrecision / Recall / F1 | 頻出状態系列との一致度。 |
+| 出力パターン数 | 直接ログ入力で過剰・過少抽出になっていないか。 |
+| run間のばらつき | 同じ条件で複数runを行う場合の安定性。 |
+| Groundedness | 必要に応じて、系列が状態遷移グラフ上に根拠を持つかを見る。 |
 
-評価2の提案手法5回実行が完了していること。
+## 入力と出力
+
+### 入力
+
+| 入力 | 例 | 役割 |
+|---|---|---|
+| 提案手法の集計 | `output/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx` | 比較対象となる提案手法の評価結果。 |
+| 状態表 | `state/aruba_15_1_154days.txt` | LLM単独ベースラインでも代表状態化に使う。 |
+| ラベル付きCASAS | `new_labeled_data/aruba.txt` | センサーイベント抽出元。activity `begin/end` はLLM入力に渡さない。 |
+| センサーマップ | `configs/aruba_sensor_map.json` | `M003` などを部屋名・場所名へ変換する。 |
+| 直接ログプロンプト | `prompts/direct_log_pattern_extraction_prompt.md` | LLM単独ベースライン用プロンプト。 |
+| APIキー | `.env` | `GEMINI_API_KEY` を設定する。 |
+
+### 出力
+
+| 出力 | 内容 |
+|---|---|
+| `output/llm_direct_154/1.json` | LLM単独ベースラインの系列パターンJSON。 |
+| `output/llm_direct_154/llm_direct_metrics_154days.csv` | runごとの評価指標CSV。 |
+| `output/llm_direct_154/evaluate_direct_log_report.txt` | 評価レポート。 |
+| `output/llm_direct_154/evaluate_direct_log_metrics_154days.xlsx` | LLM単独ベースラインの評価指標集計。 |
+
+## 結果の読み方
+
+| 順序 | ファイル | 読み方 |
+|---|---|---|
+| 1 | `output/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx`, `output/llm_direct_154/evaluate_direct_log_metrics_154days.xlsx` | summaryとして、提案手法とLLM単独ベースラインの平均Precision / Recall / F1を並べて見る。 |
+| 2 | `output/llm_direct_154/{run}.json`, `output/llm_direct_154/evaluate_direct_log_report.txt` | detailsとして、直接ログベースラインの系列内容、抽出数、長すぎる系列や不自然な系列を確認する。 |
+| 3 | `configs/default.yaml`, `prompts/direct_log_pattern_extraction_prompt.md`, `docs/paper_parameters.md` | 再現条件として、run数、モデル、入力日数、プロンプトを確認する。 |
+
+## 実行手順
+
+### 1. 🟨 **条件付き** 評価2の提案手法5回実行を完了させる
+
+`output/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx` がなければ実行する。既に評価2の出力がある場合は再実行しなくてよい。
 
 ```bash
 uv run python scripts/run_all.py
 ```
 
-少なくとも以下が存在することを確認する。
+### 2. 🟨 **条件付き** 代表状態表を作成する
 
-```text
-output/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx
-state/aruba_15_1_154days.txt
-```
-
-## LLM単独ベースラインの実行順序
-
-### 1. 状態系列を準備
-
-直接ログベースラインも代表状態テーブルを参照するため、未生成の場合は先に実行する。
+`state/aruba_15_1_154days.txt` がなければ実行する。評価2または評価4の準備で作成済みならスキップしてよい。
 
 ```bash
 uv run python scripts/run_build_network.py
 ```
 
-### 2. 直接ログ入力でLLM抽出と評価
+### 3. 🟥 **必須** LLM単独ベースラインを実行する
+
+評価3の比較対象を作るために実行する。
 
 ```bash
 uv run python scripts/run_direct_log_baseline.py
 ```
 
-入力:
+### 4. 🟨 **条件付き** Groundednessを確認する
 
-```text
-data/aruba.csv
-state/aruba_15_1_154days.txt
-prompts/direct_log_pattern_extraction_prompt.md
-.env
-```
-
-出力:
-
-```text
-output/llm_direct_154/1.json
-output/llm_direct_154/llm_direct_metrics_154days.csv
-output/llm_direct_154/evaluate_direct_log_report.txt
-output/llm_direct_154/evaluate_direct_log_metrics_154days.xlsx
-```
-
-`configs/default.yaml` の `llm.runs_default` が1の場合、直接ログベースラインは1回実行になる。提案手法と同じく5回で比較したい場合は、`llm.runs_default: 5` に変更してから実行する。
-
-## 比較方法
-
-次の2つのExcelを比較する。
-
-```text
-output/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx
-output/llm_direct_154/evaluate_direct_log_metrics_154days.xlsx
-```
-
-比較する指標:
-
-- 遷移確率ベースラインに対するPrecision, Recall, F1
-- 頻度ベースラインに対するPrecision, Recall, F1
-- 実行ごとのばらつき
-- 5回平均
-- 出力パターン数
-- 不正な系列、存在しない遷移、長すぎる系列の有無
-
-## Groundednessを確認する場合
-
-LLM出力が状態遷移グラフに根拠を持つかを確認する場合は、次を実行する。
+グラフ上の根拠まで確認する場合のみ実行する。通常の評価3比較だけなら省略できる。
 
 ```bash
 uv run python scripts/run_groundedness.py
 ```
 
-確認内容:
+## 比較対象
 
-- 系列長が2から4に収まるか。
-- 自己ループを含まないか。
-- 隣接状態ペアがMarkov graph上に存在するか。
-- 各エッジの遷移確率が0.2以上か。
+| 手法 | 入力 | 主なスクリプト | 出力 |
+|---|---|---|---|
+| 提案手法 | 時間帯別状態遷移ネットワークJSON | `scripts/run_llm_eval_batch.py` | `output/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx` |
+| LLM単独ベースライン | ラベル付きCASAS由来のセンサーイベントから作った代表状態系列 | `scripts/run_direct_log_baseline.py` | `output/llm_direct_154/evaluate_direct_log_metrics_154days.xlsx` |
 
-`src/behavior_pattern_mining/evaluation/groundedness_check.py` は入力先の既定値が直接ログ出力向けになっている場合がある。提案手法の出力にも適用する場合は、スクリプト内または設定の入力パスを確認する。
+## 処理手順の内部仕様
 
-## 結果のまとめ方
+1. 提案手法は評価2の出力を使う。
+2. LLM単独ベースラインは `new_labeled_data/aruba.txt` からセンサーイベントだけを抽出する。
+3. activity `begin/end` ラベルはLLM入力から除外する。
+4. `configs/aruba_sensor_map.json` でセンサーIDを場所名へ変換する。
+5. `scripts/run_direct_log_baseline.py` が直接ログ入力でLLM抽出と評価を行う。
+6. 評価指標は提案手法と同じベースライン系列に対するPrecision / Recall / F1を使う。
 
-表の例:
+## パラメータ
 
-```text
-method, run, num_patterns,
-prob_precision, prob_recall, prob_f1,
-state_precision, state_recall, state_f1,
-groundedness
-```
+| パラメータ | 値・注意 |
+|---|---|
+| 代表状態数 `K` | `15` |
+| ハミング距離閾値 | `1` |
+| 分析期間 | `154`日 |
+| LLM run数 | `configs/default.yaml` の `llm.runs_default` に依存する。 |
+| LLMモデル | `gemini-2.5-pro` |
+| 直接ログ出力先 | `output/llm_direct_{DAYS}/` |
 
-論文・発表では、少なくとも次を記述する。
-
-- 提案手法は状態遷移ネットワークJSONを入力にしたこと。
-- LLM単独ベースラインはログに近い系列入力を使ったこと。
-- 両手法で同じベースライン、同じ評価指標を使ったこと。
-- 直接ログベースラインの実行回数が1回か5回か。
+`llm.runs_default` が `1` の場合、直接ログベースラインは1回実行になる。提案手法と同じく5回で比較する場合は、設定値を変更し、変更内容を記録する。
 
 ## 注意点
 
-- 直接ログベースラインの出力先は `output/llm_direct_{DAYS}/` で、提案手法の出力先とは異なる。
-- `llm.runs_default` を変更した場合、他のLLM実行にも影響する可能性があるため、実験後は設定値を記録する。
 - 比較時は同じ `K`, ハミング距離、分析期間を使う。
+- `llm.runs_default` を変更した場合、他のLLM実行にも影響する可能性がある。
+- 直接ログベースラインの出力先は `output/llm_direct_{DAYS}/` で、提案手法の出力先とは異なる。
+- `src/behavior_pattern_mining/evaluation/groundedness_check.py` の既定入力が直接ログ出力向けになっている場合があるため、Groundedness確認時は入力パスを確認する。

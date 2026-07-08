@@ -28,7 +28,7 @@ def load_sequences(path: Path) -> List[List[str]]:
 
     Supported formats:
     1) [["状態1", "状態2"], ...]
-    2) [{"パターン名": "...", "遷移のシーケンス": ["状態1", ...]}, ...]
+    2) [{"パターン名": "...", "遷移のパターン": ["状態1", ...]}, ...]
     """
     if not path.exists():
         raise FileNotFoundError(f"ファイルが見つかりません: {path}")
@@ -41,16 +41,18 @@ def load_sequences(path: Path) -> List[List[str]]:
     for i, item in enumerate(payload):
         if isinstance(item, list):
             if not all(isinstance(x, str) for x in item):
-                raise ValueError(f"不正なシーケンス形式です: index={i}, path={path}")
+                raise ValueError(f"不正なパターン形式です: index={i}, path={path}")
             normalized.append(item)
             continue
 
         if isinstance(item, dict):
-            seq = item.get("遷移のシーケンス")
+            seq = item.get("遷移のパターン")
+            if seq is None:
+                seq = item.get("遷移のシーケンス")
             if seq is None:
                 seq = item.get("sequence")
             if not isinstance(seq, list) or not all(isinstance(x, str) for x in seq):
-                raise ValueError(f"不正なシーケンス形式です: index={i}, path={path}")
+                raise ValueError(f"不正なパターン形式です: index={i}, path={path}")
             normalized.append(seq)
             continue
 
@@ -179,7 +181,7 @@ def build_report_text(
     """Build a human-readable evaluation report text."""
     lines: List[str] = []
     lines.append("=" * 80)
-    lines.append("シーケンス評価レポート")
+    lines.append("パターン評価レポート")
     lines.append("=" * 80)
     lines.append(f"ベースライン系列数                 : {len(baseline_results)}")
     lines.append(f"LLM系列数                          : {len(llm_results)}")

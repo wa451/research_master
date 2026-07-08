@@ -540,7 +540,7 @@ class StateTransitionVisualizer:
         Returns:
         --------
         List
-            代表状態のシーケンス
+            代表状態のパターン
         """
         print("\nStep 4: 状態マッピング処理")
         
@@ -599,10 +599,10 @@ class StateTransitionVisualizer:
         compressed_sequence = [s for i, s in enumerate(self.state_sequence)
                                 if i == 0 or s != self.state_sequence[i - 1]]
         
-        print(f"  マッピング後のシーケンス長: {len(self.state_sequence)}")
+        print(f"  マッピング後のパターン長: {len(self.state_sequence)}")
         print(f"  圧縮後: {len(compressed_sequence)}")
         
-        # 各状態の出現回数をカウント（圧縮後のシーケンス内での出現回数）
+        # 各状態の出現回数をカウント（圧縮後のパターン内での出現回数）
         occurrence_counter = Counter(compressed_sequence)
         self.state_occurrences = dict(occurrence_counter)
         
@@ -656,7 +656,7 @@ class StateTransitionVisualizer:
             
             print(f"    データ行数: {len(filtered_df)}")
             
-            # このモードのデータで状態シーケンスを作成（既存の代表状態を使用）
+            # このモードのデータで状態パターンを作成（既存の代表状態を使用）
             mode_sequence = []
             other_count = 0
             
@@ -682,7 +682,7 @@ class StateTransitionVisualizer:
                         mode_sequence.append('Other')
                         other_count += 1
             
-            # シーケンスが空の場合はスキップ
+            # パターンが空の場合はスキップ
             if len(mode_sequence) == 0:
                 print(f"    Warning: Mode '{mode_name}' has empty sequence. Skipping...")
                 continue
@@ -693,9 +693,9 @@ class StateTransitionVisualizer:
             compressed_sequence = [s for i, s in enumerate(mode_sequence)
                                     if i == 0 or s != mode_sequence[i - 1]]
             
-            print(f"    シーケンス長: {len(mode_sequence)} -> 圧縮後: {len(compressed_sequence)}")
+            print(f"    パターン長: {len(mode_sequence)} -> 圧縮後: {len(compressed_sequence)}")
             
-            # 遷移が計算できない場合（圧縮後のシーケンスが1以下）はスキップ
+            # 遷移が計算できない場合（圧縮後のパターンが1以下）はスキップ
             if len(compressed_sequence) <= 1:
                 print(f"    Warning: Mode '{mode_name}' has insufficient transitions. Skipping...")
                 continue

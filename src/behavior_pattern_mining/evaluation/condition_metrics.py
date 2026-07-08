@@ -8,7 +8,7 @@
 処理概要:
 1) CSVから作成した状態系列を、方法A（1時間ごとの固定時間枠）で区切り、
    論文（3.1.2項、3.2.1項）に準拠したトランザクション（バスケット）データを作成する。
-2) 各LLMシーケンスの support / confidence / interval_minutes を時間枠ベースで算出する。
+2) 各LLMパターンの support / confidence / interval_minutes を時間枠ベースで算出する。
 3) 閾値ルールで TP/FP を判定
 4) Precision / Recall / F1 / Weighted F1 を算出
 
@@ -496,7 +496,7 @@ def save_sequence_details_json(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="LLMシーケンスJSONとCSVから論文準拠の条件ベース評価を行う")
+    parser = argparse.ArgumentParser(description="LLMパターンJSONとCSVから論文準拠の条件ベース評価を行う")
     parser.add_argument("--llm-json", type=Path, default=DEFAULT_LLM_SEQUENCES_PATH, help="LLM系列JSON")
     parser.add_argument("--csv", type=Path, default=DEFAULT_SOURCE_CSV_PATH, help="状態化に使う元CSV")
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT_PATH, help="出力レポートTXT")

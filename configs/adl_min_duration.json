@@ -1,0 +1,11 @@
+{
+  "Sleep": 600,
+  "Relax": 180,
+  "Meal": 120,
+  "Wake-up": 30,
+  "Outing": 60,
+  "Housework": 60,
+  "Work": 60,
+  "Other": 0,
+  "Other_ADL": 0
+}

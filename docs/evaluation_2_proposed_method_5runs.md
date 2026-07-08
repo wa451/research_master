@@ -1,147 +1,131 @@
 # 評価2: 提案手法の5回実行評価
 
-この評価では、提案手法である「センサログを代表状態系列に変換し、状態遷移ネットワークを構築してからLLMに入力する方法」を5回実行し、抽出結果と評価指標の安定性を確認する。
+## 評価の要約
 
-## 目的
+提案手法である「センサログを代表状態系列に変換し、状態遷移ネットワークを構築してからLLMに入力する方法」を5回実行し、抽出結果と評価指標の安定性を確認する。LLMの非決定性を考慮し、論文・発表で使う主結果は複数runの集計として扱う。
 
-- LLM出力のばらつきを5回実行で確認する。
-- 遷移確率ベースライン、頻度ベースラインに対するPrecision, Recall, F1を集計する。
-- 論文・発表で使う提案手法の主結果を再現する。
+## RQ
 
-## 使用条件
-
-| 項目 | 値 |
+| RQ | 内容 |
 |---|---|
-| データセット | `data/aruba.csv` |
-| 代表状態数K | 15 |
-| ハミング距離閾値 | 1 |
-| 分析期間 | 154日 |
-| LLMモデル | `gemini-2.5-pro` |
-| Temperature | 0.2 |
-| 実行回数 | 5 |
-| 入力形式 | 時間帯別状態遷移ネットワークJSON |
-| 系列長 | 2から4 |
+| RQ2-1 | 提案手法のLLM出力は5回実行しても安定しているか。 |
+| RQ2-2 | 遷移確率ベースライン・頻度ベースラインに対するPrecision / Recall / F1はどの程度か。 |
+| RQ2-3 | 5回平均の結果を、提案手法の主結果として再現できるか。 |
 
-詳細なパラメータは `docs/paper_parameters.md` を参照する。
+## 評価指標
 
-## 入力
+| 指標 | 定義・確認内容 |
+|---|---|
+| Precision | LLMが出した系列のうち、ベースライン系列と一致した割合。 |
+| Recall | ベースライン系列のうち、LLMが抽出できた割合。 |
+| F1 | PrecisionとRecallの調和平均。 |
+| run間のばらつき | 5回の出力パターン数、Precision / Recall / F1の差を見る。 |
+| 出力パターン数 | 各runでLLMが抽出した系列数を見る。 |
 
-```text
-data/aruba.csv
-configs/default.yaml
-prompts/pattern_extraction_prompt.md
-.env
-```
+現在の比較では、状態系列の完全一致をTPとして扱う。
 
-`.env` には次を設定する。
+## 入力と出力
 
-```text
-GEMINI_API_KEY=...
-```
+### 入力
 
-## 実行順序
+| 入力 | 例 | 役割 |
+|---|---|---|
+| センサログ | `data/aruba.csv` | 代表状態・状態遷移ネットワークの元データ。 |
+| 設定 | `configs/default.yaml` | `K`, ハミング距離、LLM run数など。 |
+| プロンプト | `prompts/pattern_extraction_prompt.md` | 状態遷移ネットワークから系列パターンを抽出するLLMプロンプト。 |
+| APIキー | `.env` | `GEMINI_API_KEY` を設定する。 |
+| 状態遷移JSON | `picture/aruba_15_1_154days/state_transition_{mode}.json` | LLMへの入力。 |
+| ベースライン | `output/aruba_15_1_154days/prob_threshold_sequences_15_1_154days.json`, `state_sequence_counts_15_1_154days.json` | 評価指標の比較対象。 |
 
-### 1. 状態遷移ネットワークを作成
+### 出力
+
+| 出力 | 内容 |
+|---|---|
+| `output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_{run}.json` | 各runのLLM抽出結果。 |
+| `output/aruba_15_1_154days/llm_mode_records_run{run}/state_transition_{mode}.json` | 時間帯ごとの成功結果。再開用チェックポイントでもある。 |
+| `output/aruba_15_1_154days/llm_mode_records_run{run}/state_transition_{mode}_raw.txt` | LLMの生応答。 |
+| `output/aruba_15_1_154days/llm_mode_records_run{run}/state_transition_{mode}_metrics.json` | backend、token使用量、処理時間など。 |
+| `output/aruba_15_1_154days/failed_responses/*.txt` | パースできなかったLLM応答。 |
+| `output/aruba_15_1_154days/evaluation_report_15_1_154days_{run}.txt` | 各runの評価レポート。 |
+| `output/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx` | 5回分の評価指標集計。 |
+
+## 結果の読み方
+
+| 順序 | ファイル | 読み方 |
+|---|---|---|
+| 1 | `output/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx` | summaryとして、5回平均、標準偏差、run間のばらつきを見る。 |
+| 2 | `llm_sequences_modes_15_1_154days_{run}.json`, `evaluation_report_15_1_154days_{run}.txt` | detailsとして、各runの抽出系列、パターン数、Precision / Recall / F1を確認する。 |
+| 3 | `configs/default.yaml`, `docs/paper_parameters.md`, `llm_mode_records_run{run}/*_metrics.json` | 再現条件として、モデル名、temperature、run数、token使用量を確認する。 |
+
+## 実行手順
+
+### 1. 🟨 **条件付き** 状態遷移ネットワークを作成する
+
+`picture/aruba_15_1_154days/state_transition_{mode}.json` がなければ実行する。既に同じ条件のネットワークがある場合はスキップしてよい。
 
 ```bash
 uv run python scripts/run_build_network.py
 ```
 
-出力:
+### 2. 🟨 **条件付き** ベースラインを作成する
 
-```text
-state/aruba_15_1_154days.txt
-picture/aruba_15_1_154days/state_transition_all.json
-picture/aruba_15_1_154days/state_transition_Morning.json
-picture/aruba_15_1_154days/state_transition_Daytime.json
-picture/aruba_15_1_154days/state_transition_Night.json
-picture/aruba_15_1_154days/state_transition_Midnight.json
-```
-
-### 2. ベースラインを作成
+`prob_threshold_sequences_*.json` や `state_sequence_counts_*.json` がなければ実行する。評価2でLLM出力だけを確認する場合は省略できる。
 
 ```bash
 uv run python scripts/run_baselines.py
 ```
 
-出力:
+### 3. 🟥 **必須** 提案手法のLLM抽出と評価を5回実行する
 
-```text
-output/aruba_15_1_154days/prob_threshold_sequences_15_1_154days.json
-output/aruba_15_1_154days/state_sequence_counts_15_1_154days.json
-```
-
-### 3. 提案手法のLLM抽出と評価を5回実行
+評価2の主結果を作るために実行する。`llm_mode_records_run{run}/*.json` が存在する時間帯モードは、スクリプト側でスキップされる。
 
 ```bash
 uv run python scripts/run_llm_eval_batch.py
 ```
 
-`scripts/run_llm_eval_batch.py` は内部で次を行う。
+### 4. 🟩 **スキップ可** 全工程をまとめて実行する
 
-1. `src/behavior_pattern_mining/llm/pattern_extractor.py` を5回呼び出す。
-2. 各回のLLM出力をJSONとして保存する。
-3. `src/behavior_pattern_mining/evaluation/compare_patterns.py` でベースラインと比較する。
-4. 5回分の評価指標をExcelにまとめる。
-
-### まとめて実行する場合
+個別Stepではなく、ネットワーク構築から評価までまとめて再実行したい場合だけ使う。
 
 ```bash
 uv run python scripts/run_all.py
 ```
 
-`scripts/run_all.py` は以下の順番で実行する。
-
-```text
-run_build_network
-run_baselines
-run_llm_eval_batch
-```
-
-## 出力
-
-```text
-output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json
-output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_2.json
-output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_3.json
-output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_4.json
-output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_5.json
-output/aruba_15_1_154days/evaluation_report_15_1_154days_1.txt
-output/aruba_15_1_154days/evaluation_report_15_1_154days_2.txt
-output/aruba_15_1_154days/evaluation_report_15_1_154days_3.txt
-output/aruba_15_1_154days/evaluation_report_15_1_154days_4.txt
-output/aruba_15_1_154days/evaluation_report_15_1_154days_5.txt
-output/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx
-```
-
-## 評価方法
-
-`src/behavior_pattern_mining/evaluation/compare_patterns.py` で、LLMが出力した状態系列を以下の2種類のベースラインと比較する。
+## 比較対象
 
 | 比較対象 | 内容 |
 |---|---|
-| 遷移確率ベースライン | 遷移確率0.2以上のエッジをたどる系列 |
-| 頻度ベースライン | 代表状態系列上で頻出する状態系列 |
+| 遷移確率ベースライン | 遷移確率 `0.2` 以上のエッジをたどる系列。 |
+| 頻度ベースライン | 代表状態系列上で頻出する状態系列。 |
+| 提案手法 | 時間帯別状態遷移ネットワークJSONをLLMへ渡して抽出した系列。 |
 
-指標:
+## 処理手順の内部仕様
 
-```text
-Precision = TP / (TP + FP)
-Recall    = TP / (TP + FN)
-F1        = 2 * Precision * Recall / (Precision + Recall)
-```
+1. `scripts/run_build_network.py` が状態遷移ネットワークJSONを生成する。
+2. `scripts/run_baselines.py` が遷移確率・頻度ベースラインを生成する。
+3. `scripts/run_llm_eval_batch.py` が `src/behavior_pattern_mining/llm/pattern_extractor.py` を複数回呼び出す。
+4. LLM抽出は時間帯モードごとに保存され、成功済みモードは再実行時にスキップされる。
+5. `src/behavior_pattern_mining/evaluation/compare_patterns.py` がLLM系列とベースライン系列を比較する。
+6. 5回分の評価結果をExcelへ集計する。
 
-現在の評価では完全一致のみをTPとする。
+## パラメータ
 
-## 確認する点
+| パラメータ | 値 |
+|---|---:|
+| データセット | `data/aruba.csv` |
+| 代表状態数 `K` | `15` |
+| ハミング距離閾値 | `1` |
+| 分析期間 | `154`日 |
+| LLMモデル | `gemini-2.5-pro` |
+| Temperature | `0.2` |
+| 実行回数 | `5` |
+| 入力形式 | 時間帯別状態遷移ネットワークJSON |
+| 系列長 | `2` から `4` |
 
-- 5回の出力パターン数に大きな差がないか。
-- 5回平均のPrecision, Recall, F1。
-- 遷移確率ベースラインと頻度ベースラインのどちらに近い傾向か。
-- 低確率エッジや存在しないエッジを含む系列が混入していないか。
+詳細は `docs/paper_parameters.md` を参照する。
 
 ## 注意点
 
-- LLM APIを使うためネットワーク接続とAPIキーが必要。
-- 既に同じRun番号のJSONがある場合、スクリプト側でスキップされることがある。再実行結果を完全に作り直す場合は、既存出力を別名で退避してから実行する。
-- 評価2の結果は評価3、評価4の入力にも使える。
+- LLM APIを使うため、ネットワーク接続と `.env` の `GEMINI_API_KEY` が必要。
+- 同じrun番号のJSONがある場合、スクリプト側でスキップされることがある。完全に作り直す場合は既存出力を退避してから実行する。
+- 評価2の出力は、評価3、評価4、評価5の入力にも使える。

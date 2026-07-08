@@ -9,7 +9,9 @@
 | 評価1 | 代表状態数K・ハミング距離の感度分析 | `docs/evaluation_1_parameter_sensitivity.md` |
 | 評価2 | 提案手法の5回実行評価 | `docs/evaluation_2_proposed_method_5runs.md` |
 | 評価3 | 提案手法とLLM単独ベースラインの比較 | `docs/evaluation_3_direct_log_baseline_comparison.md` |
-| 評価4 | ラベル付きCASASデータによるADL評価 | `docs/evaluation_4_labeled_casas_adl.md` |
+| 評価4 | ラベル付きCASASデータによる単一手法ADL評価 | `docs/evaluation_4_labeled_casas_adl.md` |
+| 評価5 | ADLラベルを用いたパターン単位評価 | `docs/evaluation_5_adl_correspondence.md` |
+| 評価6 | LLM解釈ラベルとADL重なりラベルのSet一致評価 | `docs/evaluation_6_adl_interpretation_set.md` |
 
 ## 最短の実行順序
 
@@ -23,15 +25,90 @@ uv run python scripts/run_all.py
 ラベル付きCASASによるADL評価まで実行する場合:
 
 ```bash
+uv run python scripts/run_build_network_from_labeled_casas.py \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --sensor-map configs/aruba_sensor_map.json
+
+uv run python scripts/run_llm_extraction.py
+
 uv run python scripts/evaluate_adl_labels.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --event-log data/aruba.csv \
   --state-table state/aruba_15_1_154days.txt \
+  --sensor-map configs/aruba_sensor_map.json \
   --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/adl_evaluation \
+  --output-dir results/4_adl_evaluation \
   --iou-thresholds 0.3 0.5 \
   --wake-window-minutes 30 \
-  --match-mode exact
+  --match-mode exact \
+  --merge-gap-minutes 5 \
+  --min-duration-config configs/adl_min_duration.json \
+  --hit-tolerance-minutes 10
+```
+
+評価5のパターン単位ADL-grounded/Useless評価まで行う場合は、代表状態系列CSVを作成してから次を実行する。
+
+```bash
+uv run python scripts/evaluate_adl_labels.py \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --state-table state/aruba_15_1_154days.txt \
+  --sensor-map configs/aruba_sensor_map.json \
+  --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
+  --write-state-series results/4_adl_evaluation/state_series.csv
+
+uv run python scripts/evaluate_adl_correspondence.py \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --state-series results/4_adl_evaluation/state_series.csv \
+  --patterns-frequency output/aruba_15_1_154days/state_sequence_counts_15_1_154days.json \
+  --patterns-proposed output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
+  --output-dir results/5_adl_correspondence \
+  --train-ratio 0.7 \
+  --grounded-hit-threshold 0.3 \
+  --grounded-purity-threshold 0.3 \
+  --useless-hit-threshold 0.1 \
+  --useless-purity-threshold 0.1 \
+  --assigned-adl-purity-threshold 0.10 \
+  --assigned-adl-max-categories 3 \
+  --enable-fp-growth-baseline \
+  --fp-min-support 0.05 \
+  --fp-top-k 50 \
+  --fp-min-len 2 \
+  --fp-max-len 4 \
+  --fp-max-median-duration-seconds 1800 \
+  --fp-max-p90-duration-seconds 3600 \
+  --other-state-labels その他 Other Other_ADL unknown \
+  --exclude-other-adl-from-any \
+  --min-overlap-seconds 1
+```
+
+評価6で提案手法とLLM単独ベースラインのADL解釈ラベルを比較する場合は、コンテキスト長を揃えるため両手法を30日版で実行する。
+
+```bash
+uv run python scripts/run_build_network_from_labeled_casas.py \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --sensor-map configs/aruba_sensor_map.json \
+  --days 30
+
+uv run python scripts/run_llm_extraction.py --days 30
+
+uv run python scripts/evaluate_adl_labels.py \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --state-table state/aruba_15_1_30days.txt \
+  --sensor-map configs/aruba_sensor_map.json \
+  --patterns output/aruba_15_1_30days/llm_sequences_modes_15_1_30days_1.json \
+  --output-dir output/6_adl_evaluation_30 \
+  --write-state-series output/6_adl_evaluation_30/state_series.csv
+
+uv run python scripts/run_direct_log_baseline.py \
+  --log-days 30 \
+  --extract-only
+
+uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
+  --patterns-proposed output/aruba_15_1_30days/llm_sequences_modes_15_1_30days_1.json \
+  --patterns-direct output/llm_direct_15_1_30days/1.json \
+  --state-series output/6_adl_evaluation_30/state_series.csv \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --output-dir results/6_adl_interpretation_set_comparison \
+  --min-overlap-ratio-for-true-label 0.10
 ```
 
 以下は全体の共通設定と補足です。
@@ -107,7 +184,7 @@ uv run python scripts/evaluate_adl_labels.py \
 - モデル: `gemini-2.5-pro`
 - Temperature: `0.2`
 - APIキー: `.env` の `GEMINI_API_KEY`
-- 出力制約: JSON配列、各要素は `パターン名`, `解釈の根拠`, `遷移のシーケンス` を持つ。系列長は2-4。
+- 出力制約: JSON配列、各要素は `パターン名`, `解釈の根拠`, `遷移のパターン` を持つ。系列長は2-4。
 
 ## ベースライン手法
 
@@ -183,12 +260,75 @@ uv run python scripts/run_groundedness.py
 uv run python scripts/evaluate_condition_metrics.py
 
 # 6. ラベル付きCASAS ADL評価
+uv run python scripts/run_build_network_from_labeled_casas.py \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --sensor-map configs/aruba_sensor_map.json
+
+uv run python scripts/run_llm_extraction.py
+
 uv run python scripts/evaluate_adl_labels.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --event-log data/aruba.csv \
   --state-table state/aruba_15_1_154days.txt \
+  --sensor-map configs/aruba_sensor_map.json \
   --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/adl_evaluation
+  --output-dir results/4_adl_evaluation \
+  --write-state-series results/4_adl_evaluation/state_series.csv \
+  --merge-gap-minutes 5 \
+  --min-duration-config configs/adl_min_duration.json \
+  --hit-tolerance-minutes 10
+
+# 7. 評価5: パターン単位ADL-grounded/Useless評価
+uv run python scripts/evaluate_adl_correspondence.py \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --state-series results/4_adl_evaluation/state_series.csv \
+  --patterns-frequency output/aruba_15_1_154days/state_sequence_counts_15_1_154days.json \
+  --patterns-proposed output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
+  --output-dir results/5_adl_correspondence \
+  --train-ratio 0.7 \
+  --grounded-hit-threshold 0.3 \
+  --grounded-purity-threshold 0.3 \
+  --useless-hit-threshold 0.1 \
+  --useless-purity-threshold 0.1 \
+  --assigned-adl-purity-threshold 0.10 \
+  --assigned-adl-max-categories 3 \
+  --enable-fp-growth-baseline \
+  --fp-min-support 0.05 \
+  --fp-top-k 50 \
+  --fp-min-len 2 \
+  --fp-max-len 4 \
+  --fp-max-median-duration-seconds 1800 \
+  --fp-max-p90-duration-seconds 3600 \
+  --other-state-labels その他 Other Other_ADL unknown \
+  --exclude-other-adl-from-any \
+  --min-overlap-seconds 1
+
+# 8. 評価6: ADL解釈ラベルset評価。提案手法とLLM単独ベースラインを30日版で比較
+uv run python scripts/run_build_network_from_labeled_casas.py \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --sensor-map configs/aruba_sensor_map.json \
+  --days 30
+
+uv run python scripts/run_llm_extraction.py --days 30
+
+uv run python scripts/evaluate_adl_labels.py \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --state-table state/aruba_15_1_30days.txt \
+  --sensor-map configs/aruba_sensor_map.json \
+  --patterns output/aruba_15_1_30days/llm_sequences_modes_15_1_30days_1.json \
+  --output-dir output/6_adl_evaluation_30 \
+  --write-state-series output/6_adl_evaluation_30/state_series.csv
+
+uv run python scripts/run_direct_log_baseline.py \
+  --log-days 30 \
+  --extract-only
+
+uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
+  --patterns-proposed output/aruba_15_1_30days/llm_sequences_modes_15_1_30days_1.json \
+  --patterns-direct output/llm_direct_15_1_30days/1.json \
+  --state-series output/6_adl_evaluation_30/state_series.csv \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --output-dir results/6_adl_interpretation_set_comparison \
+  --min-overlap-ratio-for-true-label 0.10
 ```
 
 まとめて実行する場合:

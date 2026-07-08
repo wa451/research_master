@@ -66,4 +66,4 @@ paths:
   state_dir: state
   network_and_figures_dir: picture
   legacy_output_dir: output
-  future_output_dir: outputs
+  future_output_dir: output

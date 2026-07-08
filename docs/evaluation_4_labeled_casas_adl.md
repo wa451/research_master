@@ -1,240 +1,153 @@
-# 評価4: ラベル付きCASASデータによるADL評価
+# 評価4: ラベル付きCASASデータによる単一手法ADL評価
 
-この評価では、提案手法で抽出された系列パターンを、ラベル付きCASASデータのADLラベルと照合する。パターンがどのADLカテゴリに対応するか、各ADLカテゴリをどの程度検出できるか、開始・終了境界がどの程度一致するかを評価する。
+## 評価の要約
 
-## 目的
+1つの系列パターンファイルをラベル付きCASASデータのADLラベルと照合し、各パターンがどのADLカテゴリに対応するか、ADLカテゴリごとの検出性能、開始・終了境界の一致度を確認する。主な対象は提案手法のLLM出力である。
 
-- 抽出された系列パターンをADLカテゴリに対応付ける。
-- `Sleep`, `Wake-up`, `Meal`, `Outing`, `Relax` などの行動単位でPrecision, Recall, F1を計算する。
-- ラベル境界とパターン出現区間の開始・終了時刻のずれを測る。
+## RQ
 
-## 入力
+| RQ | 内容 |
+|---|---|
+| RQ4-1 | 抽出された系列パターンは、どのADLカテゴリに対応するか。 |
+| RQ4-2 | `Sleep`, `Wake-up`, `Meal`, `Outing`, `Relax` などのADLをどの程度検出できるか。 |
+| RQ4-3 | 予測区間の開始・終了境界は、正解ADL区間とどの程度一致するか。 |
+| RQ4-4 | 近接予測のマージと短時間除外により、短いパターン出現の過剰予測を抑えられるか。 |
+
+## 評価指標
+
+| 指標 | 定義・確認内容 |
+|---|---|
+| ADLカテゴリ別Precision / Recall / F1 | IoU閾値以上で一致した予測区間をTPとして計算する。 |
+| Temporal IoU | `overlap_duration / union_duration`。既定閾値は `0.3`, `0.5`。 |
+| 境界誤差 | TPペアについて、開始・終了時刻の誤差を分単位で集計する。 |
+| ADL interval hit rate | 正解ADL区間に同じADL予測が1回以上出たかを見る。 |
+| prediction hit precision | 予測区間のうち、正解ADL区間に重なった割合を見る。 |
+| pattern-to-ADL confidence | パターン出現時間のうち、割当ADLと重なった時間割合。 |
+
+## 入力と出力
+
+### 入力
 
 | 入力 | 既定パス | 役割 |
 |---|---|---|
-| ラベル付きCASAS | `new_labeled_data/aruba.txt` | ADL begin/endラベルを含む正解データ |
-| センサログ | `data/aruba.csv` | 代表状態系列を再構築する元ログ |
-| 代表状態テーブル | `state/aruba_15_1_154days.txt` | センサ状態を代表状態IDに対応付ける |
-| LLM抽出パターン | `output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json` | 評価対象の系列パターン |
+| ラベル付きCASAS | `new_labeled_data/aruba.txt` | ADL begin/endラベルとセンサーイベントを含む正解データ。 |
+| 代表状態テーブル | `state/aruba_15_1_154days.txt` | センサー状態を代表状態IDに対応付ける。 |
+| センサーマップ | `configs/aruba_sensor_map.json` | `M003` などを代表状態テーブルの列名へ対応付ける。 |
+| LLM抽出パターン | `output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json` | 評価対象の系列パターン。 |
+| 最小継続時間設定 | `configs/adl_min_duration.json` | ADLカテゴリ別の短時間予測除外設定。 |
 
-`data/aruba.txt` はラベルなしデータなので、この評価では使わない。
+評価4では、ADL正解ラベルと代表状態系列の再構築に `new_labeled_data/aruba.txt` を使う。`data/aruba.csv` は使わない。
 
-## ADLカテゴリマッピング
+### 出力
 
-既定では次のようにCASASラベルを上位カテゴリに変換する。
+| 出力 | 内容 |
+|---|---|
+| `results/4_adl_evaluation/pattern_occurrences.csv` | パターン出現区間。 |
+| `results/4_adl_evaluation/pattern_adl_mapping.csv` | パターンごとのADL割当。 |
+| `results/4_adl_evaluation/merged_predictions.csv` | 同じADLの近接予測をマージした区間。 |
+| `results/4_adl_evaluation/filtered_predictions.csv` | 最小継続時間フィルタ後の予測区間。 |
+| `results/4_adl_evaluation/adl_metrics_iou_0.3.csv` | IoU `0.3` のADLカテゴリ別Precision / Recall / F1。 |
+| `results/4_adl_evaluation/adl_metrics_iou_0.5.csv` | IoU `0.5` のADLカテゴリ別Precision / Recall / F1。 |
+| `results/4_adl_evaluation/boundary_metrics_iou_0.3.csv` | IoU `0.3` の境界誤差。 |
+| `results/4_adl_evaluation/boundary_metrics_iou_0.5.csv` | IoU `0.5` の境界誤差。 |
+| `results/4_adl_evaluation/adl_interval_hit_metrics.csv` | ADL区間内hit評価。 |
+| `results/4_adl_evaluation/adl_interval_hit_details.csv` | 各正解区間のhit/miss詳細。 |
+| `results/4_adl_evaluation/evaluation_summary.json` | 入力パス、閾値、後処理件数、平均指標。 |
+| `results/4_adl_evaluation/state_series.csv` | 評価5などで再利用する代表状態系列CSV。`--write-state-series` 指定時に保存。 |
 
-```python
-ADL_CATEGORY_MAP = {
-    "Sleeping": "Sleep",
-    "Bed_to_Toilet": "Wake-up",
-    "Personal_Hygiene": "Wake-up",
-    "Bathing": "Wake-up",
-    "Toileting": "Wake-up",
-    "Meal_Preparation": "Meal",
-    "Eating": "Meal",
-    "Wash_Dishes": "Meal",
-    "Leave_Home": "Outing",
-    "Enter_Home": "Outing",
-    "Relax": "Relax",
-    "Housekeeping": "Housework",
-}
-```
+## 結果の読み方
 
-`Wake-up` はCASASに直接存在しない場合がある。そのため、`Sleeping` 終了後30分以内に発生した `Bed_to_Toilet`, `Bathroom`, `Personal_Hygiene`, `Meal_Preparation` などは `Wake-up` として扱う。時間幅は `--wake-window-minutes` で変更できる。
+| 順序 | ファイル | 読み方 |
+|---|---|---|
+| 1 | `evaluation_summary.json`, `adl_metrics_iou_0.3.csv`, `adl_interval_hit_metrics.csv` | summaryとして、macro/micro平均、ADL別F1、hit rate、後処理で予測数がどれだけ減ったかを見る。 |
+| 2 | `pattern_occurrences.csv`, `pattern_adl_mapping.csv`, `filtered_predictions.csv`, `adl_interval_hit_details.csv` | detailsとして、どのパターンがいつ出現し、どのADLに割り当てられ、どの正解区間をmissしたかを見る。 |
+| 3 | `evaluation_summary.json`, `configs/adl_min_duration.json`, `configs/aruba_sensor_map.json` | 再現条件として、入力パス、IoU閾値、マージ幅、最小継続時間、センサーマップを確認する。 |
 
-## 実行前の準備
+## 実行手順
 
-評価2を少なくとも1回実行し、LLMパターンを生成しておく。
+### 1. 🟨 **条件付き** 状態遷移ネットワークと代表状態テーブルを作成する
+
+`state/aruba_15_1_154days.txt` がなければ実行する。ラベル付きCASASのみを入力に使い、`data/aruba.csv` は使わない。
 
 ```bash
-uv run python scripts/run_all.py
+uv run python scripts/run_build_network_from_labeled_casas.py \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --sensor-map configs/aruba_sensor_map.json
 ```
 
-必要なファイルがあることを確認する。
+### 2. 🟨 **条件付き** 状態遷移ネットワークからLLMパターンを抽出する
 
-```text
-new_labeled_data/aruba.txt
-data/aruba.csv
-state/aruba_15_1_154days.txt
-output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json
+`output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json` がなければ実行する。既に同じ条件のLLM出力がある場合はスキップしてよい。
+
+```bash
+uv run python scripts/run_llm_extraction.py
 ```
 
-## 実行コマンド
+### 3. 🟥 **必須** 評価4を実行する
+
+ADL区間評価を作るために実行する。`--write-state-series` により、評価5や評価6でも使える代表状態系列CSVを同時に保存する。
 
 ```bash
 uv run python scripts/evaluate_adl_labels.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --event-log data/aruba.csv \
   --state-table state/aruba_15_1_154days.txt \
+  --sensor-map configs/aruba_sensor_map.json \
   --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/adl_evaluation \
+  --output-dir results/4_adl_evaluation \
   --iou-thresholds 0.3 0.5 \
   --wake-window-minutes 30 \
-  --match-mode exact
+  --match-mode exact \
+  --merge-gap-minutes 5 \
+  --min-duration-config configs/adl_min_duration.json \
+  --hit-tolerance-minutes 10 \
+  --write-state-series results/4_adl_evaluation/state_series.csv
 ```
 
-## 処理手順
+### 4. 🟩 **スキップ可** 代表状態系列CSVだけを再利用する
 
-### 1. ラベル付きCASASの区間化
+`results/4_adl_evaluation/state_series.csv` が既にあり、評価5だけを実行したい場合は評価4の再実行を省いてよい。このStepの追加コマンドはない。
 
-`new_labeled_data/aruba.txt` のactivity begin/endを対応付け、次の形式の区間に変換する。
+## 比較対象
 
-```text
-start_time, end_time, raw_label, adl_category
-```
+| 対象 | 内容 |
+|---|---|
+| 評価対象パターン | `--patterns` で指定した1つの系列パターンファイル。 |
+| 正解ADL区間 | `new_labeled_data/aruba.txt` のactivity `begin/end` から区間化したADL。 |
+| 予測ADL区間 | パターン出現区間に `assigned_adl` を付与し、マージ・短時間除外した区間。 |
 
-### 2. LLMパターンの時刻付き出現区間への展開
+複数手法を横比較する場合は評価5を使う。
 
-LLMが出力した状態系列を代表状態系列上で検索する。既定の `--match-mode exact` では、状態系列が連続して完全一致した場合のみ出現とする。
+## 処理手順の内部仕様
 
-出力例:
+1. CASAS activity `begin/end` を `start_time, end_time, raw_label, adl_category` に区間化する。
+2. `--state-series` が指定されていればCSVを読み込む。指定がなければ `--labeled-casas`, `--state-table`, `--sensor-map` から代表状態系列を再構築する。
+3. LLMパターンを代表状態系列上で検索し、`pattern_occurrences.csv` を作る。
+4. パターン出現区間とADL区間の重なり時間を集計し、最も重なりが大きいADLを `assigned_adl` とする。
+5. 同じADLの近接予測を `--merge-gap-minutes` 以内でマージする。
+6. ADLカテゴリ別の最小継続時間より短い予測を除外する。
+7. 後処理後の予測区間でIoU評価、境界評価、ADL interval hit評価を行う。
 
-```text
-pattern_id, pattern_name, sequence, start_time, end_time
-```
+## パラメータ
 
-### 3. パターンとADLカテゴリの対応付け
+| パラメータ | 既定値・例 |
+|---|---|
+| `--labeled-casas` | `new_labeled_data/aruba.txt` |
+| `--state-table` | `state/aruba_15_1_154days.txt` |
+| `--sensor-map` | `configs/aruba_sensor_map.json` |
+| `--patterns` | `output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json` |
+| `--output-dir` | `results/4_adl_evaluation` |
+| `--iou-thresholds` | `0.3 0.5` |
+| `--wake-window-minutes` | `30` |
+| `--match-mode` | `exact` |
+| `--merge-gap-minutes` | `5` |
+| `--min-duration-config` | `configs/adl_min_duration.json` |
+| `--hit-tolerance-minutes` | `10` |
 
-各パターン出現区間とADLラベル区間の重なり時間を計算する。
-
-```text
-overlap = max(0, min(pred_end, label_end) - max(pred_start, label_start))
-```
-
-パターンごとに重なり時間が最大のADLカテゴリを割り当てる。
-
-```text
-confidence = assigned_adl_overlap_time / total_pattern_occurrence_time
-```
-
-### 4. ADLごとのPrecision, Recall, F1
-
-割り当て済みパターン出現区間を予測区間として扱う。同じADLカテゴリ内でTemporal IoUが閾値以上ならTPとする。
-
-```text
-IoU = overlap_duration / union_duration
-```
-
-評価閾値:
-
-```text
-IoU >= 0.3
-IoU >= 0.5
-```
-
-マッチングは同じADLカテゴリ内でIoUが最大のペアから貪欲に行う。1つの正解区間または予測区間を複数回使わない。
-
-### 5. 境界一致度
-
-TPになったペアについて次を計算する。
-
-```text
-start_error_minutes = predicted_start - true_start
-end_error_minutes = predicted_end - true_end
-abs_start_error_minutes
-abs_end_error_minutes
-temporal_iou
-```
-
-ADLカテゴリごとに平均値と中央値を出力する。
-
-## 出力
-
-```text
-results/adl_evaluation/pattern_occurrences.csv
-results/adl_evaluation/pattern_adl_mapping.csv
-results/adl_evaluation/adl_metrics_iou_0.3.csv
-results/adl_evaluation/adl_metrics_iou_0.5.csv
-results/adl_evaluation/boundary_metrics_iou_0.3.csv
-results/adl_evaluation/boundary_metrics_iou_0.5.csv
-results/adl_evaluation/evaluation_summary.json
-```
-
-`evaluation_summary.json` には次が保存される。
-
-- 使用したデータパス
-- 評価対象期間
-- IoU閾値
-- ADLマッピング
-- パターン数
-- 出現区間数
-- 予測区間数
-- macro平均
-- micro平均
-
-## オプション
-
-### 代表状態系列CSVを直接使う
-
-既に `start_time,end_time,state_id` 形式のCSVがある場合:
-
-```bash
-uv run python scripts/evaluate_adl_labels.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --state-series results/state_series.csv \
-  --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/adl_evaluation
-```
-
-### 代表状態系列CSVを書き出す
-
-```bash
-uv run python scripts/evaluate_adl_labels.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --event-log data/aruba.csv \
-  --state-table state/aruba_15_1_154days.txt \
-  --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --write-state-series results/adl_evaluation/state_series.csv
-```
-
-### train/test splitを使う
-
-同じデータで対応付けと評価を行うと過大評価になる可能性がある。分割する場合は次のどちらかを指定する。
-
-```bash
-uv run python scripts/evaluate_adl_labels.py \
-  --split-date "2010-12-01 00:00:00"
-```
-
-または:
-
-```bash
-uv run python scripts/evaluate_adl_labels.py \
-  --train-ratio 0.7
-```
-
-分割時は、前半でpattern to ADL対応を学習し、後半で評価する。
-
-### skip-other一致
-
-短時間の「その他」状態を1個まで無視したい場合:
-
-```bash
-uv run python scripts/evaluate_adl_labels.py \
-  --match-mode skip-other \
-  --max-skip-duration-minutes 1
-```
-
-まずは `exact` の結果を基準として報告する。
-
-## テスト
-
-ADL評価モジュールの単体テスト:
-
-```bash
-uv run python -m unittest discover -s tests
-```
-
-確認している内容:
-
-- CASASラベルを区間化できる。
-- 状態系列からパターン出現区間を検出できる。
-- overlapとTemporal IoUを計算できる。
-- TP, FP, FNを数えられる。
-- 同じ正解区間に複数の予測が重複マッチしない。
+最小継続時間の既定値は `configs/adl_min_duration.json` に保存する。例: `Sleep=600`, `Relax=180`, `Meal=120`, `Wake-up=30` 秒。
 
 ## 注意点
 
-- この評価はラベル付きCASASデータに依存するため、ラベルなしの `data/aruba.txt` では実行できない。
+- ラベル付きCASASデータに依存するため、ラベルなしの `data/aruba.txt` では実行しない。
 - パターンとADLの対応付けを同じ期間で行う場合はdescriptive evaluationとして扱う。
 - 評価4は既存の前処理、代表状態抽出、LLM抽出ロジックを変更せず、後段評価として実行する。
+- マージ幅や最小継続時間の設定によりPrecision / Recall / F1は変わるため、報告時は後処理条件を併記する。

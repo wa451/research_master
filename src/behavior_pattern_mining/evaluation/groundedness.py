@@ -31,7 +31,7 @@ def load_patterns(path: Path) -> List[Tuple[str, List[str]]]:
     patterns: List[Tuple[str, List[str]]] = []
     for item in payload:
         if isinstance(item, dict):
-            seq = item.get("遷移のシーケンス") or item.get("sequence")
+            seq = item.get("遷移のパターン") or item.get("遷移のシーケンス") or item.get("sequence")
             name = item.get("パターン名") or ""
             if isinstance(seq, list) and all(isinstance(s, str) for s in seq):
                 patterns.append((str(name), seq))

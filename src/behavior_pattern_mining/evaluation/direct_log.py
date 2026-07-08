@@ -82,7 +82,7 @@ def build_report_text_direct(
         allow_base_contains_llm,
         allow_llm_contains_base,
     )
-    return report_text.replace("シーケンス評価レポート", "シーケンス評価レポート（直接ログ）", 1)
+    return report_text.replace("パターン評価レポート", "パターン評価レポート（直接ログ）", 1)
 
 
 def evaluate_run(run_idx: int) -> Optional[Tuple[str, RunMetricSummary]]:

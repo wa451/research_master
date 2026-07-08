@@ -186,7 +186,7 @@ def main() -> None:
         inactive_values={"OFF", "0", "FALSE"},
     )
 
-    # 3) 状態遷移シーケンスを集計
+    # 3) 状態遷移パターンを集計
     counts = count_sequences(
         state_sequence,
         min_length=MIN_SEQUENCE_LENGTH,

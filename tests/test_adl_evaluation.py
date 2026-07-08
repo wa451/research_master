@@ -9,9 +9,13 @@ from src.behavior_pattern_mining.evaluation.adl import (
     PatternRecord,
     PredictionInterval,
     StateInterval,
+    build_state_series_from_labeled_casas,
+    compute_interval_hit_evaluation,
+    filter_predictions_by_duration,
     find_pattern_occurrences,
     greedy_match_by_category,
     interval_overlap_seconds,
+    merge_prediction_intervals,
     metrics_rows_from_counts,
     parse_labeled_casas_intervals,
     temporal_iou,
@@ -54,6 +58,18 @@ class ADLEvaluationTests(unittest.TestCase):
         self.assertEqual(len(occurrences), 1)
         self.assertEqual(occurrences[0].start_time, ts("2020-01-01 00:00:00"))
         self.assertEqual(occurrences[0].end_time, ts("2020-01-01 00:03:00"))
+
+    def test_state_series_can_be_built_from_labeled_casas(self) -> None:
+        intervals = build_state_series_from_labeled_casas(
+            labeled_casas_path=FIXTURES_DIR / "sample_labeled_casas.txt",
+            state_table_path=FIXTURES_DIR / "sample_state_table.tsv",
+            hamming_threshold=0,
+            sensor_map_path=FIXTURES_DIR / "sample_sensor_map.json",
+        )
+
+        self.assertGreaterEqual(len(intervals), 2)
+        self.assertEqual(intervals[0].state_id, "状態2")
+        self.assertEqual(intervals[0].start_time, ts("2020-01-01 00:00:00"))
 
     def test_overlap_and_temporal_iou(self) -> None:
         overlap = interval_overlap_seconds(
@@ -108,6 +124,72 @@ class ADLEvaluationTests(unittest.TestCase):
         self.assertEqual(sleep_row["tp"], 1)
         self.assertEqual(sleep_row["fp"], 1)
         self.assertEqual(sleep_row["fn"], 0)
+
+    def test_merge_predictions_only_within_same_adl(self) -> None:
+        predictions = [
+            PredictionInterval("P1", "relax A", (), ts("2020-01-01 10:00:00"), ts("2020-01-01 10:00:20"), "Relax"),
+            PredictionInterval("P2", "meal", (), ts("2020-01-01 10:00:30"), ts("2020-01-01 10:01:00"), "Meal"),
+            PredictionInterval("P3", "relax B", (), ts("2020-01-01 10:01:00"), ts("2020-01-01 10:01:30"), "Relax"),
+            PredictionInterval("P4", "relax C", (), ts("2020-01-01 10:03:00"), ts("2020-01-01 10:03:20"), "Relax"),
+        ]
+
+        merged = merge_prediction_intervals(predictions, merge_gap_minutes=5)
+
+        self.assertEqual(len(merged), 2)
+        relax = next(item for item in merged if item.assigned_adl == "Relax")
+        meal = next(item for item in merged if item.assigned_adl == "Meal")
+        self.assertEqual(relax.start_time, ts("2020-01-01 10:00:00"))
+        self.assertEqual(relax.end_time, ts("2020-01-01 10:03:20"))
+        self.assertEqual(relax.num_merged_occurrences, 3)
+        self.assertEqual(meal.num_merged_occurrences, 1)
+
+    def test_duration_filter_removes_short_predictions(self) -> None:
+        predictions = merge_prediction_intervals(
+            [
+                PredictionInterval("P1", "short relax", (), ts("2020-01-01 10:00:00"), ts("2020-01-01 10:01:00"), "Relax"),
+                PredictionInterval("P2", "long sleep", (), ts("2020-01-01 11:00:00"), ts("2020-01-01 11:20:00"), "Sleep"),
+            ],
+            merge_gap_minutes=0,
+        )
+
+        kept, removed = filter_predictions_by_duration(predictions, {"Relax": 180, "Sleep": 600, "Other_ADL": 0})
+
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(kept[0].assigned_adl, "Sleep")
+        self.assertEqual(removed, {"Relax": 1})
+
+    def test_interval_hit_overlap_and_tolerance(self) -> None:
+        labels = [
+            ADLInterval(
+                ts("2020-01-01 07:00:00"),
+                ts("2020-01-01 07:30:00"),
+                "Meal_Preparation",
+                "Meal",
+            ),
+            ADLInterval(
+                ts("2020-01-01 08:00:00"),
+                ts("2020-01-01 08:30:00"),
+                "Relax",
+                "Relax",
+            ),
+        ]
+        predictions = merge_prediction_intervals(
+            [
+                PredictionInterval("P1", "meal", (), ts("2020-01-01 07:10:00"), ts("2020-01-01 07:11:00"), "Meal"),
+                PredictionInterval("P2", "relax near", (), ts("2020-01-01 07:55:00"), ts("2020-01-01 07:56:00"), "Relax"),
+            ],
+            merge_gap_minutes=0,
+        )
+
+        rows, details = compute_interval_hit_evaluation(predictions, labels, hit_tolerance_minutes=10)
+        overlap_relax = next(row for row in rows if row["hit_type"] == "overlap" and row["adl_category"] == "Relax")
+        tolerance_relax = next(row for row in rows if row["hit_type"] == "tolerance" and row["adl_category"] == "Relax")
+        overlap_meal = next(row for row in rows if row["hit_type"] == "overlap" and row["adl_category"] == "Meal")
+
+        self.assertEqual(overlap_meal["hit_intervals"], 1)
+        self.assertEqual(overlap_relax["hit_intervals"], 0)
+        self.assertEqual(tolerance_relax["hit_intervals"], 1)
+        self.assertTrue(any(row["hit_type"] == "tolerance" and row["true_adl"] == "Relax" and row["is_hit"] for row in details))
 
 
 if __name__ == "__main__":
