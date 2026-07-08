@@ -1,2 +1,0 @@
-run,model,backend,duration_sec,prompt_tokens,response_tokens,total_tokens,attempts
-1,gemini-2.5-pro,google-genai,106.03159258404048,370773,3041,385445,1

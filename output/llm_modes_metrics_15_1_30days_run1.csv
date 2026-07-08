@@ -1,5 +1,0 @@
-run,mode,mode_file,model,backend,duration_sec,prompt_tokens,response_tokens,total_tokens
-1,Morning: 06:00-10:00,state_transition_Morning.json,gemini-2.5-pro,google-genai,68.67716004204703,5206,2471,15475
-1,Daytime: 10:00-18:00,state_transition_Daytime.json,gemini-2.5-pro,google-genai,62.89969791600015,5593,2267,14076
-1,Night: 18:00-24:00,state_transition_Night.json,gemini-2.5-pro,google-genai,62.81384475005325,5415,2399,13502
-1,Midnight: 00:00-06:00,state_transition_Midnight.json,gemini-2.5-pro,google-genai,60.2039361250354,3304,1708,11192
