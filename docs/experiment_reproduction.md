@@ -45,7 +45,7 @@ uv run python scripts/evaluate_adl_labels.py \
   --hit-tolerance-minutes 10
 ```
 
-評価5のパターン単位ADL-grounded/Useless評価まで行う場合は、代表状態系列CSVを作成してから次を実行する。
+評価5のUseful non-redundant / Fragmentation / Contextless useless評価まで行う場合は、代表状態系列CSVを作成してから次を実行する。
 
 ```bash
 uv run python scripts/evaluate_adl_labels.py \
@@ -79,6 +79,8 @@ uv run python scripts/evaluate_adl_correspondence.py \
   --exclude-other-adl-from-any \
   --min-overlap-seconds 1
 ```
+
+提案手法を5回平均する場合は、先に `scripts/run_llm_extraction.py --runs 5` で `_1.json` から `_5.json` までを作成し、評価5本体に `--runs 5` を追加する。標準命名以外を使う場合は `--patterns-proposed-template` で `{run}` を含むパスを指定する。
 
 評価6で提案手法とLLM単独ベースラインのADL解釈ラベルを比較する場合は、コンテキスト長を揃えるため両手法を30日版で実行する。
 
@@ -277,13 +279,14 @@ uv run python scripts/evaluate_adl_labels.py \
   --min-duration-config configs/adl_min_duration.json \
   --hit-tolerance-minutes 10
 
-# 7. 評価5: パターン単位ADL-grounded/Useless評価
+# 7. 評価5: Useful non-redundant / Fragmentation / Contextless useless評価
 uv run python scripts/evaluate_adl_correspondence.py \
   --labeled-casas new_labeled_data/aruba.txt \
   --state-series results/4_adl_evaluation/state_series.csv \
   --patterns-frequency output/aruba_15_1_154days/state_sequence_counts_15_1_154days.json \
   --patterns-proposed output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
   --output-dir results/5_adl_correspondence \
+  --runs 5 \
   --train-ratio 0.7 \
   --grounded-hit-threshold 0.3 \
   --grounded-purity-threshold 0.3 \

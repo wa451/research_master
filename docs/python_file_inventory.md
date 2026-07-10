@@ -29,7 +29,7 @@
 | `scripts/run_groundedness.py` | LLM出力系列が状態遷移グラフ上の根拠を持つかを評価する。 |
 | `scripts/evaluate_condition_metrics.py` | support, confidence, 時間間隔条件を用いた系列評価を実行する。 |
 | `scripts/evaluate_adl_labels.py` | ラベル付きCASASデータを使い、抽出パターンとADL区間の対応付け、ADLカテゴリ別Precision/Recall/F1、境界誤差を評価する。 |
-| `scripts/evaluate_adl_correspondence.py` | frequency, rule-filtered frequency, FP-Growth系baseline, proposed method のパターンを共通形式に正規化し、パターン単位のADL-grounded/Useless指標を手法別に比較する。 |
+| `scripts/evaluate_adl_correspondence.py` | frequency, rule-filtered frequency, FP-Growth系baseline, transition_probability baseline, proposed method のパターンを共通形式に正規化し、評価5の3指標を手法別に比較する。`--runs` で提案手法の複数run平均も出せる。 |
 | `scripts/evaluate_6_compare_adl_interpretation_set.py` | 評価6について、30日版の提案手法とLLM単独ベースラインを同じ状態系列・同じADL正解区間で比較する。`--runs` で複数run平均も出力する。 |
 
 ## 3. src/behavior_pattern_mining/
@@ -86,7 +86,7 @@
 | `src/behavior_pattern_mining/evaluation/groundedness_check.py` | Groundedness評価を実行し、CSV出力する実行寄りモジュール。 |
 | `src/behavior_pattern_mining/evaluation/condition_metrics.py` | support, confidence, 最大時間間隔などの条件グリッドでLLM系列を評価するモジュール。 |
 | `src/behavior_pattern_mining/evaluation/adl.py` | ラベル付きCASASデータを区間化し、抽出パターンとの時間重なり、ADL割当、同一ADL予測のマージ、短時間予測除外、Temporal IoU、区間内hit、境界誤差を計算するADL評価ロジック。 |
-| `src/behavior_pattern_mining/evaluation/adl_correspondence.py` | 複数手法の系列パターンCSV/JSON読み込み、FP-Growth系baseline生成、評価5のパターン単位ADL-grounded/Useless-A/B/C指標を計算する後段評価ロジック。 |
+| `src/behavior_pattern_mining/evaluation/adl_correspondence.py` | 複数手法の系列パターンCSV/JSON読み込み、FP-Growth系baseline/transition_probability baseline生成、評価5のUseful non-redundant pattern rate、Fragmentation rate、Contextless useless rateを計算する後段評価ロジック。 |
 | `src/behavior_pattern_mining/evaluation/adl_interpretation_set.py` | LLM解釈ラベル集合とADL重なりラベル集合を比較し、Exact Set Match, Jaccard, multi-label Precision/Recall/F1を計算する評価6ロジック。 |
 
 ### pipelines/

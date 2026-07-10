@@ -118,6 +118,27 @@ def template_path(template: str, dataset: str, n_states: int, hamming_threshold:
     return as_path(template.format(**values)) or PROJECT_ROOT
 
 
+def proposed_run_path(
+    base_path: Path,
+    template: str | None,
+    dataset: str,
+    n_states: int,
+    hamming_threshold: int,
+    days: int,
+    run: int,
+) -> Path:
+    if template:
+        return template_path(template, dataset, n_states, hamming_threshold, days, run=run)
+    if run == 1:
+        return base_path
+    stem = base_path.stem
+    suffix = base_path.suffix
+    prefix, sep, last = stem.rpartition("_")
+    if sep and last.isdigit():
+        return base_path.with_name(f"{prefix}_{run}{suffix}")
+    return base_path.with_name(f"{stem}_{run}{suffix}")
+
+
 def build_evaluation4_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     runner = settings["runner"]
     dataset = settings["dataset"]
@@ -209,20 +230,44 @@ def build_evaluation4_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
 
 def build_evaluation5_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     runner = settings["runner"]
+    dataset = settings["dataset"]
+    days = settings["days"]
+    n_states = settings["n_states"]
+    hamming = settings["hamming_threshold"]
+    runs = settings.get("runs", 1)
     labeled = as_path(settings["labeled_casas"])
     state_series = as_path(settings["state_series"])
-    eval4_output_dir = as_path(settings["eval4_output_dir"])
+    intermediate_output_dir = as_path(
+        settings.get("eval5_intermediate_output_dir")
+        or settings.get("eval4_output_dir")
+        or "output/5_adl_evaluation"
+    )
     state_table = as_path(settings["state_table"])
     sensor_map = as_path(settings["sensor_map"])
     proposed = as_path(settings["patterns_proposed"])
+    proposed_template = settings.get("patterns_proposed_template")
     output_dir = as_path(settings["output_dir"])
+    transition_json = PROJECT_ROOT / "picture" / condition_suffix(dataset, n_states, hamming, days) / "state_transition_all.json"
+
+    build_cmd = script_cmd(runner, "scripts/run_build_network_from_labeled_casas.py")
+    add_arg(build_cmd, "--labeled-casas", labeled)
+    add_arg(build_cmd, "--sensor-map", sensor_map)
+    add_arg(build_cmd, "--days", days)
+    add_arg(build_cmd, "--n-states", n_states)
+    add_arg(build_cmd, "--hamming-threshold", hamming)
+
+    llm_cmd = script_cmd(runner, "scripts/run_llm_extraction.py")
+    add_arg(llm_cmd, "--days", days)
+    add_arg(llm_cmd, "--n-states", n_states)
+    add_arg(llm_cmd, "--hamming-threshold", hamming)
+    add_arg(llm_cmd, "--runs", runs)
 
     prep_cmd = script_cmd(runner, "scripts/evaluate_adl_labels.py")
     add_arg(prep_cmd, "--labeled-casas", labeled)
     add_arg(prep_cmd, "--state-table", state_table)
     add_arg(prep_cmd, "--sensor-map", sensor_map)
     add_arg(prep_cmd, "--patterns", proposed)
-    add_arg(prep_cmd, "--output-dir", eval4_output_dir)
+    add_arg(prep_cmd, "--output-dir", intermediate_output_dir)
     add_arg(prep_cmd, "--write-state-series", state_series)
 
     eval_cmd = script_cmd(runner, "scripts/evaluate_adl_correspondence.py")
@@ -260,6 +305,24 @@ def build_evaluation5_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_arg(eval_cmd, "--fp-max-len", settings["fp_max_len"])
     add_arg(eval_cmd, "--fp-max-median-duration-seconds", settings["fp_max_median_duration_seconds"])
     add_arg(eval_cmd, "--fp-max-p90-duration-seconds", settings["fp_max_p90_duration_seconds"])
+    add_arg(eval_cmd, "--baseline-cache-dir", as_path(settings["baseline_cache_dir"]))
+    if settings.get("use_baseline_cache", True):
+        eval_cmd.append("--use-baseline-cache")
+    else:
+        eval_cmd.append("--no-use-baseline-cache")
+    if settings["enable_transition_baseline"]:
+        eval_cmd.append("--enable-transition-baseline")
+    else:
+        eval_cmd.append("--no-enable-transition-baseline")
+    add_arg(eval_cmd, "--transition-top-k", settings["transition_top_k"])
+    add_arg(eval_cmd, "--transition-min-prob", settings["transition_min_prob"])
+    add_arg(eval_cmd, "--transition-min-len", settings["transition_min_len"])
+    add_arg(eval_cmd, "--transition-max-len", settings["transition_max_len"])
+    add_arg(eval_cmd, "--fragmentation-containment-threshold", settings["fragmentation_containment_threshold"])
+    add_arg(eval_cmd, "--low-information-threshold", settings["low_information_threshold"])
+    add_arg(eval_cmd, "--patterns-proposed-template", proposed_template)
+    add_arg(eval_cmd, "--runs", runs)
+    add_flag(eval_cmd, "--skip-missing-runs", settings.get("skip_missing_runs", False))
     add_multi_arg(eval_cmd, "--other-state-labels", settings["other_state_labels"])
     if settings["exclude_other_adl_from_any"]:
         eval_cmd.append("--exclude-other-adl-from-any")
@@ -269,29 +332,58 @@ def build_evaluation5_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_flag(eval_cmd, "--no-auto-generate-baselines", settings["no_auto_generate_baselines"])
 
     required_eval_inputs = [labeled, state_series, proposed]
+    if runs > 1 and not settings.get("skip_missing_runs", False):
+        for run in range(2, runs + 1):
+            required_eval_inputs.append(
+                proposed_run_path(proposed, proposed_template, dataset, n_states, hamming, days, run)
+            )
     if settings["no_auto_generate_baselines"]:
         required_eval_inputs.extend(pattern_flags.values())
 
+    expected_proposed_outputs = [
+        proposed_run_path(proposed, proposed_template, dataset, n_states, hamming, days, run)
+        for run in range(1, runs + 1)
+    ]
+    expected_eval_outputs = [
+        output_dir / "evaluation5_summary_by_method.csv",
+        output_dir / "evaluation5_pattern_details.csv",
+        output_dir / "evaluation5_summary.json",
+    ]
+    if runs > 1 or settings.get("skip_missing_runs", False):
+        expected_eval_outputs.insert(1, output_dir / "evaluation5_summary_by_method_by_run.csv")
+
     return [
         EvaluationStep(
+            "eval5_build_network",
+            "1. 代表状態・状態遷移ネットワークを作成",
+            "評価5条件の state table と状態遷移JSONを作成します。既にある場合は一括実行ではスキップされます。",
+            build_cmd,
+            [p for p in [labeled, sensor_map] if p is not None],
+            [state_table, transition_json],
+        ),
+        EvaluationStep(
+            "eval5_proposed_llm",
+            "2. 提案手法LLM出力を生成",
+            "状態遷移ネットワークから提案手法の LLM JSON を指定run数分生成します。APIキーを使う重い処理です。",
+            llm_cmd,
+            [transition_json],
+            expected_proposed_outputs,
+        ),
+        EvaluationStep(
             "eval5_prepare_state_series",
-            "1. 評価5用 state_series を作成",
-            "評価4のCLIを使って代表状態系列CSVだけを用意します。既にある場合はスキップ可能です。",
+            "3. 評価5用 state_series を作成",
+            "評価5専用の中間output-dirへ代表状態系列CSVを作成します。既にある場合は一括実行ではスキップされます。",
             prep_cmd,
             [p for p in [labeled, state_table, sensor_map, proposed] if p is not None],
             [state_series],
         ),
         EvaluationStep(
             "eval5_evaluate",
-            "2. 評価5を実行",
-            "frequency/rule/proposed/FP-Growth のパターン単位ADL-grounded/Useless評価を実行します。",
+            "4. 評価5を実行",
+            "frequency/rule/FP-Growth/transition_probability/proposed のパターン単位評価を実行します。",
             eval_cmd,
             [p for p in required_eval_inputs if p is not None],
-            [
-                output_dir / "evaluation5_summary_by_method.csv",
-                output_dir / "evaluation5_pattern_details.csv",
-                output_dir / "evaluation5_summary.json",
-            ],
+            expected_eval_outputs,
         ),
     ]
 

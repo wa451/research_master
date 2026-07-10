@@ -58,12 +58,12 @@
 - 対応ファイル: `scripts/evaluate_adl_labels.py`, `src/behavior_pattern_mining/evaluation/adl.py`
 - 役割: LLM抽出系列を代表状態系列上で検索し、ADLラベル区間との重なりからpattern->ADL対応を行う。さらに同一ADLの近接予測マージ、短時間予測除外を適用し、カテゴリ別Precision/Recall/F1、開始/終了境界誤差、ADL区間内hitを評価する。
 
-## 7.2 評価5: Pattern-level ADL groundedness/uselessness
+## 7.2 評価5: Useful non-redundant pattern / fragmentation evaluation
 
 - 入力: `new_labeled_data/aruba.txt`, `--state-series`, frequency/rule/proposed のパターンCSVまたはJSON
 - 出力: `results/5_adl_correspondence/evaluation5_pattern_details.csv`, `evaluation5_summary_by_method.csv`, `evaluation5_summary.json`
 - 対応ファイル: `scripts/evaluate_adl_correspondence.py`, `src/behavior_pattern_mining/evaluation/adl.py`, `src/behavior_pattern_mining/evaluation/adl_correspondence.py`
-- 役割: train期間でpattern->ADL集合を決め、test期間で各出力パターンがADL-groundedか、Useless-A/B/Cかを評価する。比較対象はfrequency、rule-filtered frequency、FP-Growth系baseline、提案手法。主指標は `ADL-grounded pattern rate` と `Useless pattern rate`。
+- 役割: train期間でpattern->ADL集合を決め、test期間で各出力パターンがADL-groundedか、生活文脈のない系列か、長い系列の断片かを評価する。比較対象はfrequency、rule-filtered frequency、FP-Growth系baseline、transition_probability baseline、提案手法。主指標は `useful_non_redundant_pattern_rate`, `fragmentation_rate`, `contextless_useless_rate` の3つ。`--runs` で提案手法の複数run平均も出せる。
 
 ## 7.3 評価6: LLM ADL interpretation set match
 

@@ -160,13 +160,14 @@ def load_history(log_root: Path, limit: int = 200) -> list[dict]:
 
 def metric_columns(columns: Iterable[str]) -> list[str]:
     preferred = [
+        "useful_non_redundant_pattern_rate",
+        "fragmentation_rate",
+        "contextless_useless_rate",
         "mean_multilabel_f1",
         "multilabel_f1",
         "f1",
         "macro_f1",
         "micro_f1",
-        "adl_grounded_pattern_rate",
-        "useless_pattern_rate",
         "mean_exact_set_match",
         "mean_accuracy",
         "mean_jaccard",

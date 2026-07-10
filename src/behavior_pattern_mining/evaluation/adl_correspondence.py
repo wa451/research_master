@@ -48,6 +48,7 @@ METHOD_ID_PREFIX = {
     "rule_strong": "RS",
     "fp_growth": "FPG",
     "fp_growth_filtered": "FPGF",
+    "transition_probability": "TP",
     "proposed": "P",
 }
 
@@ -93,6 +94,7 @@ class MethodPattern:
     sequence: tuple[str, ...]
     count: int | None = None
     pattern_source: str = ""
+    time_band: str = ""
     support_transactions: int | None = None
     support_ratio: float | None = None
     train_occurrence_count: int | None = None
@@ -100,6 +102,8 @@ class MethodPattern:
     p90_duration_seconds: float | None = None
     is_fp_filtered_out: int | None = None
     fp_filter_reason: str = ""
+    transition_joint_probability: float | None = None
+    transition_min_step_probability: float | None = None
 
 
 @dataclass(frozen=True)
@@ -178,6 +182,31 @@ def _pattern_id(method: str, index: int) -> str:
     return f"{prefix}{index:03d}"
 
 
+def _time_band_suffix(value: str) -> str:
+    cleaned = "".join(ch if ch.isalnum() else "_" for ch in value.strip())
+    return cleaned.strip("_") or "time_band"
+
+
+def _make_method_pattern(
+    method: str,
+    pattern_id: str,
+    pattern_name: str,
+    sequence: Sequence[str],
+    count: int | None = None,
+    pattern_source: str = "",
+    time_band: str = "",
+) -> MethodPattern:
+    return MethodPattern(
+        method=method,
+        pattern_id=pattern_id,
+        pattern_name=pattern_name,
+        sequence=tuple(sequence),
+        count=count,
+        pattern_source=pattern_source,
+        time_band=time_band,
+    )
+
+
 def load_method_patterns(path: Path, method: str) -> tuple[list[MethodPattern], list[str]]:
     """Load one method's pattern output from JSON or CSV.
 
@@ -233,29 +262,62 @@ def load_method_patterns(path: Path, method: str) -> tuple[list[MethodPattern], 
             )
             existing_id = _first_present(item, ["pattern_id", "id"])
             input_count = _coerce_count(_first_present(item, ["count", "frequency", "support"]))
+            time_band = str(_first_present(item, ["time_band", "mode", "時間帯"]) or "")
         else:
             raw_sequence = item
             existing_id = None
+            time_band = ""
 
         sequence = parse_sequence(raw_sequence)
         if len(sequence) < 2:
             notes.append(f"{method}: skipped invalid sequence at row {raw_index}: {raw_sequence!r}")
             continue
 
+        if pattern_name is None:
+            pattern_name = sequence_text(sequence)
+
+        time_band_interpretations = (
+            item.get("time_band_interpretations")
+            if isinstance(item, dict) and isinstance(item.get("time_band_interpretations"), dict)
+            else None
+        )
+        if method == "proposed" and time_band_interpretations:
+            for band_name, interpretation in time_band_interpretations.items():
+                pattern_index = len(patterns) + 1
+                base_id = str(existing_id).strip() if existing_id else _pattern_id(method, pattern_index)
+                band_text = str(band_name)
+                band_suffix = _time_band_suffix(band_text)
+                band_pattern_name = pattern_name
+                if isinstance(interpretation, dict):
+                    band_pattern_name = _first_present(
+                        interpretation,
+                        ["pattern_name", "name", "パターン名", "label", "description"],
+                    ) or pattern_name
+                patterns.append(
+                    _make_method_pattern(
+                        method=method,
+                        pattern_id=f"{base_id}_{band_suffix}",
+                        pattern_name=str(band_pattern_name),
+                        sequence=sequence,
+                        count=input_count,
+                        pattern_source="proposed_time_band",
+                        time_band=band_text,
+                    )
+                )
+            continue
+
         pattern_index = len(patterns) + 1
         pattern_id = str(existing_id).strip() if existing_id else _pattern_id(method, pattern_index)
         if not pattern_id:
             pattern_id = _pattern_id(method, pattern_index)
-        if pattern_name is None:
-            pattern_name = sequence_text(sequence)
-
         patterns.append(
-            MethodPattern(
+            _make_method_pattern(
                 method=method,
                 pattern_id=pattern_id,
                 pattern_name=str(pattern_name),
                 sequence=sequence,
                 count=input_count,
+                time_band=time_band,
             )
         )
 
@@ -584,6 +646,106 @@ def build_fp_growth_baseline_patterns(
         f"fp_growth_filtered: kept {len(fp_growth_filtered_patterns)} / {len(fp_growth_patterns)} selected patterns",
     ]
     return {"fp_growth": fp_growth_patterns, "fp_growth_filtered": fp_growth_filtered_patterns}, notes
+
+
+def build_transition_probability_baseline_patterns(
+    state_intervals: Sequence[StateInterval],
+    top_k: int = 50,
+    min_prob: float = 0.0,
+    min_len: int = 2,
+    max_len: int = 4,
+) -> tuple[list[MethodPattern], list[str]]:
+    """Build transition-probability baseline paths from train-period state series."""
+    if top_k < 0:
+        raise ValueError("--transition-top-k must be >= 0")
+    if min_len < 2:
+        raise ValueError("--transition-min-len must be >= 2")
+    if max_len < min_len:
+        raise ValueError("--transition-max-len must be >= --transition-min-len")
+    if not 0.0 <= min_prob <= 1.0:
+        raise ValueError("--transition-min-prob must be in the range [0, 1]")
+
+    state_sequence = compressed_state_sequence(state_intervals)
+    if len(state_sequence) < min_len:
+        return [], ["transition_probability: skipped because train state series is too short"]
+
+    transition_counts: dict[str, Counter[str]] = defaultdict(Counter)
+    for src, dst in zip(state_sequence, state_sequence[1:]):
+        transition_counts[src][dst] += 1
+
+    adjacency: dict[str, list[tuple[str, float]]] = {}
+    for src, counts in transition_counts.items():
+        total = sum(counts.values())
+        if total <= 0:
+            continue
+        candidates = [
+            (dst, count / total)
+            for dst, count in counts.items()
+            if (count / total) >= min_prob
+        ]
+        candidates.sort(key=lambda item: (-item[1], item[0]))
+        adjacency[src] = candidates
+
+    unique_paths: dict[tuple[str, ...], tuple[float, float]] = {}
+
+    def dfs(path: list[str], probabilities: list[float]) -> None:
+        if min_len <= len(path) <= max_len:
+            joint = 1.0
+            for probability in probabilities:
+                joint *= probability
+            min_step = min(probabilities) if probabilities else 1.0
+            key = tuple(path)
+            existing = unique_paths.get(key)
+            if existing is None or (joint, min_step) > existing:
+                unique_paths[key] = (joint, min_step)
+        if len(path) >= max_len:
+            return
+        for dst, probability in adjacency.get(path[-1], []):
+            path.append(dst)
+            probabilities.append(probability)
+            dfs(path, probabilities)
+            probabilities.pop()
+            path.pop()
+
+    for start_state in sorted(adjacency):
+        dfs([start_state], [])
+
+    if not unique_paths:
+        return [], ["transition_probability: skipped because no paths satisfied transition settings"]
+
+    occurrence_counts = count_contiguous_sequences(
+        state_sequence,
+        min_length=min_len,
+        max_length=max_len,
+    )
+    sorted_paths = sorted(
+        unique_paths.items(),
+        key=lambda item: (-item[1][0], -item[1][1], -len(item[0]), item[0]),
+    )
+    selected = sorted_paths[:top_k] if top_k > 0 else sorted_paths
+
+    patterns = [
+        MethodPattern(
+            method="transition_probability",
+            pattern_id=_pattern_id("transition_probability", index),
+            pattern_name=sequence_text(sequence),
+            sequence=sequence,
+            count=occurrence_counts.get(sequence, 0),
+            pattern_source="train_transition_probability",
+            train_occurrence_count=occurrence_counts.get(sequence, 0),
+            transition_joint_probability=joint_probability,
+            transition_min_step_probability=min_step_probability,
+        )
+        for index, (sequence, (joint_probability, min_step_probability)) in enumerate(selected, start=1)
+    ]
+    notes = [
+        (
+            "transition_probability: generated from train state-series transitions "
+            f"(states={len(state_sequence)}, paths={len(unique_paths)}, selected={len(patterns)}, "
+            f"min_prob={min_prob:g}, length={min_len}-{max_len})"
+        )
+    ]
+    return patterns, notes
 
 
 def to_pattern_records(patterns: Sequence[MethodPattern]) -> list[PatternRecord]:
@@ -1026,6 +1188,114 @@ def detect_alternating_loop(sequence: Sequence[str]) -> tuple[bool, str]:
     return False, ""
 
 
+def detect_self_transition(sequence: Sequence[str]) -> tuple[bool, str]:
+    for index in range(len(sequence) - 1):
+        if sequence[index] == sequence[index + 1]:
+            return True, f"self_transition: {sequence[index]} -> {sequence[index + 1]}"
+    return False, ""
+
+
+def is_low_information_sequence(
+    sequence: Sequence[str],
+    other_state_labels: set[str],
+    low_information_threshold: float,
+) -> tuple[bool, float]:
+    if not sequence:
+        return False, 0.0
+    low_info_markers = {label.lower() for label in other_state_labels}
+    low_info_markers.update(
+        {
+            "other",
+            "unknown",
+            "その他",
+            "active_sensorsなし",
+            "active_sensors:なし",
+            "no_active_sensors",
+            "active_sensors=[]",
+        }
+    )
+    count = 0
+    for state in sequence:
+        state_text = str(state).strip()
+        state_lower = state_text.lower()
+        if state_text in other_state_labels or state_lower in low_info_markers:
+            count += 1
+            continue
+        if "active_sensors" in state_lower and ("なし" in state_text or "[]" in state_text or "none" in state_lower):
+            count += 1
+    ratio = count / len(sequence)
+    return ratio >= low_information_threshold, ratio
+
+
+def is_contiguous_subsequence(shorter: Sequence[str], longer: Sequence[str]) -> bool:
+    if len(shorter) >= len(longer) or not shorter:
+        return False
+    width = len(shorter)
+    target = tuple(shorter)
+    return any(tuple(longer[index : index + width]) == target for index in range(len(longer) - width + 1))
+
+
+def occurrence_containment_rate(
+    child_occurrences: Sequence[MethodOccurrence],
+    parent_occurrences: Sequence[MethodOccurrence],
+) -> float:
+    if not child_occurrences:
+        return 0.0
+    contained = 0
+    sorted_parents = sorted(parent_occurrences, key=lambda item: (item.start_time, item.end_time))
+    for child in child_occurrences:
+        if any(parent.start_time <= child.start_time and child.end_time <= parent.end_time for parent in sorted_parents):
+            contained += 1
+    return contained / len(child_occurrences)
+
+
+def compute_fragmentation_by_method(
+    patterns_by_method: dict[str, list[MethodPattern]],
+    test_occurrences_by_method: dict[str, list[MethodOccurrence]],
+    containment_threshold: float,
+) -> dict[str, dict[str, dict[str, Any]]]:
+    if not 0.0 <= containment_threshold <= 1.0:
+        raise ValueError("fragmentation_containment_threshold must be in the range [0, 1]")
+
+    result: dict[str, dict[str, dict[str, Any]]] = {}
+    for method, patterns in patterns_by_method.items():
+        occurrences_by_pattern: dict[str, list[MethodOccurrence]] = defaultdict(list)
+        for occurrence in test_occurrences_by_method.get(method, []):
+            occurrences_by_pattern[occurrence.pattern_id].append(occurrence)
+
+        method_result = {
+            pattern.pattern_id: {
+                "is_fragmented": False,
+                "fragment_parent_ids": [],
+                "max_occurrence_containment": 0.0,
+            }
+            for pattern in patterns
+        }
+        for child in patterns:
+            child_occurrences = occurrences_by_pattern.get(child.pattern_id, [])
+            for parent in patterns:
+                if child.pattern_id == parent.pattern_id:
+                    continue
+                if child.time_band != parent.time_band:
+                    continue
+                if not is_contiguous_subsequence(child.sequence, parent.sequence):
+                    continue
+                containment = occurrence_containment_rate(
+                    child_occurrences,
+                    occurrences_by_pattern.get(parent.pattern_id, []),
+                )
+                current = method_result[child.pattern_id]
+                if containment > current["max_occurrence_containment"]:
+                    current["max_occurrence_containment"] = containment
+                if containment >= containment_threshold:
+                    current["is_fragmented"] = True
+                    current["fragment_parent_ids"].append(parent.pattern_id)
+        for values in method_result.values():
+            values["fragment_parent_ids"] = sorted(set(values["fragment_parent_ids"]))
+        result[method] = method_result
+    return result
+
+
 def train_pattern_adl_assignments(
     patterns_by_method: dict[str, list[MethodPattern]],
     train_occurrences_by_method: dict[str, list[MethodOccurrence]],
@@ -1143,6 +1413,8 @@ def evaluate_pattern_groundedness(
     include_no_test_support_in_denominator: bool = False,
     exclude_other_adl_from_any: bool = True,
     other_state_labels: set[str] | None = None,
+    fragmentation_containment_threshold: float = 0.7,
+    low_information_threshold: float = 0.5,
 ) -> tuple[list[dict], list[dict], dict[str, Any]]:
     """Compute pattern-level Evaluation 5 metrics on test data."""
     detail_rows: list[dict] = []
@@ -1150,6 +1422,11 @@ def evaluate_pattern_groundedness(
     summary_by_method: dict[str, Any] = {}
     excluded_any_categories = {"Other_ADL"} if exclude_other_adl_from_any else set()
     other_labels = other_state_labels or set(DEFAULT_OTHER_STATE_LABELS)
+    fragmentation_by_method = compute_fragmentation_by_method(
+        patterns_by_method=patterns_by_method,
+        test_occurrences_by_method=test_occurrences_by_method,
+        containment_threshold=fragmentation_containment_threshold,
+    )
 
     for method, patterns in patterns_by_method.items():
         support_by_pattern: Counter[str] = Counter()
@@ -1246,11 +1523,45 @@ def evaluate_pattern_groundedness(
                 and any_hit_rate < useless_hit_threshold
                 and any_purity < useless_purity_threshold
             )
+            is_structural_self, structural_self_reason = detect_self_transition(pattern.sequence)
             is_useless_b, useless_b_reason = detect_other_state_round_trip(pattern.sequence, other_labels)
             is_useless_c, useless_c_reason = detect_alternating_loop(pattern.sequence)
+            is_structural_useless = bool(is_structural_self or is_useless_b or is_useless_c)
+            is_low_information, low_information_ratio = is_low_information_sequence(
+                pattern.sequence,
+                other_labels,
+                low_information_threshold=low_information_threshold,
+            )
+            is_adl_unsupported = bool(
+                denominator_eligible
+                and test_support > 0
+                and any_hit_rate < useless_hit_threshold
+                and any_purity < useless_purity_threshold
+            )
+            fragment_info = fragmentation_by_method.get(method, {}).get(
+                pattern.pattern_id,
+                {
+                    "is_fragmented": False,
+                    "fragment_parent_ids": [],
+                    "max_occurrence_containment": 0.0,
+                },
+            )
+            is_fragmented = bool(denominator_eligible and fragment_info["is_fragmented"])
+            is_contextless_useless = bool(
+                denominator_eligible
+                and (is_structural_useless or is_low_information or is_adl_unsupported)
+            )
+            is_useful_non_redundant = bool(
+                denominator_eligible
+                and is_adl_grounded
+                and not is_contextless_useless
+                and not is_fragmented
+            )
             useless_reasons: list[str] = []
             if is_useless_a:
                 useless_reasons.append("useless_a: low_any_adl_overlap")
+            if denominator_eligible and is_structural_self:
+                useless_reasons.append("structural_useless: self_transition")
             if denominator_eligible and is_useless_b:
                 useless_reasons.append("useless_b: other_round_trip")
             if denominator_eligible and is_useless_c:
@@ -1262,6 +1573,7 @@ def evaluate_pattern_groundedness(
                 "pattern_id": pattern.pattern_id,
                 "pattern_name": pattern.pattern_name,
                 "sequence": sequence_text(pattern.sequence),
+                "time_band": pattern.time_band,
                 "input_count": pattern.count if pattern.count is not None else "",
                 "pattern_source": pattern.pattern_source,
                 "support_transactions": pattern.support_transactions if pattern.support_transactions is not None else "",
@@ -1279,6 +1591,16 @@ def evaluate_pattern_groundedness(
                     pattern.is_fp_filtered_out if pattern.is_fp_filtered_out is not None else ""
                 ),
                 "fp_filter_reason": pattern.fp_filter_reason,
+                "transition_joint_probability": (
+                    f"{pattern.transition_joint_probability:.6f}"
+                    if pattern.transition_joint_probability is not None
+                    else ""
+                ),
+                "transition_min_step_probability": (
+                    f"{pattern.transition_min_step_probability:.6f}"
+                    if pattern.transition_min_step_probability is not None
+                    else ""
+                ),
                 "train_support": train_support,
                 "test_support": test_support,
                 "assigned_adl_train": assigned_adl,
@@ -1301,7 +1623,21 @@ def evaluate_pattern_groundedness(
                 "is_useless_b": int(is_useless_b),
                 "is_useless_c": int(is_useless_c),
                 "is_useless": int(is_useless),
+                "is_contextless_useless": int(is_contextless_useless),
+                "is_structural_useless": int(is_structural_useless),
+                "is_low_information": int(is_low_information),
+                "low_information_ratio": f"{low_information_ratio:.6f}",
+                "is_adl_unsupported": int(is_adl_unsupported),
+                "is_fragmented": int(is_fragmented),
+                "fragment_parent_ids": "|".join(fragment_info["fragment_parent_ids"]),
+                "max_occurrence_containment": f"{float(fragment_info['max_occurrence_containment']):.6f}",
+                "is_useful_non_redundant": int(is_useful_non_redundant),
                 "useless_reason": "; ".join(useless_reasons),
+                "structural_useless_reason": "; ".join(
+                    reason
+                    for reason in [structural_self_reason, useless_b_reason, useless_c_reason]
+                    if reason
+                ),
                 "useless_b_reason": useless_b_reason,
                 "useless_c_reason": useless_c_reason,
                 "evaluation_status": status,
@@ -1316,41 +1652,18 @@ def evaluate_pattern_groundedness(
             and (int(row["test_support"]) > 0 or include_no_test_support_in_denominator)
         ]
         num_evaluable = len(denominator_rows)
-        num_grounded = sum(int(row["is_adl_grounded"]) for row in denominator_rows)
-        num_useless = sum(int(row["is_useless"]) for row in denominator_rows)
-        num_useless_a = sum(int(row["is_useless_a"]) for row in denominator_rows)
-        num_useless_b = sum(int(row["is_useless_b"]) for row in denominator_rows)
-        num_useless_c = sum(int(row["is_useless_c"]) for row in denominator_rows)
-
-        def mean_float(key: str) -> float:
-            values = [float(row[key]) for row in denominator_rows]
-            return statistics.fmean(values) if values else 0.0
+        num_contextless_useless = sum(int(row["is_contextless_useless"]) for row in denominator_rows)
+        num_fragmented = sum(int(row["is_fragmented"]) for row in denominator_rows)
+        num_useful_non_redundant = sum(int(row["is_useful_non_redundant"]) for row in denominator_rows)
 
         summary = {
             "method": method,
-            "num_patterns": len(method_rows),
-            "num_evaluable_patterns": num_evaluable,
-            "num_no_train_support": sum(row["evaluation_status"] == "no_train_support" for row in method_rows),
-            "num_no_test_support": sum(row["evaluation_status"] == "no_test_support" for row in method_rows),
-            "num_no_assigned_adl": sum(row["evaluation_status"] == "no_assigned_adl" for row in method_rows),
-            "num_adl_grounded": num_grounded,
-            "num_useless": num_useless,
-            "num_useless_a": num_useless_a,
-            "num_useless_b": num_useless_b,
-            "num_useless_c": num_useless_c,
-            "adl_grounded_pattern_rate": (num_grounded / num_evaluable) if num_evaluable else 0.0,
-            "useless_pattern_rate": (num_useless / num_evaluable) if num_evaluable else 0.0,
-            "useless_a_pattern_rate": (num_useless_a / num_evaluable) if num_evaluable else 0.0,
-            "useless_b_pattern_rate": (num_useless_b / num_evaluable) if num_evaluable else 0.0,
-            "useless_c_pattern_rate": (num_useless_c / num_evaluable) if num_evaluable else 0.0,
-            "mean_assigned_adl_hit_rate": mean_float("assigned_adl_hit_rate_test"),
-            "mean_assigned_adl_purity": mean_float("assigned_adl_purity_test"),
-            "mean_any_adl_hit_rate": mean_float("any_adl_hit_rate_test"),
-            "mean_any_adl_purity": mean_float("any_adl_purity_test"),
+            "useful_non_redundant_pattern_rate": (
+                num_useful_non_redundant / num_evaluable
+            ) if num_evaluable else 0.0,
+            "contextless_useless_rate": (num_contextless_useless / num_evaluable) if num_evaluable else 0.0,
+            "fragmentation_rate": (num_fragmented / num_evaluable) if num_evaluable else 0.0,
         }
-        # Keep these keys stable for readers produced by the earlier Evaluation 5 implementation.
-        summary.setdefault("num_useless_a", num_useless_a)
-        summary.setdefault("useless_a_pattern_rate", (num_useless_a / num_evaluable) if num_evaluable else 0.0)
         summary_rows.append(summary)
         summary_by_method[method] = summary
 
@@ -1362,79 +1675,92 @@ def write_pattern_groundedness_outputs(
     pattern_detail_rows: Sequence[dict],
     summary_rows: Sequence[dict],
     summary: dict,
+    summary_by_run_rows: Sequence[dict] | None = None,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
+    include_run = any("run" in row for row in pattern_detail_rows)
+    pattern_detail_fieldnames = [
+        *(["run"] if include_run else []),
+        "method",
+        "pattern_id",
+        "pattern_name",
+        "sequence",
+        "time_band",
+        "input_count",
+        "pattern_source",
+        "support_transactions",
+        "support_ratio",
+        "train_occurrence_count",
+        "median_duration_seconds",
+        "p90_duration_seconds",
+        "is_fp_filtered_out",
+        "fp_filter_reason",
+        "transition_joint_probability",
+        "transition_min_step_probability",
+        "train_support",
+        "test_support",
+        "assigned_adl_train",
+        "assigned_adl_set_train",
+        "train_overlap_by_adl_json",
+        "train_total_duration_seconds",
+        "train_assigned_adl_overlap_seconds",
+        "train_assigned_adl_set_purity",
+        "train_assigned_adl_purity",
+        "is_contextless_useless",
+        "is_structural_useless",
+        "is_low_information",
+        "is_adl_unsupported",
+        "is_fragmented",
+        "fragment_parent_ids",
+        "max_occurrence_containment",
+        "is_useful_non_redundant",
+        "structural_useless_reason",
+        "evaluation_status",
+    ]
     write_csv_rows(
         output_dir / "evaluation5_pattern_details.csv",
-        pattern_detail_rows,
-        [
-            "method",
-            "pattern_id",
-            "pattern_name",
-            "sequence",
-            "input_count",
-            "pattern_source",
-            "support_transactions",
-            "support_ratio",
-            "train_occurrence_count",
-            "median_duration_seconds",
-            "p90_duration_seconds",
-            "is_fp_filtered_out",
-            "fp_filter_reason",
-            "train_support",
-            "test_support",
-            "assigned_adl_train",
-            "assigned_adl_set_train",
-            "train_overlap_by_adl_json",
-            "train_total_duration_seconds",
-            "train_assigned_adl_overlap_seconds",
-            "train_assigned_adl_set_purity",
-            "train_assigned_adl_purity",
-            "assigned_adl_hit_rate_test",
-            "assigned_adl_purity_test",
-            "any_adl_hit_rate_test",
-            "any_adl_purity_test",
-            "is_adl_grounded",
-            "is_useless_a",
-            "is_useless_b",
-            "is_useless_c",
-            "is_useless",
-            "useless_reason",
-            "useless_b_reason",
-            "useless_c_reason",
-            "evaluation_status",
-        ],
+        [{key: row.get(key, "") for key in pattern_detail_fieldnames} for row in pattern_detail_rows],
+        pattern_detail_fieldnames,
     )
     write_csv_rows(
         output_dir / "evaluation5_summary_by_method.csv",
-        summary_rows,
-        [
-            "method",
-            "num_patterns",
-            "num_evaluable_patterns",
-            "num_no_train_support",
-            "num_no_test_support",
-            "num_no_assigned_adl",
-            "num_adl_grounded",
-            "num_useless",
-            "num_useless_a",
-            "num_useless_b",
-            "num_useless_c",
-            "adl_grounded_pattern_rate",
-            "useless_pattern_rate",
-            "useless_a_pattern_rate",
-            "useless_b_pattern_rate",
-            "useless_c_pattern_rate",
-            "mean_assigned_adl_hit_rate",
-            "mean_assigned_adl_purity",
-            "mean_any_adl_hit_rate",
-            "mean_any_adl_purity",
-        ],
+        [{key: row.get(key, "") for key in evaluation5_summary_fieldnames(summary_rows)} for row in summary_rows],
+        evaluation5_summary_fieldnames(summary_rows),
     )
+    if summary_by_run_rows is not None:
+        by_run_fieldnames = [
+            "run",
+            "method",
+            "useful_non_redundant_pattern_rate",
+            "fragmentation_rate",
+            "contextless_useless_rate",
+        ]
+        write_csv_rows(
+            output_dir / "evaluation5_summary_by_method_by_run.csv",
+            [{key: row.get(key, "") for key in by_run_fieldnames} for row in summary_by_run_rows],
+            by_run_fieldnames,
+        )
     (output_dir / "evaluation5_summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def evaluation5_summary_fieldnames(summary_rows: Sequence[dict]) -> list[str]:
+    metric_names = [
+        "useful_non_redundant_pattern_rate",
+        "fragmentation_rate",
+        "contextless_useless_rate",
+    ]
+    fieldnames = ["method"]
+    if any("num_runs" in row for row in summary_rows):
+        fieldnames.append("num_runs")
+    for metric in metric_names:
+        fieldnames.append(metric)
+        std_name = f"{metric}_std"
+        if any(std_name in row for row in summary_rows):
+            fieldnames.append(std_name)
+    return fieldnames
 
 
 def write_adl_correspondence_outputs(

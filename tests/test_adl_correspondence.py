@@ -1,18 +1,22 @@
 from __future__ import annotations
 
 import json
+import csv
 import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
 
+from scripts.evaluate_adl_correspondence import aggregate_run_summaries, load_pattern_cache, write_pattern_cache
 from src.behavior_pattern_mining.evaluation.adl import ADLInterval, PredictionInterval, StateInterval
 from src.behavior_pattern_mining.evaluation.adl_correspondence import (
     detect_alternating_loop,
     detect_other_state_round_trip,
+    compute_fragmentation_by_method,
     expand_adl_intervals_for_evaluation5,
     assign_mappings_by_method,
     build_fp_growth_baseline_patterns,
+    build_transition_probability_baseline_patterns,
     build_predictions_by_method,
     clip_adl_intervals,
     clip_state_intervals,
@@ -22,9 +26,11 @@ from src.behavior_pattern_mining.evaluation.adl_correspondence import (
     evaluate_methods,
     find_occurrences_by_method,
     load_method_patterns,
+    MethodPattern,
     parse_sequence,
     postprocess_predictions_by_method,
     train_pattern_adl_assignments,
+    write_pattern_groundedness_outputs,
 )
 
 
@@ -287,6 +293,127 @@ class ADLCorrespondenceTests(unittest.TestCase):
         self.assertIn("other_round_trip", fp_sequences[("状態1", "その他", "状態1")].fp_filter_reason)
         self.assertIn("median_duration", fp_sequences[("状態5", "状態6")].fp_filter_reason)
 
+    def test_transition_probability_baseline_builds_ranked_paths(self) -> None:
+        states = [
+            StateInterval(ts("2020-01-01 00:00:00"), ts("2020-01-01 00:01:00"), "状態1"),
+            StateInterval(ts("2020-01-01 00:01:00"), ts("2020-01-01 00:02:00"), "状態2"),
+            StateInterval(ts("2020-01-01 00:02:00"), ts("2020-01-01 00:03:00"), "状態3"),
+            StateInterval(ts("2020-01-01 00:03:00"), ts("2020-01-01 00:04:00"), "状態1"),
+            StateInterval(ts("2020-01-01 00:04:00"), ts("2020-01-01 00:05:00"), "状態2"),
+            StateInterval(ts("2020-01-01 00:05:00"), ts("2020-01-01 00:06:00"), "状態3"),
+            StateInterval(ts("2020-01-01 00:06:00"), ts("2020-01-01 00:07:00"), "状態4"),
+        ]
+
+        patterns, notes = build_transition_probability_baseline_patterns(
+            states,
+            top_k=5,
+            min_prob=0.0,
+            min_len=2,
+            max_len=4,
+        )
+
+        sequences = {pattern.sequence: pattern for pattern in patterns}
+        self.assertTrue(any("transition_probability: generated" in note for note in notes))
+        self.assertIn(("状態1", "状態2"), sequences)
+        self.assertEqual(sequences[("状態1", "状態2")].method, "transition_probability")
+        self.assertEqual(sequences[("状態1", "状態2")].count, 2)
+        self.assertGreaterEqual(sequences[("状態1", "状態2")].transition_joint_probability or 0.0, 0.0)
+
+    def test_evaluation5_baseline_pattern_cache_round_trips_metadata(self) -> None:
+        patterns = [
+            MethodPattern(
+                method="transition_probability",
+                pattern_id="TP001",
+                pattern_name="tp path",
+                sequence=("状態1", "状態2", "状態3"),
+                count=10,
+                pattern_source="transition_probability",
+                transition_joint_probability=0.42,
+                transition_min_step_probability=0.6,
+            ),
+            MethodPattern(
+                method="transition_probability",
+                pattern_id="TP002",
+                pattern_name="tp path 2",
+                sequence=("状態4", "状態5"),
+                train_occurrence_count=7,
+                median_duration_seconds=12.5,
+                p90_duration_seconds=20.0,
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "cache.csv"
+            write_pattern_cache(path, patterns)
+            loaded = load_pattern_cache(path, "transition_probability")
+
+        self.assertEqual(len(loaded), 2)
+        self.assertEqual(loaded[0].sequence, ("状態1", "状態2", "状態3"))
+        self.assertEqual(loaded[0].transition_joint_probability, 0.42)
+        self.assertEqual(loaded[1].train_occurrence_count, 7)
+        self.assertEqual(loaded[1].median_duration_seconds, 12.5)
+
+    def test_fragmentation_and_useful_non_redundant_metrics(self) -> None:
+        patterns, _ = load_method_patterns_from_payload(
+            [
+                {"sequence": ["状態1", "状態2"], "count": 10},
+                {"sequence": ["状態1", "状態2", "状態3"], "count": 4},
+                {"sequence": ["その他", "unknown"], "count": 2},
+            ],
+            "frequency",
+        )
+        patterns_by_method = {"frequency": patterns}
+        train_states = [
+            StateInterval(ts("2020-01-01 00:00:00"), ts("2020-01-01 00:01:00"), "状態1"),
+            StateInterval(ts("2020-01-01 00:01:00"), ts("2020-01-01 00:02:00"), "状態2"),
+            StateInterval(ts("2020-01-01 00:02:00"), ts("2020-01-01 00:03:00"), "状態3"),
+            StateInterval(ts("2020-01-01 00:03:00"), ts("2020-01-01 00:04:00"), "その他"),
+            StateInterval(ts("2020-01-01 00:04:00"), ts("2020-01-01 00:05:00"), "unknown"),
+        ]
+        train_labels = [
+            ADLInterval(ts("2020-01-01 00:00:00"), ts("2020-01-01 00:03:00"), "Relax", "Relax"),
+            ADLInterval(ts("2020-01-01 00:03:00"), ts("2020-01-01 00:05:00"), "Unknown_Label", "Other_ADL"),
+        ]
+        test_states = [
+            StateInterval(ts("2020-01-02 00:00:00"), ts("2020-01-02 00:01:00"), "状態1"),
+            StateInterval(ts("2020-01-02 00:01:00"), ts("2020-01-02 00:02:00"), "状態2"),
+            StateInterval(ts("2020-01-02 00:02:00"), ts("2020-01-02 00:03:00"), "状態3"),
+            StateInterval(ts("2020-01-02 00:03:00"), ts("2020-01-02 00:04:00"), "その他"),
+            StateInterval(ts("2020-01-02 00:04:00"), ts("2020-01-02 00:05:00"), "unknown"),
+        ]
+        test_labels = [
+            ADLInterval(ts("2020-01-02 00:00:00"), ts("2020-01-02 00:03:00"), "Relax", "Relax")
+        ]
+
+        train_occurrences = find_occurrences_by_method(patterns_by_method, train_states, "exact", 2.0)
+        test_occurrences = find_occurrences_by_method(patterns_by_method, test_states, "exact", 2.0)
+        assignments = train_pattern_adl_assignments(patterns_by_method, train_occurrences, train_labels)
+        fragmentation = compute_fragmentation_by_method(patterns_by_method, test_occurrences, 0.7)
+        detail_rows, summary_rows, _ = evaluate_pattern_groundedness(
+            patterns_by_method=patterns_by_method,
+            train_assignments=assignments,
+            test_occurrences_by_method=test_occurrences,
+            test_labels=test_labels,
+            min_overlap_seconds=1,
+            grounded_hit_threshold=0.3,
+            grounded_purity_threshold=0.3,
+            useless_hit_threshold=0.1,
+            useless_purity_threshold=0.1,
+            other_state_labels={"その他", "unknown"},
+        )
+
+        by_pattern = {row["pattern_id"]: row for row in detail_rows}
+        self.assertTrue(fragmentation["frequency"]["F001"]["is_fragmented"])
+        self.assertEqual(by_pattern["F001"]["is_fragmented"], 1)
+        self.assertEqual(by_pattern["F001"]["is_useful_non_redundant"], 0)
+        self.assertEqual(by_pattern["F002"]["is_useful_non_redundant"], 1)
+        self.assertEqual(by_pattern["F003"]["is_low_information"], 1)
+        self.assertEqual(by_pattern["F003"]["is_contextless_useless"], 1)
+        summary = summary_rows[0]
+        self.assertEqual(set(summary), {"method", "useful_non_redundant_pattern_rate", "fragmentation_rate", "contextless_useless_rate"})
+        self.assertAlmostEqual(summary["fragmentation_rate"], 1 / 3)
+        self.assertAlmostEqual(summary["useful_non_redundant_pattern_rate"], 1 / 3)
+        self.assertAlmostEqual(summary["contextless_useless_rate"], 1 / 3)
+
     def test_pattern_groundedness_and_useless_a_are_pattern_level(self) -> None:
         patterns, _ = load_method_patterns_from_payload(
             [
@@ -341,14 +468,10 @@ class ADLCorrespondenceTests(unittest.TestCase):
         self.assertEqual(by_pattern["F003"]["evaluation_status"], "no_train_support")
 
         summary = summary_rows[0]
-        self.assertEqual(summary["num_patterns"], 3)
-        self.assertEqual(summary["num_evaluable_patterns"], 2)
-        self.assertEqual(summary["num_adl_grounded"], 1)
-        self.assertEqual(summary["num_useless_a"], 1)
-        self.assertEqual(summary["num_useless"], 1)
-        self.assertAlmostEqual(summary["adl_grounded_pattern_rate"], 0.5)
-        self.assertAlmostEqual(summary["useless_a_pattern_rate"], 0.5)
-        self.assertAlmostEqual(summary["useless_pattern_rate"], 0.5)
+        self.assertEqual(set(summary), {"method", "useful_non_redundant_pattern_rate", "fragmentation_rate", "contextless_useless_rate"})
+        self.assertAlmostEqual(summary["useful_non_redundant_pattern_rate"], 0.5)
+        self.assertAlmostEqual(summary["fragmentation_rate"], 0.0)
+        self.assertAlmostEqual(summary["contextless_useless_rate"], 0.5)
 
     def test_evaluation5_multi_label_assigned_set_and_other_adl_exclusion(self) -> None:
         patterns, _ = load_method_patterns_from_payload(
@@ -441,6 +564,78 @@ class ADLCorrespondenceTests(unittest.TestCase):
         self.assertNotIn("Housework", assigned)
         self.assertNotIn("Other_ADL", assigned)
         self.assertEqual(assignments["frequency"]["F002"]["assigned_adl_set_train"], ["Other_ADL"])
+
+    def test_evaluation5_multi_run_summary_outputs_average_and_by_run(self) -> None:
+        by_run = [
+            {
+                "run": 1,
+                "method": "proposed",
+                "useful_non_redundant_pattern_rate": 0.2,
+                "fragmentation_rate": 0.4,
+                "contextless_useless_rate": 0.6,
+            },
+            {
+                "run": 2,
+                "method": "proposed",
+                "useful_non_redundant_pattern_rate": 0.4,
+                "fragmentation_rate": 0.2,
+                "contextless_useless_rate": 0.8,
+            },
+        ]
+        summary_rows, summary_by_method = aggregate_run_summaries(by_run)
+        self.assertEqual(summary_rows[0]["num_runs"], 2)
+        self.assertAlmostEqual(summary_rows[0]["useful_non_redundant_pattern_rate"], 0.3)
+        self.assertAlmostEqual(summary_rows[0]["fragmentation_rate"], 0.3)
+        self.assertAlmostEqual(summary_rows[0]["contextless_useless_rate"], 0.7)
+        self.assertIn("useful_non_redundant_pattern_rate_std", summary_by_method["proposed"])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            write_pattern_groundedness_outputs(
+                output_dir=output_dir,
+                pattern_detail_rows=[
+                    {
+                        "run": 1,
+                        "method": "proposed",
+                        "pattern_id": "P001",
+                        "pattern_name": "p",
+                        "sequence": "状態1 -> 状態2",
+                        "is_contextless_useless": 0,
+                        "is_fragmented": 0,
+                        "is_useful_non_redundant": 1,
+                    }
+                ],
+                summary_rows=summary_rows,
+                summary_by_run_rows=by_run,
+                summary={"summary_by_method": summary_by_method},
+            )
+            with (output_dir / "evaluation5_summary_by_method.csv").open(encoding="utf-8", newline="") as handle:
+                header = next(csv.reader(handle))
+            self.assertEqual(
+                header,
+                [
+                    "method",
+                    "num_runs",
+                    "useful_non_redundant_pattern_rate",
+                    "useful_non_redundant_pattern_rate_std",
+                    "fragmentation_rate",
+                    "fragmentation_rate_std",
+                    "contextless_useless_rate",
+                    "contextless_useless_rate_std",
+                ],
+            )
+            with (output_dir / "evaluation5_summary_by_method_by_run.csv").open(encoding="utf-8", newline="") as handle:
+                by_run_header = next(csv.reader(handle))
+            self.assertEqual(
+                by_run_header,
+                [
+                    "run",
+                    "method",
+                    "useful_non_redundant_pattern_rate",
+                    "fragmentation_rate",
+                    "contextless_useless_rate",
+                ],
+            )
 
 
 def load_method_patterns_from_payload(payload: list[dict], method: str):
