@@ -516,6 +516,91 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     ]
 
 
+def build_evaluation8_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
+    """Build either the 30-day comparison or 154-day proposed-only Evaluation 8 command."""
+    analysis_scope = settings["analysis_scope"]
+    n_states = int(settings["n_states"])
+    hamming = int(settings["hamming_threshold"])
+    days = int(settings["days"])
+    output_dir = as_path(settings["output_dir"])
+    if output_dir is None:
+        raise ValueError("Evaluation 8 requires an output directory.")
+
+    command = script_cmd(settings["runner"], "scripts/evaluate_8_frequency_stratified_adl_consistency.py")
+    add_arg(command, "--analysis-scope", analysis_scope)
+    add_arg(command, "--output-dir", output_dir)
+    add_arg(command, "--frequency-band-mode", settings["frequency_band_mode"])
+    add_arg(command, "--n-states", n_states)
+    add_arg(command, "--hamming-threshold", hamming)
+    add_arg(command, "--days", days)
+
+    if analysis_scope == "comparison_30days":
+        details = as_path(settings["evaluation6_details"])
+        if details is None:
+            raise ValueError("30-day comparison requires an Evaluation 6 details path.")
+        add_arg(command, "--evaluation6-details", details)
+        required_inputs = [details]
+        description = "30日条件の評価6手法比較詳細CSVを、手法ごとに頻度三分位へ後段集計します。"
+        expected_outputs = [
+            output_dir / "evaluation8_frequency_band_details.csv",
+            output_dir / "evaluation8_by_frequency_band.csv",
+            output_dir / "evaluation8_by_frequency_band_by_method.csv",
+            output_dir / "evaluation8_occurrence_weighted_summary.csv",
+            output_dir / "evaluation8_summary.json",
+        ]
+    else:
+        patterns = as_path(settings["patterns_proposed"])
+        state_series = as_path(settings["state_series"])
+        labeled_casas = as_path(settings.get("labeled_casas"))
+        adl_intervals = as_path(settings.get("adl_intervals"))
+        if patterns is None or state_series is None:
+            raise ValueError("154-day proposed-only evaluation requires patterns-proposed and state-series.")
+        add_arg(command, "--patterns-proposed", patterns)
+        add_arg(command, "--patterns-proposed-template", settings.get("patterns_proposed_template"))
+        add_arg(command, "--runs", settings["runs"])
+        add_arg(command, "--state-series", state_series)
+        add_arg(command, "--labeled-casas", labeled_casas)
+        add_arg(command, "--adl-intervals", adl_intervals)
+        add_arg(command, "--min-overlap-ratio-for-true-label", settings["min_overlap_ratio_for_true_label"])
+        add_arg(command, "--no-overlap-label", settings["no_overlap_label"])
+        add_arg(command, "--missing-pred-label", settings["missing_pred_label"])
+        add_arg(command, "--unknown-pred-label", settings["unknown_pred_label"])
+        add_arg(command, "--wake-window-minutes", settings["wake_window_minutes"])
+        add_arg(command, "--match-mode", settings["match_mode"])
+        add_arg(command, "--max-skip-duration-minutes", settings["max_skip_duration_minutes"])
+        run_paths = [
+            proposed_run_path(
+                patterns,
+                settings.get("patterns_proposed_template"),
+                settings.get("dataset", "aruba"),
+                n_states,
+                hamming,
+                days,
+                run,
+            )
+            for run in range(1, int(settings["runs"]) + 1)
+        ]
+        required_inputs = [*run_paths, state_series, *([labeled_casas or adl_intervals] if labeled_casas or adl_intervals else [])]
+        description = "154日条件の提案手法JSONを5 runで評価6と同じset一致処理へ通し、runごとの頻度三分位結果を平均します。"
+        expected_outputs = [
+            output_dir / "evaluation8_frequency_band_details.csv",
+            output_dir / "evaluation8_by_frequency_band.csv",
+            output_dir / "evaluation8_occurrence_weighted_summary.csv",
+            output_dir / "evaluation8_summary.json",
+        ]
+
+    return [
+        EvaluationStep(
+            "eval8_frequency_stratified",
+            "評価8を実行",
+            description,
+            command,
+            required_inputs,
+            expected_outputs,
+        )
+    ]
+
+
 def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     runner = settings["runner"]
     dataset = settings["dataset"]

@@ -12,6 +12,7 @@
 | 評価4 | ラベル付きCASASデータによる単一手法ADL評価 | `docs/evaluation_4_labeled_casas_adl.md` |
 | 評価5 | ADLラベルを用いたパターン単位評価 | `docs/evaluation_5_adl_correspondence.md` |
 | 評価6 | LLM解釈ラベルとADL重なりラベルのSet一致評価 | `docs/evaluation_6_adl_interpretation_set.md` |
+| 評価8 | 頻度帯別ADL整合性評価 | `docs/evaluation_8_frequency_stratified_adl_consistency.md` |
 
 ## 最短の実行順序
 
@@ -111,6 +112,27 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
   --labeled-casas new_labeled_data/aruba.txt \
   --output-dir results/6_adl_interpretation_set_comparison \
   --min-overlap-ratio-for-true-label 0.10
+```
+
+評価8は、30日条件の手法比較と154日条件の提案手法単独を別ディレクトリへ出力する。
+
+```bash
+uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
+  --analysis-scope comparison_30days \
+  --evaluation6-details results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_pattern_set_details_by_method.csv \
+  --output-dir results/e8_30_c_30_2 \
+  --frequency-band-mode tertile
+```
+
+```bash
+uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
+  --analysis-scope proposed_154days \
+  --patterns-proposed output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
+  --state-series output/5_adl_evaluation/state_series.csv \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --runs 5 \
+  --output-dir results/e8_154_p_30_2 \
+  --frequency-band-mode tertile
 ```
 
 以下は全体の共通設定と補足です。

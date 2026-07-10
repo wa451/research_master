@@ -42,7 +42,7 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 |---|---|
 | `results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_method_comparison.csv` | 提案手法とLLM単独ベースラインの主比較表。`--runs` が2以上の場合はrun平均と標準偏差。 |
 | `results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_method_comparison_by_run.csv` | runごとの手法別summary。5回平均の元データ。 |
-| `results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_pattern_set_details_by_method.csv` | 手法別・パターン別詳細。 |
+| `results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_pattern_set_details_by_method.csv` | 手法別・パターン別詳細。`num_occurrences` は評価8の頻度帯分析に使う、評価レコードごとの代表状態系列上の出現回数。 |
 | `results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_by_pred_label_by_method.csv` | 手法別・予測ラベル別集計。 |
 | `results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_by_true_label_by_method.csv` | 手法別・正解ラベル別集計。 |
 | `results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_by_time_band_by_method.csv` | 手法別・時間帯別集計。 |
@@ -264,7 +264,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 
 1. LLM出力JSONから `ADL系列ラベル` と `遷移のパターン` を読む。
 2. 提案手法の `time_band_interpretations` は `sequence × time_band` 単位へ展開する。
-3. パターン出現区間を用意する。比較スクリプトでは、両手法を同じ `state_series.csv` 上で検索し直す。
+3. パターン出現区間を用意する。比較スクリプトでは、両手法を同じ `state_series.csv` 上で検索し直す。詳細CSVには、この検索結果に基づく `num_occurrences` も保存する。
 4. `time_band` が `All` でない評価レコードは、出現開始時刻が同じ時間帯に属するoccurrenceだけを使う。
 5. `new_labeled_data/aruba.txt` からADL正解区間を内部生成する。
 6. 対象occurrenceについて、ADLカテゴリ別の重なり時間を合計する。

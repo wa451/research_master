@@ -9,7 +9,7 @@
 | 入力データ | `data/aruba.csv`, OpenSHS本体 | 管理しない |
 | 秘密情報 | `.env`, APIキー | 管理しない |
 | 再現に必要な固定成果物 | 論文で使う代表状態表、採用したLLM出力、最終評価表、掲載図 | 必要最小限だけ管理する |
-| 評価結果 | `results/4_adl_evaluation/`, `results/5_adl_correspondence/`, `results/6_adl_interpretation_set_comparison/` | 論文で使う値だけ残す |
+| 評価結果 | `results/4_adl_evaluation/`, `results/5_adl_correspondence/`, `results/6_adl_interpretation_set_comparison/`, `results/e8_30_c_{K}_{hamming}/`, `results/e8_154_p_{K}_{hamming}/` | 論文で使う値だけ残す |
 | 一時生成物 | LLM runごとの試行ファイル、再生成できる図、ログ、途中CSV | 原則管理しない |
 | 設定・プロンプト | `configs/*.yaml`, `prompts/*.md` | 管理する |
 
@@ -21,9 +21,11 @@
 results/
 ├── 4_adl_evaluation/
 ├── 5_adl_correspondence/
-└── 6_adl_interpretation_set_comparison/
-    ├── 15_1_30days/
-    └── 30_1_30days/
+├── 6_adl_interpretation_set_comparison/
+│   ├── 15_1_30days/
+│   └── 30_1_30days/
+├── e8_30_c_30_2/
+└── e8_154_p_30_2/
 
 output/
 ├── 5_rule_filter/

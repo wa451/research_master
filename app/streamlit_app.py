@@ -1,4 +1,4 @@
-"""Local Streamlit dashboard for Evaluation 4, 5, 6, and 7."""
+"""Local Streamlit dashboard for Evaluation 4 through Evaluation 8."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from app.command_builder import (  # noqa: E402
     build_evaluation5_steps,
     build_evaluation6_steps,
     build_evaluation7_steps,
+    build_evaluation8_steps,
     command_preview,
     default_direct_path,
     default_proposed_path,
@@ -118,6 +119,24 @@ RESULT_GUIDES: dict[str, list[dict[str, str]]] = {
             "how_to_read": "時間帯別、予測ラベル別、正解ラベル別に、どの条件で精度が変わるかを確認する。",
         },
     ],
+    "評価8": [
+        {
+            "files": "evaluation8_by_frequency_band_by_method.csv, evaluation8_by_frequency_band.csv",
+            "how_to_read": "Low / Middle / Highごとに、pattern単位のPrecision / Recall / F1とJaccardを比較する。高頻度でPrecisionが高いかは、同一method内の帯間で確認する。",
+        },
+        {
+            "files": "evaluation8_occurrence_weighted_summary.csv",
+            "how_to_read": "出現回数で重み付けした全体Jaccard / Precision / Recall / F1を手法ごとに確認する。",
+        },
+        {
+            "files": "evaluation8_frequency_band_details.csv",
+            "how_to_read": "各評価レコードのnum_occurrences、frequency_band、予測/正解ADLラベルを確認して、帯別結果の原因を追跡する。",
+        },
+        {
+            "files": "evaluation8_summary.json",
+            "how_to_read": "analysis_scope、入力した評価6詳細CSVまたは154日提案手法入力、三分位モード、手法別・全体集計を再現条件として確認する。",
+        },
+    ],
 }
 
 RESULT_FILE_ORDER: dict[str, list[str]] = {
@@ -159,6 +178,13 @@ RESULT_FILE_ORDER: dict[str, list[str]] = {
         "evaluation7_by_pred_label.csv",
         "evaluation7_by_true_label.csv",
     ],
+    "評価8": [
+        "evaluation8_by_frequency_band_by_method.csv",
+        "evaluation8_by_frequency_band.csv",
+        "evaluation8_occurrence_weighted_summary.csv",
+        "evaluation8_frequency_band_details.csv",
+        "evaluation8_summary.json",
+    ],
 }
 
 
@@ -188,7 +214,7 @@ def rel_default(path: Path) -> str:
 
 def common_sidebar() -> dict:
     st.sidebar.header("共通設定")
-    evaluation = st.sidebar.radio("評価を選択", ["評価4", "評価5", "評価6", "評価7"], horizontal=True)
+    evaluation = st.sidebar.radio("評価を選択", ["評価4", "評価5", "評価6", "評価7", "評価8"], horizontal=True)
     runner = st.sidebar.selectbox("Python実行方法", ["uv run python", "python"], index=0)
     run_name = st.sidebar.text_input("run名（ログ用）", "manual")
     dry_run = st.sidebar.checkbox("dry-run（実行せずコマンドだけ記録）", value=False)
@@ -615,6 +641,93 @@ def render_eval7_settings(common: dict) -> dict:
     }
 
 
+def render_eval8_settings(common: dict) -> dict:
+    st.subheader("評価8: 頻度帯別ADL整合性評価")
+    st.caption("評価6の指標を置き換えず、出現頻度の三分位で後段分析します。")
+    scope_label = st.radio(
+        "実行条件",
+        ["154日: 提案手法のみ", "30日: 提案手法 vs LLM単独ベースライン"],
+        index=0,
+        horizontal=True,
+    )
+    analysis_scope = "comparison_30days" if scope_label.startswith("30日") else "proposed_154days"
+    days = 30 if analysis_scope == "comparison_30days" else 154
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        n_states = st.number_input("代表状態数 K", min_value=1, value=30, step=1)
+    with col2:
+        hamming = st.number_input("ハミング距離閾値", min_value=0, value=2, step=1)
+    with col3:
+        runs = st.number_input("runs", min_value=1, value=5, step=1)
+    suffix = short_suffix(int(n_states), int(hamming), days)
+
+    st.markdown("**入力・出力**")
+    if analysis_scope == "comparison_30days":
+        details = st.text_input(
+            "evaluation6 details file path",
+            f"results/6_adl_interpretation_set_comparison/{suffix}/evaluation6_pattern_set_details_by_method.csv",
+        )
+        patterns_proposed = ""
+        state_series = ""
+        labeled_casas = ""
+        adl_intervals = ""
+        output_dir = st.text_input(
+            "output directory",
+            f"results/e8_30_c_{int(n_states)}_{int(hamming)}",
+        )
+        st.caption("評価6詳細CSVには5 run分のレコードを含めてください。評価8ではrunごとの帯別指標を平均します。")
+        patterns_proposed_template = ""
+        runs = 5
+    else:
+        details = ""
+        patterns_proposed = st.text_input(
+            "patterns-proposed (154日)",
+            f"output/aruba_{suffix}/llm_sequences_modes_{suffix}_1.json",
+        )
+        state_series_default = "output/5_adl_evaluation/state_series.csv" if (int(n_states), int(hamming)) == (30, 2) else ""
+        state_series = st.text_input("state-series (154日)", state_series_default)
+        if not state_series_default:
+            st.caption("Kまたはハミング距離を変更した場合は、その条件で作成した154日state-series CSVを指定してください。")
+        labeled_casas = st.text_input("ラベル付きCASAS", "new_labeled_data/aruba.txt")
+        adl_intervals = st.text_input("adl-intervals（任意）", "output/adl_label_intervals.csv")
+        patterns_proposed_template = st.text_input(
+            "patterns-proposed-template（任意）",
+            "",
+            placeholder="output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_{run}.json",
+        )
+        output_dir = st.text_input(
+            "output directory",
+            f"results/e8_154_p_{int(n_states)}_{int(hamming)}",
+        )
+    frequency_band_mode = st.selectbox("frequency band mode", ["tertile"], index=0)
+    st.caption("methodごとにnum_occurrences昇順で安定ソートし、できるだけ同数のLow / Middle / Highへ割り当てます。")
+
+    return {
+        **common,
+        "analysis_scope": analysis_scope,
+        "days": days,
+        "n_states": int(n_states),
+        "hamming_threshold": int(hamming),
+        "evaluation6_details": details,
+        "patterns_proposed": patterns_proposed,
+        "patterns_proposed_template": patterns_proposed_template,
+        "state_series": state_series,
+        "labeled_casas": labeled_casas,
+        "adl_intervals": adl_intervals,
+        "output_dir": output_dir,
+        "frequency_band_mode": frequency_band_mode,
+        "runs": int(runs),
+        "min_overlap_ratio_for_true_label": 0.10,
+        "no_overlap_label": "Ambiguous",
+        "missing_pred_label": "Ambiguous",
+        "unknown_pred_label": "Other",
+        "wake_window_minutes": 30.0,
+        "match_mode": "exact",
+        "max_skip_duration_minutes": 1.0,
+    }
+
+
 def render_step(step: EvaluationStep, settings: dict) -> None:
     expanded = not (step.step_id.startswith("eval7_") and step.step_id != "eval7_evaluate")
     with st.expander(step.title, expanded=expanded):
@@ -796,6 +909,8 @@ def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
 
 def infer_evaluation_for_results(selected_dir: Path, files: list[Path], current_evaluation: str | None) -> str | None:
     names = {path.name for path in files}
+    if any(name.startswith("evaluation8_") for name in names):
+        return "評価8"
     if any(name.startswith("evaluation7_") for name in names):
         return "評価7"
     if any(name.startswith("evaluation6_") for name in names):
@@ -891,6 +1006,21 @@ def render_results(default_dirs: list[Path], current_evaluation: str | None = No
     if selected_file.suffix == ".csv":
         df = pd.read_csv(selected_file)
         filtered_df = render_csv_result_table(df, key_prefix=f"result_{selected_file}")
+        if selected_file.name in {"evaluation8_by_frequency_band.csv", "evaluation8_by_frequency_band_by_method.csv"}:
+            simple_columns = [
+                column
+                for column in [
+                    "method",
+                    "frequency_band",
+                    "mean_multilabel_precision",
+                    "mean_multilabel_recall",
+                    "mean_multilabel_f1",
+                ]
+                if column in df.columns
+            ]
+            if simple_columns:
+                st.markdown("**頻度帯別 Precision / Recall / F1**")
+                st.dataframe(df[simple_columns], hide_index=True, use_container_width=True)
         metrics = metric_columns(filtered_df.columns)
         if metrics:
             metric = st.selectbox("グラフ化する指標", metrics)
@@ -929,7 +1059,7 @@ def render_results(default_dirs: list[Path], current_evaluation: str | None = No
             )
 
     st.markdown("**複数run比較**")
-    comparison_files = [path for path in discover_result_files([PROJECT_ROOT / "results"]) if path.name in {"evaluation7_condition_summary.csv", "evaluation6_method_comparison.csv", "evaluation5_summary_by_method.csv", "evaluation5_summary_by_method_by_run.csv", "adl_interval_hit_metrics.csv"}]
+    comparison_files = [path for path in discover_result_files([PROJECT_ROOT / "results"]) if path.name in {"evaluation8_by_frequency_band_by_method.csv", "evaluation7_condition_summary.csv", "evaluation6_method_comparison.csv", "evaluation5_summary_by_method.csv", "evaluation5_summary_by_method_by_run.csv", "adl_interval_hit_metrics.csv"}]
     if comparison_files:
         chosen = st.multiselect("比較に使うCSV", [display_path(path) for path in comparison_files], default=[display_path(comparison_files[0])])
         frames = []
@@ -966,6 +1096,8 @@ def default_result_dirs(settings: dict) -> list[Path]:
         return [PROJECT_ROOT / settings["output_dir"]]
     if evaluation == "評価7":
         return [PROJECT_ROOT / settings["output_dir"]]
+    if evaluation == "評価8":
+        return [PROJECT_ROOT / settings["output_dir"]]
     suffix = short_suffix(settings["n_states"], settings["hamming_threshold"], settings["days"])
     output_dir = PROJECT_ROOT / settings["output_dir"]
     return [output_dir / suffix if output_dir.name != suffix else output_dir, PROJECT_ROOT / settings["intermediate_output_dir"]]
@@ -989,9 +1121,12 @@ def main() -> None:
         elif common["evaluation"] == "評価6":
             settings = render_eval6_settings(common)
             steps = build_evaluation6_steps(settings)
-        else:
+        elif common["evaluation"] == "評価7":
             settings = render_eval7_settings(common)
             steps = build_evaluation7_steps(settings)
+        else:
+            settings = render_eval8_settings(common)
+            steps = build_evaluation8_steps(settings)
 
         st.markdown("### ステップ")
         render_batch_runner(steps, settings)

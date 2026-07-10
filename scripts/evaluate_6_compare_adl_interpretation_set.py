@@ -45,6 +45,7 @@ DETAIL_FIELDNAMES = [
     "time_band",
     "pattern_name",
     "pattern_id",
+    "num_occurrences",
     "pred_adl_labels",
     "true_adl_labels",
     "intersection_labels",

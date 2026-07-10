@@ -72,6 +72,13 @@
 - 対応ファイル: `scripts/evaluate_6_compare_adl_interpretation_set.py`, `src/behavior_pattern_mining/evaluation/adl_interpretation_set.py`
 - 役割: LLMが `ADL系列ラベル` として付けた解釈ラベル集合と、パターン出現区間がCASAS ADL区間と重なって得られる正解ADL集合を、順序を無視したset評価で比較する。提案手法は `sequence × time_band` 単位へ展開し、対象時間帯の出現だけで評価する。提案手法とLLM単独ベースラインの比較では、両手法を30日版に揃える。`--runs` で複数回実行結果の平均を出せる。
 
+## 7.5 評価8: Frequency-stratified ADL consistency
+
+- 入力: 30日手法比較では評価6の `evaluation6_pattern_set_details_by_method.csv`、154日提案手法単独では提案手法JSON・154日state series・ADL正解データ。
+- 出力: `results/e8_30_c_{K}_{hamming}/` と `results/e8_154_p_{K}_{hamming}/` に保存する。後者は単一methodなので重複する `evaluation8_by_frequency_band_by_method.csv` を出力しない。
+- 対応ファイル: `scripts/evaluate_8_frequency_stratified_adl_consistency.py`。
+- 役割: 評価6のパターン単位set指標を、`num_occurrences` のmethod内三分位（Low / Middle / High）で後段集計する。time-band awareな提案手法レコードは `sequence × time_band` ごとの出現回数を使う。
+
 ## 8. Visualization
 
 - 入力: 遷移確率行列、状態滞在時間、代表状態列

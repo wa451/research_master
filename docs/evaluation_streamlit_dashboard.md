@@ -1,6 +1,6 @@
 # Streamlit Evaluation Dashboard
 
-Python + Streamlitで評価4、評価5、評価6、評価7をローカル実行するための薄いGUIラッパーです。既存の研究ロジックは変更せず、画面上で設定した値から既存CLIコマンドを組み立てて `subprocess` で実行します。
+Python + Streamlitで評価4、評価5、評価6、評価7、評価8をローカル実行するための薄いGUIラッパーです。既存の研究ロジックは変更せず、画面上で設定した値から既存CLIコマンドを組み立てて `subprocess` で実行します。
 
 ## 起動方法
 
@@ -32,6 +32,7 @@ uv run streamlit run app/streamlit_app.py
 | 評価5 | frequency / rule-filtered / FP-Growth / transition_probability / proposedを、Useful non-redundant rateとFragmentation rateで比較する。 |
 | 評価6 | proposedとdirect-log baselineのADL解釈ラベルset一致を比較する。 |
 | 評価7 | proposedのみについて、Kとハミング距離を変えたADL解釈ラベル精度を比較する。 |
+| 評価8 | 評価6詳細を出現頻度のLow / Middle / Highに分け、ADL整合性を後段比較する。 |
 
 サイドバーの `dry-run` が有効な場合、コマンドと履歴だけを保存し、実処理は実行しません。重いLLM処理を走らせる前にコマンド確認に使ってください。
 
@@ -129,6 +130,12 @@ uv run streamlit run app/streamlit_app.py
 
 Streamlit画面では、`代表状態数 K` と `ハミング距離閾値` を `10,15,20,30` のようにカンマ区切りまたは空白区切りで指定できます。`不足ファイル作成ステップを表示` をONにすると、各条件ごとの前段3ステップも表示されます。一括実行の「不足ファイル生成 + 評価本体」では、既に出力が揃っている前段ステップを対象外にし、不足している条件別ファイルを作ったうえで評価7本体を実行します。結果タブでは条件別summaryと `evaluation7_summary.json` の `best_condition` を確認できます。
 
+## 評価8のステップ
+
+参照ドキュメント: `docs/evaluation_8_frequency_stratified_adl_consistency.md`
+
+評価8ではラジオボタンで「154日: 提案手法のみ」（既定）または「30日: 提案手法 vs LLM単独ベースライン」を選択して実行する。代表状態数K（既定30）、ハミング距離閾値（既定2）、runs（既定5）を変更できる。154日条件は提案手法JSONを指定run数、154日state series、ラベル付きCASASを入力にし、runごとに評価6と同じset一致処理と頻度三分位を実行してから帯別指標を平均する。出力先は短い条件別名称（例: `results/e8_154_p_30_2/`, `results/e8_30_c_30_2/`）であり、結果を混在させない。154日提案手法のみでは重複する `evaluation8_by_frequency_band_by_method.csv` を生成しない。結果タブでは帯別CSVを選ぶと、Low / Middle / HighごとのPrecision / Recall / F1簡易表を表示する。
+
 ## ログとコマンド履歴
 
 ログは以下に保存されます。
@@ -148,7 +155,7 @@ output/logs/evaluation_dashboard/
 - JSONは整形表示します。
 - `method` と F1 / precision / recall / Jaccard などの列があるCSVは棒グラフ表示できます。
 - 複数の summary CSV を選ぶと、source列付きで結合表示できます。
-- 評価4、評価5、評価6、評価7の各READMEにある「結果の読み方」に合わせて、見るべきファイル順と読み方を結果タブ内に表示します。
+- 評価4、評価5、評価6、評価7、評価8の各READMEにある「結果の読み方」に合わせて、見るべきファイル順と読み方を結果タブ内に表示します。
 - 表示ファイルのプルダウンは、READMEで推奨している確認順を優先して並べます。
 
 ## トラブルシューティング
@@ -170,4 +177,5 @@ uv run python scripts/evaluate_adl_labels.py --help
 uv run python scripts/evaluate_adl_correspondence.py --help
 uv run python scripts/evaluate_6_compare_adl_interpretation_set.py --help
 uv run python scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py --help
+uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py --help
 ```

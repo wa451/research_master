@@ -224,6 +224,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 - `results/4_adl_evaluation/*.csv`, `evaluation_summary.json`: ADLラベル付き単一手法評価の出力。`merged_predictions.csv`, `filtered_predictions.csv`, `adl_interval_hit_metrics.csv` も含む。
 - `results/5_adl_correspondence/evaluation5_*.csv`, `evaluation5_summary.json`: 複数手法のパターン単位ADL-grounded/Useless評価の出力。
 - `results/6_adl_interpretation_set_comparison/15_1_30days/*.csv`, `evaluation6_comparison_summary.json`: 評価6の提案手法/LLM単独ベースライン比較。`evaluation6_method_comparison.csv` は主比較表、`evaluation6_method_comparison_by_run.csv` はrun別結果。
+- `results/e8_30_c_{K}_{hamming}/*.csv` と `results/e8_154_p_{K}_{hamming}/*.csv`: 評価8の頻度帯別ADL整合性分析。前者は30日proposed / direct-log比較、後者は154日提案手法5 runの平均で、結果を混在させない。
 
 ## 再現実験
 

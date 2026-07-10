@@ -202,8 +202,10 @@ class Evaluation6ADLInterpretationSetTests(unittest.TestCase):
 
         by_id = {row["eval_pattern_id"]: row for row in detail_rows}
         self.assertEqual(by_id["P001_Morning"]["time_band"], "Morning")
+        self.assertEqual(by_id["P001_Morning"]["num_occurrences"], 1)
         self.assertEqual(by_id["P001_Morning"]["true_adl_labels"], "Hygiene;Wake-up")
         self.assertEqual(by_id["P001_Midnight"]["time_band"], "Midnight")
+        self.assertEqual(by_id["P001_Midnight"]["num_occurrences"], 1)
         self.assertEqual(by_id["P001_Midnight"]["true_adl_labels"], "Sleep")
         self.assertEqual(summary["num_patterns"], 2)
 

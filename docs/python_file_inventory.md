@@ -31,6 +31,7 @@
 | `scripts/evaluate_adl_labels.py` | ラベル付きCASASデータを使い、抽出パターンとADL区間の対応付け、ADLカテゴリ別Precision/Recall/F1、境界誤差を評価する。 |
 | `scripts/evaluate_adl_correspondence.py` | frequency, rule-filtered frequency, FP-Growth系baseline, transition_probability baseline, proposed method のパターンを共通形式に正規化し、評価5の3指標を手法別に比較する。`--runs` で提案手法の複数run平均も出せる。 |
 | `scripts/evaluate_6_compare_adl_interpretation_set.py` | 評価6について、30日版の提案手法とLLM単独ベースラインを同じ状態系列・同じADL正解区間で比較する。`--runs` で複数run平均も出力する。 |
+| `scripts/evaluate_8_frequency_stratified_adl_consistency.py` | 評価6詳細CSVを入力に、パターンの代表状態系列上の出現回数でLow / Middle / Highへ分け、ADL解釈ラベル整合性を後段集計する。 |
 
 ## 3. src/behavior_pattern_mining/
 

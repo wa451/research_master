@@ -432,6 +432,29 @@ def overlap_by_pattern_and_label(
     return overlaps
 
 
+def relevant_occurrences_for_pattern(
+    pattern: InterpretationPattern,
+    occurrences: Sequence[PatternOccurrenceInterval],
+) -> list[PatternOccurrenceInterval]:
+    """Return the representative-state occurrences used by one evaluation record.
+
+    For proposed patterns, ``sequence × time_band`` is the evaluation unit.
+    Thus an identical sequence in another time band is deliberately excluded
+    from both overlap calculation and ``num_occurrences``.
+    """
+    group_pattern_id = pattern.group_pattern_id or pattern.pattern_id
+    relevant = []
+    for occurrence in occurrences:
+        id_matches = occurrence.pattern_id in {pattern.pattern_id, group_pattern_id}
+        sequence_matches = bool(occurrence.sequence) and occurrence.sequence == pattern.sequence
+        if not (id_matches or sequence_matches):
+            continue
+        if pattern.time_band != "All" and time_band_for_timestamp(occurrence.start_time) != pattern.time_band:
+            continue
+        relevant.append(occurrence)
+    return relevant
+
+
 def true_label_set_from_overlap(
     overlap_seconds_by_label: dict[str, float],
     min_overlap_ratio: float,
@@ -493,6 +516,7 @@ def evaluate_interpretation_sets(
                 "time_band": pattern.time_band,
                 "pattern_name": pattern.pattern_name,
                 "sequence": sequence_text(pattern.sequence),
+                "num_occurrences": len(relevant_occurrences_for_pattern(pattern, occurrences)),
                 "pred_adl_labels": labels_text(pattern.pred_adl_labels),
                 "true_adl_labels": labels_text(true_labels),
                 "intersection_labels": labels_text(metrics["intersection_labels"]),
