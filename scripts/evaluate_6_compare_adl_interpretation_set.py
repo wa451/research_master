@@ -90,7 +90,7 @@ MEAN_SUMMARY_FIELDNAMES = [
 
 
 def default_output_root() -> Path:
-    return ROOT_DIR / "results" / "6_adl_interpretation_set_comparison"
+    return ROOT_DIR / "results" / "6_adl_match"
 
 
 def condition_suffix(days: int, n_states: int | None, hamming_threshold: int | None) -> str:
@@ -102,7 +102,7 @@ def condition_suffix(days: int, n_states: int | None, hamming_threshold: int | N
 def resolve_output_dir(output_dir: Path | None, suffix: str) -> Path:
     """Resolve the final condition-specific result directory.
 
-    Passing results/6_adl_interpretation_set_comparison writes into its
+    Passing results/6_adl_match writes into its
     {K}_{hamming}_{days}days child. Passing the condition directory itself
     remains supported for backward compatibility.
     """
@@ -179,8 +179,8 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Output root or condition directory for evaluation 6 method comparison. "
-            "When omitted, or when results/6_adl_interpretation_set_comparison is passed, "
-            "outputs are written to results/6_adl_interpretation_set_comparison/{K}_{hamming}_{days}days."
+            "When omitted, or when results/6_adl_match is passed, "
+            "outputs are written to results/6_adl_match/{K}_{hamming}_{days}days."
         ),
     )
     parser.add_argument(

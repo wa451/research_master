@@ -1,49 +1,22 @@
 ---
 name: baseline-implementation
-description: Use when adding or modifying comparison baselines such as PrefixSpan, FP-Growth, transition-probability, frequency, rule-filtered frequency, or direct-log LLM baselines for this smart-home behavior pattern mining repository.
+description: Implement or change a comparison baseline algorithm, extraction, filtering, or fairness behavior. Do not use for running baselines or evaluation-only integration.
 ---
 
 # Baseline Implementation
 
-Use this skill for new methods compared against the proposed state-transition-network plus LLM approach.
+## Workflow
 
-## Required First Steps
+1. Read the evaluation document that consumes the baseline and inspect the current baseline producer, consumer, CLI, tests, and nearby baseline implementations.
+2. Establish the comparison contract from current code: input period, split, state configuration, sequence constraints, output record shape, method identifier, and failure handling.
+3. Implement reusable extraction or filtering outside the CLI entry point. Reuse the same inputs and split as compared methods unless the research specification says otherwise.
+4. Prevent test labels from influencing extraction, filtering, thresholds, caches, or train-side pattern-to-label assignment.
+5. Keep method identifiers and consumer-facing fields stable. Expose meaningful thresholds as CLI arguments and record them using the evaluation's existing summary convention.
+6. Update focused tests and the consuming evaluation document. Update Streamlit only when its supported CLI or displayed outputs change.
 
-1. Read `docs/evaluation_3_direct_log_baseline_comparison.md`, `docs/evaluation_5_adl_correspondence.md`, and `docs/pipeline.md`.
-2. Inspect existing baseline modules:
-   - `src/behavior_pattern_mining/baselines/frequency.py`
-   - `src/behavior_pattern_mining/baselines/transition_probability.py`
-   - `src/behavior_pattern_mining/evaluation/adl_correspondence.py`
-   - `src/behavior_pattern_mining/llm/direct_log_extractor.py`
-3. Identify the comparison surface: sequence-level Precision/Recall/F1, Evaluation 5 pattern-level uselessness, Evaluation 6 set-match, or direct-log baseline comparison.
+## Verification
 
-## Fair Comparison Rules
-
-- Use the same input period, dataset, representative-state configuration, and pattern length range as the proposed method unless the evaluation doc states otherwise.
-- Keep train/test split identical for all methods in the same evaluation.
-- Normalize every baseline output to a common pattern record:
-  - `method`
-  - `pattern_id`
-  - `pattern_name`
-  - `sequence`
-  - `count` or support when available
-- Do not let test labels influence baseline pattern extraction or train-side pattern-to-ADL assignment.
-- If a baseline needs filtering, expose thresholds as CLI arguments and record them in summary JSON.
-
-## Common Baseline Locations
-
-- Frequency and rule-filtered frequency: `src/behavior_pattern_mining/baselines/frequency.py` and Evaluation 5 helpers.
-- Transition probability: `src/behavior_pattern_mining/baselines/transition_probability.py`.
-- LLM direct-log baseline: `scripts/run_direct_log_baseline.py`, `src/behavior_pattern_mining/llm/direct_log_extractor.py`, `prompts/direct_log_pattern_extraction_prompt.md`.
-- FP-Growth-style baseline in Evaluation 5: `build_fp_growth_baseline_patterns` in `src/behavior_pattern_mining/evaluation/adl_correspondence.py`.
-
-## Implementation Pattern
-
-1. Add extraction logic in a reusable module or evaluation helper, not only inside a script.
-2. Add CLI flags with conservative defaults.
-3. Convert output into the existing pattern schema.
-4. Include the method in summary JSON and skipped-method handling.
-5. Add focused unit tests with small state intervals.
-6. Update docs for the evaluation that consumes the baseline.
-
-For known baseline-specific contracts and filter examples, read `references/baseline-contracts.md`.
+- Exercise the baseline on a small fixture and cover empty/invalid input handling.
+- Run the consuming CLI's `--help` and focused tests.
+- Check that all compared methods use compatible periods, splits, and pattern constraints.
+- Inspect the diff for unintended metric, proposed-method, or generated-result changes.

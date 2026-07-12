@@ -265,8 +265,8 @@ def render_eval4_settings(common: dict) -> dict:
         min_duration = st.text_input("min-duration-config（任意）", "configs/adl_min_duration.json")
 
     st.markdown("**出力**")
-    output_dir = st.text_input("output-dir", "results/4_adl_evaluation")
-    write_state = st.text_input("write-state-series", "results/4_adl_evaluation/state_series.csv")
+    output_dir = st.text_input("output-dir", "results/4_adl_detect")
+    write_state = st.text_input("write-state-series", "results/4_adl_detect/state_series.csv")
 
     return {
         **common,
@@ -406,7 +406,7 @@ def render_eval5_settings(common: dict) -> dict:
             )
 
     st.markdown("**出力**")
-    output_dir = st.text_input("output-dir", "results/5_adl_correspondence")
+    output_dir = st.text_input("output-dir", "results/5_pattern_quality")
     eval5_intermediate_output = st.text_input("中間output-dir（state_series作成用）", "output/5_adl_evaluation")
 
     return {
@@ -513,7 +513,7 @@ def render_eval6_settings(common: dict) -> dict:
 
     st.markdown("**出力**")
     intermediate_dir = st.text_input("中間output-dir", default_intermediate)
-    output_dir = st.text_input("比較output-dir", "results/6_adl_interpretation_set_comparison")
+    output_dir = st.text_input("比較output-dir", "results/6_adl_match")
 
     return {
         **common,
@@ -613,7 +613,7 @@ def render_eval7_settings(common: dict) -> dict:
     show_preparation_steps = st.checkbox("不足ファイル作成ステップを表示", value=True)
 
     st.markdown("**出力**")
-    output_dir = st.text_input("output-dir", "results/7_parameter_sensitivity_adl_interpretation")
+    output_dir = st.text_input("output-dir", "results/7_param_search")
 
     return {
         **common,
@@ -666,7 +666,7 @@ def render_eval8_settings(common: dict) -> dict:
     if analysis_scope == "comparison_30days":
         details = st.text_input(
             "evaluation6 details file path",
-            f"results/6_adl_interpretation_set_comparison/{suffix}/evaluation6_pattern_set_details_by_method.csv",
+            f"results/6_adl_match/{suffix}/evaluation6_pattern_set_details_by_method.csv",
         )
         patterns_proposed = ""
         state_series = ""
@@ -917,7 +917,7 @@ def infer_evaluation_for_results(selected_dir: Path, files: list[Path], current_
         return "評価6"
     if any(name.startswith("evaluation5_") for name in names):
         return "評価5"
-    if {"evaluation_summary.json", "adl_interval_hit_metrics.csv"} & names or "4_adl_evaluation" in str(selected_dir):
+    if {"evaluation_summary.json", "adl_interval_hit_metrics.csv"} & names or "4_adl_detect" in str(selected_dir):
         return "評価4"
     if current_evaluation in RESULT_GUIDES:
         return current_evaluation

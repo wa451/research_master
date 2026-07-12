@@ -54,21 +54,21 @@
 ## 7.1 評価4: ADL label evaluation
 
 - 入力: `new_labeled_data/aruba.txt`, `configs/aruba_sensor_map.json`, `--state-series` または `state/*.txt`, LLMパターンJSON
-- 出力: `results/4_adl_evaluation/pattern_occurrences.csv`, `pattern_adl_mapping.csv`, `merged_predictions.csv`, `filtered_predictions.csv`, `adl_metrics_iou_*.csv`, `boundary_metrics_iou_*.csv`, `adl_interval_hit_metrics.csv`, `adl_interval_hit_details.csv`, `evaluation_summary.json`
+- 出力: `results/4_adl_detect/pattern_occurrences.csv`, `pattern_adl_mapping.csv`, `merged_predictions.csv`, `filtered_predictions.csv`, `adl_metrics_iou_*.csv`, `boundary_metrics_iou_*.csv`, `adl_interval_hit_metrics.csv`, `adl_interval_hit_details.csv`, `evaluation_summary.json`
 - 対応ファイル: `scripts/evaluate_adl_labels.py`, `src/behavior_pattern_mining/evaluation/adl.py`
 - 役割: LLM抽出系列を代表状態系列上で検索し、ADLラベル区間との重なりからpattern->ADL対応を行う。さらに同一ADLの近接予測マージ、短時間予測除外を適用し、カテゴリ別Precision/Recall/F1、開始/終了境界誤差、ADL区間内hitを評価する。
 
 ## 7.2 評価5: Useful non-redundant pattern / fragmentation evaluation
 
 - 入力: `new_labeled_data/aruba.txt`, `--state-series`, frequency/rule/proposed のパターンCSVまたはJSON
-- 出力: `results/5_adl_correspondence/evaluation5_pattern_details.csv`, `evaluation5_summary_by_method.csv`, `evaluation5_summary.json`
+- 出力: `results/5_pattern_quality/evaluation5_pattern_details.csv`, `evaluation5_summary_by_method.csv`, `evaluation5_summary.json`
 - 対応ファイル: `scripts/evaluate_adl_correspondence.py`, `src/behavior_pattern_mining/evaluation/adl.py`, `src/behavior_pattern_mining/evaluation/adl_correspondence.py`
 - 役割: train期間でpattern->ADL集合を決め、test期間で各出力パターンがADL-groundedか、生活文脈のない系列か、長い系列の断片かを評価する。比較対象はfrequency、rule-filtered frequency、FP-Growth系baseline、transition_probability baseline、提案手法。主指標は `useful_non_redundant_pattern_rate`, `fragmentation_rate`, `contextless_useless_rate` の3つ。`--runs` で提案手法の複数run平均も出せる。
 
 ## 7.3 評価6: LLM ADL interpretation set match
 
 - 入力: `output/aruba_15_1_30days/llm_sequences_modes_15_1_30days_1.json`, `output/llm_direct_15_1_30days/1.json`, `output/6_adl_evaluation_30/state_series.csv`, `new_labeled_data/aruba.txt`
-- 出力: `results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_time_band_by_method.csv`, `evaluation6_comparison_summary.json`
+- 出力: `results/6_adl_match/15_1_30days/evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_time_band_by_method.csv`, `evaluation6_comparison_summary.json`
 - 対応ファイル: `scripts/evaluate_6_compare_adl_interpretation_set.py`, `src/behavior_pattern_mining/evaluation/adl_interpretation_set.py`
 - 役割: LLMが `ADL系列ラベル` として付けた解釈ラベル集合と、パターン出現区間がCASAS ADL区間と重なって得られる正解ADL集合を、順序を無視したset評価で比較する。提案手法は `sequence × time_band` 単位へ展開し、対象時間帯の出現だけで評価する。提案手法とLLM単独ベースラインの比較では、両手法を30日版に揃える。`--runs` で複数回実行結果の平均を出せる。
 

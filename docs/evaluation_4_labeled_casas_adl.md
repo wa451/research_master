@@ -42,18 +42,18 @@
 
 | 出力 | 内容 |
 |---|---|
-| `results/4_adl_evaluation/pattern_occurrences.csv` | パターン出現区間。 |
-| `results/4_adl_evaluation/pattern_adl_mapping.csv` | パターンごとのADL割当。 |
-| `results/4_adl_evaluation/merged_predictions.csv` | 同じADLの近接予測をマージした区間。 |
-| `results/4_adl_evaluation/filtered_predictions.csv` | 最小継続時間フィルタ後の予測区間。 |
-| `results/4_adl_evaluation/adl_metrics_iou_0.3.csv` | IoU `0.3` のADLカテゴリ別Precision / Recall / F1。 |
-| `results/4_adl_evaluation/adl_metrics_iou_0.5.csv` | IoU `0.5` のADLカテゴリ別Precision / Recall / F1。 |
-| `results/4_adl_evaluation/boundary_metrics_iou_0.3.csv` | IoU `0.3` の境界誤差。 |
-| `results/4_adl_evaluation/boundary_metrics_iou_0.5.csv` | IoU `0.5` の境界誤差。 |
-| `results/4_adl_evaluation/adl_interval_hit_metrics.csv` | ADL区間内hit評価。 |
-| `results/4_adl_evaluation/adl_interval_hit_details.csv` | 各正解区間のhit/miss詳細。 |
-| `results/4_adl_evaluation/evaluation_summary.json` | 入力パス、閾値、後処理件数、平均指標。 |
-| `results/4_adl_evaluation/state_series.csv` | 評価5などで再利用する代表状態系列CSV。`--write-state-series` 指定時に保存。 |
+| `results/4_adl_detect/pattern_occurrences.csv` | パターン出現区間。 |
+| `results/4_adl_detect/pattern_adl_mapping.csv` | パターンごとのADL割当。 |
+| `results/4_adl_detect/merged_predictions.csv` | 同じADLの近接予測をマージした区間。 |
+| `results/4_adl_detect/filtered_predictions.csv` | 最小継続時間フィルタ後の予測区間。 |
+| `results/4_adl_detect/adl_metrics_iou_0.3.csv` | IoU `0.3` のADLカテゴリ別Precision / Recall / F1。 |
+| `results/4_adl_detect/adl_metrics_iou_0.5.csv` | IoU `0.5` のADLカテゴリ別Precision / Recall / F1。 |
+| `results/4_adl_detect/boundary_metrics_iou_0.3.csv` | IoU `0.3` の境界誤差。 |
+| `results/4_adl_detect/boundary_metrics_iou_0.5.csv` | IoU `0.5` の境界誤差。 |
+| `results/4_adl_detect/adl_interval_hit_metrics.csv` | ADL区間内hit評価。 |
+| `results/4_adl_detect/adl_interval_hit_details.csv` | 各正解区間のhit/miss詳細。 |
+| `results/4_adl_detect/evaluation_summary.json` | 入力パス、閾値、後処理件数、平均指標。 |
+| `results/4_adl_detect/state_series.csv` | 評価5などで再利用する代表状態系列CSV。`--write-state-series` 指定時に保存。 |
 
 ## 結果の読み方
 
@@ -93,19 +93,19 @@ uv run python scripts/evaluate_adl_labels.py \
   --state-table state/aruba_15_1_154days.txt \
   --sensor-map configs/aruba_sensor_map.json \
   --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/4_adl_evaluation \
+  --output-dir results/4_adl_detect \
   --iou-thresholds 0.3 0.5 \
   --wake-window-minutes 30 \
   --match-mode exact \
   --merge-gap-minutes 5 \
   --min-duration-config configs/adl_min_duration.json \
   --hit-tolerance-minutes 10 \
-  --write-state-series results/4_adl_evaluation/state_series.csv
+  --write-state-series results/4_adl_detect/state_series.csv
 ```
 
 ### 4. 🟩 **スキップ可** 代表状態系列CSVだけを再利用する
 
-`results/4_adl_evaluation/state_series.csv` が既にあり、評価5だけを実行したい場合は評価4の再実行を省いてよい。このStepの追加コマンドはない。
+`results/4_adl_detect/state_series.csv` が既にあり、評価5だけを実行したい場合は評価4の再実行を省いてよい。このStepの追加コマンドはない。
 
 ## 比較対象
 
@@ -135,7 +135,7 @@ uv run python scripts/evaluate_adl_labels.py \
 | `--state-table` | `state/aruba_15_1_154days.txt` |
 | `--sensor-map` | `configs/aruba_sensor_map.json` |
 | `--patterns` | `output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json` |
-| `--output-dir` | `results/4_adl_evaluation` |
+| `--output-dir` | `results/4_adl_detect` |
 | `--iou-thresholds` | `0.3 0.5` |
 | `--wake-window-minutes` | `30` |
 | `--match-mode` | `exact` |

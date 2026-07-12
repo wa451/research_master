@@ -188,7 +188,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=ROOT_DIR / "results" / "7_parameter_sensitivity_adl_interpretation",
+        default=ROOT_DIR / "results" / "7_param_search",
     )
     parser.add_argument("--min-overlap-ratio-for-true-label", type=float, default=0.10)
     parser.add_argument("--no-overlap-label", choices=["Other", "Ambiguous"], default="Ambiguous")

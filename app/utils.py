@@ -127,10 +127,10 @@ def discover_result_files(base_dirs: Iterable[Path]) -> list[Path]:
 
 def discover_result_dirs() -> list[Path]:
     candidates = [
-        PROJECT_ROOT / "results" / "4_adl_evaluation",
-        PROJECT_ROOT / "results" / "5_adl_correspondence",
-        PROJECT_ROOT / "results" / "6_adl_interpretation_set_comparison",
-        PROJECT_ROOT / "results" / "7_parameter_sensitivity_adl_interpretation",
+        PROJECT_ROOT / "results" / "4_adl_detect",
+        PROJECT_ROOT / "results" / "5_pattern_quality",
+        PROJECT_ROOT / "results" / "6_adl_match",
+        PROJECT_ROOT / "results" / "7_param_search",
         PROJECT_ROOT / "output" / "6_adl_evaluation_30",
         PROJECT_ROOT / "output" / "6_adl_evaluation_30_1_30days",
     ]

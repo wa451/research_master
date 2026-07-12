@@ -77,7 +77,7 @@ PATTERN_CACHE_COLUMNS = [
 
 
 def default_output_dir() -> Path:
-    return ROOT_DIR / "results" / "5_adl_correspondence"
+    return ROOT_DIR / "results" / "5_pattern_quality"
 
 
 def default_baseline_cache_dir() -> Path:

@@ -64,10 +64,10 @@ occurrence_containment(p, q)
 
 | 出力 | 内容 |
 |---|---|
-| `results/5_adl_correspondence/evaluation5_summary_by_method.csv` | 手法ごとの主指標。`--runs 2` 以上ではrun平均と標準偏差。 |
-| `results/5_adl_correspondence/evaluation5_summary_by_method_by_run.csv` | runごとの手法別summary。`--runs 2` 以上、または `--skip-missing-runs` 指定時に出力。 |
-| `results/5_adl_correspondence/evaluation5_pattern_details.csv` | 手法別・run別・パターン別の詳細結果。 |
-| `results/5_adl_correspondence/evaluation5_summary.json` | 入力パス、train/test期間、閾値、run情報、skipped methods、手法別集計。 |
+| `results/5_pattern_quality/evaluation5_summary_by_method.csv` | 手法ごとの主指標。`--runs 2` 以上ではrun平均と標準偏差。 |
+| `results/5_pattern_quality/evaluation5_summary_by_method_by_run.csv` | runごとの手法別summary。`--runs 2` 以上、または `--skip-missing-runs` 指定時に出力。 |
+| `results/5_pattern_quality/evaluation5_pattern_details.csv` | 手法別・run別・パターン別の詳細結果。 |
+| `results/5_pattern_quality/evaluation5_summary.json` | 入力パス、train/test期間、閾値、run情報、skipped methods、手法別集計。 |
 
 FP-Growth系とtransition_probabilityの生成済みパターンは、既定で `output/5_adl_correspondence_baselines/` にCSVキャッシュとして保存される。同じ `state_series`、train期間、CLI設定で再実行した場合はこのCSVを読み込み、ベースライン生成時間を削減する。
 
@@ -145,7 +145,7 @@ uv run python scripts/evaluate_adl_correspondence.py \
   --patterns-rule-medium output/5_rule_filter/frequency_rule_medium.csv \
   --patterns-rule-strong output/5_rule_filter/frequency_rule_strong.csv \
   --patterns-proposed output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/5_adl_correspondence \
+  --output-dir results/5_pattern_quality \
   --train-ratio 0.7 \
   --grounded-hit-threshold 0.3 \
   --grounded-purity-threshold 0.3 \
@@ -186,7 +186,7 @@ uv run python scripts/evaluate_adl_correspondence.py \
   --patterns-rule-medium output/5_rule_filter/frequency_rule_medium.csv \
   --patterns-rule-strong output/5_rule_filter/frequency_rule_strong.csv \
   --patterns-proposed output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/5_adl_correspondence \
+  --output-dir results/5_pattern_quality \
   --runs 5 \
   --train-ratio 0.7 \
   --enable-fp-growth-baseline \
@@ -220,7 +220,7 @@ uv run python scripts/evaluate_adl_correspondence.py \
   --patterns-rule-medium output/5_rule_filter/frequency_rule_medium.csv \
   --patterns-rule-strong output/5_rule_filter/frequency_rule_strong.csv \
   --patterns-proposed output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/5_adl_correspondence \
+  --output-dir results/5_pattern_quality \
   --train-ratio 0.7 \
   --grounded-hit-threshold 0.3 \
   --grounded-purity-threshold 0.3 \

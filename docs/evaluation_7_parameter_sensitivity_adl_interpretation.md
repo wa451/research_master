@@ -48,7 +48,7 @@ uv run python scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py \
   --days 30 \
   --runs 1 \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/7_parameter_sensitivity_adl_interpretation \
+  --output-dir results/7_param_search \
   --min-overlap-ratio-for-true-label 0.10 \
   --selection-metric mean_multilabel_f1 \
   --skip-missing-conditions
@@ -63,7 +63,7 @@ uv run python scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py \
   --days 30 \
   --runs 1 \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/7_parameter_sensitivity_adl_interpretation \
+  --output-dir results/7_param_search \
   --skip-missing-conditions
 ```
 
@@ -81,7 +81,7 @@ uv run python scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py \
 
 ## 出力
 
-出力先: `results/7_parameter_sensitivity_adl_interpretation/`
+出力先: `results/7_param_search/`
 
 | 出力 | 内容 |
 |---|---|

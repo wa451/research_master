@@ -1,35 +1,21 @@
 ---
 name: reproducibility-and-output-contract
-description: Use when changing experiment commands, output directories, CSV/JSON schemas, result summaries, logging, seed/reproducibility settings, or generated artifacts in this smart-home behavior pattern mining repository.
+description: Change repository-wide reproducibility, artifact placement, logging policy, or shared cross-pipeline CSV/JSON contracts. Excludes outputs local to one evaluation or baseline.
 ---
 
 # Reproducibility And Output Contract
 
-Use this skill whenever a change can affect reproducibility, output files, or result interpretation.
+## Workflow
 
-## Permanent Rules
+1. Read `docs/artifact_policy.md`, `docs/experiment_reproduction.md`, and the relevant producer documentation.
+2. Inspect the producer, every downstream reader found with `rg`, tests, and representative existing headers or summary keys. Determine whether each artifact is an input, intermediate output, or paper-facing result.
+3. Preserve paths, field names, types, row grain, and defaults. Prefer additive fields; make a breaking migration only when explicitly requested and document compatibility impact.
+4. Keep reproduction metadata consistent with existing summaries, including the inputs and parameters needed to explain the run. Do not invent a universal schema when producers use different contracts.
+5. Never overwrite existing experiment artifacts during verification. Use a temporary or new output directory and keep generated data out of Git.
+6. Update producer, consumers, documentation, and tests together.
 
-- Do not modify raw datasets, `.env`, or API keys.
-- Do not delete or overwrite existing result artifacts unless the user explicitly asks.
-- Put paper-facing evaluation results under `results/<number>_<name>/`.
-- Put intermediate outputs, LLM responses, generated networks, and temporary state under `output/`, `picture/`, or `state/` according to existing conventions.
-- Keep CSV column names stable. If a column must be renamed, keep a compatibility column unless the user approves a breaking change.
-- Keep summary JSON machine-readable and include input paths, thresholds, method names, skipped methods, and counts.
-- Record train/test periods and split rules in summary JSON for split-based evaluations.
+## Verification
 
-## Before Editing
-
-1. Inspect `docs/artifact_policy.md`, `docs/experiment_reproduction.md`, and the relevant `docs/evaluation_*.md`.
-2. Check existing output files in `results/`.
-3. Search for downstream readers with `rg "column_or_filename"`.
-4. Identify whether outputs are final results or intermediate artifacts.
-
-## After Editing
-
-- Run focused unit tests.
-- If practical, run the exact evaluation command on existing small or current outputs.
-- Compare new CSV headers against documented headers.
-- Update docs and summary JSON fields together.
-- Report any regenerated files and any known compatibility risk.
-
-For concrete schema and checklist details, read `references/output-checklist.md`.
+- Compare old and new CSV headers or JSON keys and test downstream readers.
+- Run a small deterministic fixture or dry run where available.
+- Report regenerated files, compatibility risks, and anything not reproducible locally.

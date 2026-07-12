@@ -65,7 +65,7 @@
 ```bash
 uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
   --analysis-scope comparison_30days \
-  --evaluation6-details results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_pattern_set_details_by_method.csv \
+  --evaluation6-details results/6_adl_match/15_1_30days/evaluation6_pattern_set_details_by_method.csv \
   --output-dir results/e8_30_c_30_2 \
   --frequency-band-mode tertile
 ```

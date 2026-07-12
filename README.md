@@ -106,7 +106,7 @@ uv run python scripts/evaluate_adl_labels.py \
   --state-table state/aruba_15_1_154days.txt \
   --sensor-map configs/aruba_sensor_map.json \
   --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/4_adl_evaluation \
+  --output-dir results/4_adl_detect \
   --iou-thresholds 0.3 0.5 \
   --wake-window-minutes 30 \
   --match-mode exact \
@@ -120,10 +120,10 @@ uv run python scripts/evaluate_adl_labels.py \
 ```bash
 uv run python scripts/evaluate_adl_correspondence.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --state-series results/4_adl_evaluation/state_series.csv \
+  --state-series results/4_adl_detect/state_series.csv \
   --patterns-frequency output/aruba_15_1_154days/state_sequence_counts_15_1_154days.json \
   --patterns-proposed output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/5_adl_correspondence \
+  --output-dir results/5_pattern_quality \
   --train-ratio 0.7 \
   --grounded-hit-threshold 0.3 \
   --grounded-purity-threshold 0.3 \
@@ -172,11 +172,11 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
   --patterns-direct output/llm_direct_15_1_30days/1.json \
   --state-series output/6_adl_evaluation_30/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/6_adl_interpretation_set_comparison \
+  --output-dir results/6_adl_match \
   --min-overlap-ratio-for-true-label 0.10
 ```
 
-評価6の結果は、指定したroot直下の条件別ディレクトリに保存されます。既定条件では `results/6_adl_interpretation_set_comparison/15_1_30days/` です。
+評価6の結果は、指定したroot直下の条件別ディレクトリに保存されます。既定条件では `results/6_adl_match/15_1_30days/` です。
 
 5回分の平均を出す場合は、提案手法JSONと直接ログJSONをそれぞれ5回分用意し、最後の評価6比較コマンドに `--runs 5` を追加します。生成コマンドは `docs/evaluation_6_adl_interpretation_set.md` を参照してください。
 
@@ -221,9 +221,9 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 - `output/aruba_15_1_154days/state_sequence_counts_15_1_154days.json`: 頻度ベースライン。
 - `output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_*.json`: LLM抽出結果。同じ遷移パターンは1グループにまとめ、時間帯別解釈は `time_band_interpretations` に保持する。
 - `output/aruba_15_1_154days/evaluation_report_15_1_154days_*.txt`: 評価レポート。
-- `results/4_adl_evaluation/*.csv`, `evaluation_summary.json`: ADLラベル付き単一手法評価の出力。`merged_predictions.csv`, `filtered_predictions.csv`, `adl_interval_hit_metrics.csv` も含む。
-- `results/5_adl_correspondence/evaluation5_*.csv`, `evaluation5_summary.json`: 複数手法のパターン単位ADL-grounded/Useless評価の出力。
-- `results/6_adl_interpretation_set_comparison/15_1_30days/*.csv`, `evaluation6_comparison_summary.json`: 評価6の提案手法/LLM単独ベースライン比較。`evaluation6_method_comparison.csv` は主比較表、`evaluation6_method_comparison_by_run.csv` はrun別結果。
+- `results/4_adl_detect/*.csv`, `evaluation_summary.json`: ADLラベル付き単一手法評価の出力。`merged_predictions.csv`, `filtered_predictions.csv`, `adl_interval_hit_metrics.csv` も含む。
+- `results/5_pattern_quality/evaluation5_*.csv`, `evaluation5_summary.json`: 複数手法のパターン単位ADL-grounded/Useless評価の出力。
+- `results/6_adl_match/15_1_30days/*.csv`, `evaluation6_comparison_summary.json`: 評価6の提案手法/LLM単独ベースライン比較。`evaluation6_method_comparison.csv` は主比較表、`evaluation6_method_comparison_by_run.csv` はrun別結果。
 - `results/e8_30_c_{K}_{hamming}/*.csv` と `results/e8_154_p_{K}_{hamming}/*.csv`: 評価8の頻度帯別ADL整合性分析。前者は30日proposed / direct-log比較、後者は154日提案手法5 runの平均で、結果を混在させない。
 
 ## 再現実験

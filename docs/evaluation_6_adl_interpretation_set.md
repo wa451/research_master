@@ -40,13 +40,13 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 
 | 出力 | 内容 |
 |---|---|
-| `results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_method_comparison.csv` | 提案手法とLLM単独ベースラインの主比較表。`--runs` が2以上の場合はrun平均と標準偏差。 |
-| `results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_method_comparison_by_run.csv` | runごとの手法別summary。5回平均の元データ。 |
-| `results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_pattern_set_details_by_method.csv` | 手法別・パターン別詳細。`num_occurrences` は評価8の頻度帯分析に使う、評価レコードごとの代表状態系列上の出現回数。 |
-| `results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_by_pred_label_by_method.csv` | 手法別・予測ラベル別集計。 |
-| `results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_by_true_label_by_method.csv` | 手法別・正解ラベル別集計。 |
-| `results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_by_time_band_by_method.csv` | 手法別・時間帯別集計。 |
-| `results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_comparison_summary.json` | 比較評価の再現条件。 |
+| `results/6_adl_match/15_1_30days/evaluation6_method_comparison.csv` | 提案手法とLLM単独ベースラインの主比較表。`--runs` が2以上の場合はrun平均と標準偏差。 |
+| `results/6_adl_match/15_1_30days/evaluation6_method_comparison_by_run.csv` | runごとの手法別summary。5回平均の元データ。 |
+| `results/6_adl_match/15_1_30days/evaluation6_pattern_set_details_by_method.csv` | 手法別・パターン別詳細。`num_occurrences` は評価8の頻度帯分析に使う、評価レコードごとの代表状態系列上の出現回数。 |
+| `results/6_adl_match/15_1_30days/evaluation6_by_pred_label_by_method.csv` | 手法別・予測ラベル別集計。 |
+| `results/6_adl_match/15_1_30days/evaluation6_by_true_label_by_method.csv` | 手法別・正解ラベル別集計。 |
+| `results/6_adl_match/15_1_30days/evaluation6_by_time_band_by_method.csv` | 手法別・時間帯別集計。 |
+| `results/6_adl_match/15_1_30days/evaluation6_comparison_summary.json` | 比較評価の再現条件。 |
 
 ## 結果の読み方
 
@@ -135,7 +135,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
   --patterns-direct output/llm_direct_15_1_30days/1.json \
   --state-series output/6_adl_evaluation_30/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/6_adl_interpretation_set_comparison/15_1_30days \
+  --output-dir results/6_adl_match/15_1_30days \
   --min-overlap-ratio-for-true-label 0.10
 ```
 
@@ -149,7 +149,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
   --patterns-direct output/llm_direct_15_1_30days/1.json \
   --state-series output/6_adl_evaluation_30/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/6_adl_interpretation_set_comparison/15_1_30days \
+  --output-dir results/6_adl_match/15_1_30days \
   --min-overlap-ratio-for-true-label 0.10 \
   --runs 5
 ```
@@ -198,7 +198,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
   --patterns-direct output/llm_direct_20_1_30days/1.json \
   --state-series output/6_adl_evaluation_20_1_30days/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/6_adl_interpretation_set_comparison/20_1_30days \
+  --output-dir results/6_adl_match/20_1_30days \
   --min-overlap-ratio-for-true-label 0.10 \
   --days 30 \
   --n-states 20 \
@@ -245,7 +245,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
   --patterns-direct output/llm_direct_20_1_30days/1.json \
   --state-series output/6_adl_evaluation_20_1_30days/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/6_adl_interpretation_set_comparison/20_1_30days \
+  --output-dir results/6_adl_match/20_1_30days \
   --min-overlap-ratio-for-true-label 0.10 \
   --days 30 \
   --n-states 20 \
@@ -355,4 +355,4 @@ Ambiguous
 - 評価6ではラベル順序を評価しない。`ADL系列ラベル` という名前でもsetとして扱う。
 - 154日版の提案手法出力と30日版の直接ログベースラインを混ぜて比較しない。
 - 既存のLLM出力に `ADL系列ラベル` がない場合は `Ambiguous` として扱われ、平均指標が低く出やすい。
-- `output/6_adl_evaluation_30/` は評価6用の中間出力であり、最終結果は `results/6_adl_interpretation_set_comparison/` に保存する。
+- `output/6_adl_evaluation_30/` は評価6用の中間出力であり、最終結果は `results/6_adl_match/` に保存する。

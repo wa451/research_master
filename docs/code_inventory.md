@@ -70,7 +70,7 @@ uv run python scripts/evaluate_adl_labels.py \
   --state-table state/aruba_15_1_154days.txt \
   --sensor-map configs/aruba_sensor_map.json \
   --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/4_adl_evaluation
+  --output-dir results/4_adl_detect
 ```
 
 評価5: パターン単位ADL-grounded/Useless評価:
@@ -78,10 +78,10 @@ uv run python scripts/evaluate_adl_labels.py \
 ```bash
 uv run python scripts/evaluate_adl_correspondence.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --state-series results/4_adl_evaluation/state_series.csv \
+  --state-series results/4_adl_detect/state_series.csv \
   --patterns-frequency output/aruba_15_1_154days/state_sequence_counts_15_1_154days.json \
   --patterns-proposed output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/5_adl_correspondence \
+  --output-dir results/5_pattern_quality \
   --train-ratio 0.7 \
   --grounded-hit-threshold 0.3 \
   --grounded-purity-threshold 0.3 \
@@ -128,7 +128,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
   --patterns-direct output/llm_direct_15_1_30days/1.json \
   --state-series output/6_adl_evaluation_30/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/6_adl_interpretation_set_comparison \
+  --output-dir results/6_adl_match \
   --min-overlap-ratio-for-true-label 0.10
 ```
 

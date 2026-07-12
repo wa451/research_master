@@ -1,0 +1,4 @@
+interface:
+  display_name: "Streamlit Evaluation Dashboard"
+  short_description: "Safely update the evaluation dashboard UI"
+  default_prompt: "Use $streamlit-evaluation-dashboard to update the evaluation dashboard without duplicating research logic."

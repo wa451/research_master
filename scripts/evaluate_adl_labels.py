@@ -40,7 +40,7 @@ from src.behavior_pattern_mining.evaluation.adl import (
 
 
 def default_output_dir() -> Path:
-    return ROOT_DIR / "results" / "4_adl_evaluation"
+    return ROOT_DIR / "results" / "4_adl_detect"
 
 
 def parse_args() -> argparse.Namespace:

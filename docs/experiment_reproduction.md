@@ -37,7 +37,7 @@ uv run python scripts/evaluate_adl_labels.py \
   --state-table state/aruba_15_1_154days.txt \
   --sensor-map configs/aruba_sensor_map.json \
   --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/4_adl_evaluation \
+  --output-dir results/4_adl_detect \
   --iou-thresholds 0.3 0.5 \
   --wake-window-minutes 30 \
   --match-mode exact \
@@ -54,14 +54,14 @@ uv run python scripts/evaluate_adl_labels.py \
   --state-table state/aruba_15_1_154days.txt \
   --sensor-map configs/aruba_sensor_map.json \
   --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --write-state-series results/4_adl_evaluation/state_series.csv
+  --write-state-series results/4_adl_detect/state_series.csv
 
 uv run python scripts/evaluate_adl_correspondence.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --state-series results/4_adl_evaluation/state_series.csv \
+  --state-series results/4_adl_detect/state_series.csv \
   --patterns-frequency output/aruba_15_1_154days/state_sequence_counts_15_1_154days.json \
   --patterns-proposed output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/5_adl_correspondence \
+  --output-dir results/5_pattern_quality \
   --train-ratio 0.7 \
   --grounded-hit-threshold 0.3 \
   --grounded-purity-threshold 0.3 \
@@ -110,7 +110,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
   --patterns-direct output/llm_direct_15_1_30days/1.json \
   --state-series output/6_adl_evaluation_30/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/6_adl_interpretation_set_comparison \
+  --output-dir results/6_adl_match \
   --min-overlap-ratio-for-true-label 0.10
 ```
 
@@ -119,7 +119,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 ```bash
 uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
   --analysis-scope comparison_30days \
-  --evaluation6-details results/6_adl_interpretation_set_comparison/15_1_30days/evaluation6_pattern_set_details_by_method.csv \
+  --evaluation6-details results/6_adl_match/15_1_30days/evaluation6_pattern_set_details_by_method.csv \
   --output-dir results/e8_30_c_30_2 \
   --frequency-band-mode tertile
 ```
@@ -295,8 +295,8 @@ uv run python scripts/evaluate_adl_labels.py \
   --state-table state/aruba_15_1_154days.txt \
   --sensor-map configs/aruba_sensor_map.json \
   --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/4_adl_evaluation \
-  --write-state-series results/4_adl_evaluation/state_series.csv \
+  --output-dir results/4_adl_detect \
+  --write-state-series results/4_adl_detect/state_series.csv \
   --merge-gap-minutes 5 \
   --min-duration-config configs/adl_min_duration.json \
   --hit-tolerance-minutes 10
@@ -304,10 +304,10 @@ uv run python scripts/evaluate_adl_labels.py \
 # 7. 評価5: Useful non-redundant / Fragmentation / Contextless useless評価
 uv run python scripts/evaluate_adl_correspondence.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --state-series results/4_adl_evaluation/state_series.csv \
+  --state-series results/4_adl_detect/state_series.csv \
   --patterns-frequency output/aruba_15_1_154days/state_sequence_counts_15_1_154days.json \
   --patterns-proposed output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/5_adl_correspondence \
+  --output-dir results/5_pattern_quality \
   --runs 5 \
   --train-ratio 0.7 \
   --grounded-hit-threshold 0.3 \
@@ -352,7 +352,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
   --patterns-direct output/llm_direct_15_1_30days/1.json \
   --state-series output/6_adl_evaluation_30/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/6_adl_interpretation_set_comparison \
+  --output-dir results/6_adl_match \
   --min-overlap-ratio-for-true-label 0.10
 ```
 
