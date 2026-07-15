@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import bisect
 import csv
 import json
 import statistics
@@ -35,6 +36,7 @@ from src.behavior_pattern_mining.evaluation.adl_interpretation_set import (
 
 
 FREQUENCY_BANDS = ("Low", "Middle", "High")
+DEFAULT_FIXED_FREQUENCY_BIN_EDGES = (0, 1, 10, 100, 1000, 10000)
 DETAIL_FIELDNAMES = [
     "run",
     "method",
@@ -95,6 +97,11 @@ METRIC_COLUMNS = (
 )
 
 
+def default_output_dir(analysis_scope: str) -> Path:
+    directory_name = "8_vs_llm" if analysis_scope == "comparison_30days" else "8_proposed"
+    return ROOT_DIR / "results" / directory_name
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -119,14 +126,34 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=ROOT_DIR / "results" / "e8_30_c_30_2",
-        help="Directory for Evaluation 8 CSV and JSON outputs.",
+        default=None,
+        help="Directory for Evaluation 8 CSV and JSON outputs. Defaults by analysis scope.",
     )
     parser.add_argument(
         "--frequency-band-mode",
-        choices=["tertile"],
+        choices=["tertile", "fixed"],
         default="tertile",
-        help="Frequency stratification mode. tertile assigns near-equal record counts per method.",
+        help=(
+            "Frequency stratification mode. tertile assigns near-equal record counts per method; "
+            "fixed assigns numeric num_occurrences ranges."
+        ),
+    )
+    parser.add_argument(
+        "--fixed-frequency-bin-edges",
+        default=",".join(str(edge) for edge in DEFAULT_FIXED_FREQUENCY_BIN_EDGES),
+        help=(
+            "Comma- or space-separated inclusive lower bounds for --frequency-band-mode fixed. "
+            "Default: 0,1,10,100,1000,10000, producing 0, 1-9, ..., 10000+."
+        ),
+    )
+    parser.add_argument(
+        "--write-distribution-plots",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Write fixed-range distribution and metric PNG plots for proposed_154days. "
+            "Default: enabled; use --no-write-distribution-plots to disable."
+        ),
     )
     parser.add_argument(
         "--state-series",
@@ -242,6 +269,35 @@ def as_occurrence_count(value: Any, row_number: int) -> int:
     if numeric < 0 or not numeric.is_integer():
         raise ValueError(f"Row {row_number} has an invalid num_occurrences: {value!r}")
     return int(numeric)
+
+
+def parse_fixed_frequency_bin_edges(value: str) -> tuple[int, ...]:
+    """Parse validated lower bounds for fixed occurrence-frequency ranges."""
+    try:
+        edges = tuple(int(item) for item in value.replace(",", " ").split())
+    except ValueError as exc:
+        raise ValueError("--fixed-frequency-bin-edges must contain integers") from exc
+    if len(edges) < 2 or edges[0] != 0 or any(edge < 0 for edge in edges):
+        raise ValueError("--fixed-frequency-bin-edges must start at 0 and contain at least two non-negative bounds")
+    if any(later <= earlier for earlier, later in zip(edges, edges[1:])):
+        raise ValueError("--fixed-frequency-bin-edges must be strictly increasing")
+    return edges
+
+
+def fixed_frequency_band_labels(edges: Sequence[int]) -> tuple[str, ...]:
+    labels = []
+    for lower, upper in zip(edges, edges[1:]):
+        labels.append(str(lower) if upper == lower + 1 else f"{lower}-{upper - 1}")
+    labels.append(f"{edges[-1]}+")
+    return tuple(labels)
+
+
+def frequency_bands_for_mode(mode: str, fixed_edges: Sequence[int]) -> tuple[str, ...]:
+    if mode == "tertile":
+        return FREQUENCY_BANDS
+    if mode == "fixed":
+        return fixed_frequency_band_labels(fixed_edges)
+    raise ValueError(f"Unsupported frequency band mode: {mode}")
 
 
 def evaluation6_summary_payload(details_path: Path) -> dict[str, Any]:
@@ -407,12 +463,25 @@ def stable_record_key(row: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
-def assign_frequency_bands(rows: list[dict[str, Any]]) -> None:
+def assign_frequency_bands(
+    rows: list[dict[str, Any]],
+    mode: str = "tertile",
+    fixed_edges: Sequence[int] = DEFAULT_FIXED_FREQUENCY_BIN_EDGES,
+) -> None:
     """Assign near-equal tertiles independently within each method and run.
 
     Ties are resolved by stable identifiers, rather than splitting at a raw
     quantile value. This keeps every record assigned and makes reruns stable.
     """
+    if mode == "fixed":
+        labels = fixed_frequency_band_labels(fixed_edges)
+        for row in rows:
+            index = bisect.bisect_right(fixed_edges, int(row["num_occurrences"])) - 1
+            row["frequency_band"] = labels[index]
+        return
+    if mode != "tertile":
+        raise ValueError(f"Unsupported frequency band mode: {mode}")
+
     by_method_run: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
         by_method_run[(str(row["method"]), int(row.get("run") or 1))].append(row)
@@ -475,9 +544,11 @@ def mean_run_summaries(run_summaries: Sequence[dict[str, Any]], frequency_band: 
     }
 
 
-def summaries_by_frequency_band(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+def summaries_by_frequency_band(
+    rows: Sequence[dict[str, Any]], frequency_bands: Sequence[str] = FREQUENCY_BANDS
+) -> list[dict[str, Any]]:
     summaries = []
-    for band in FREQUENCY_BANDS:
+    for band in frequency_bands:
         run_groups: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
         for row in rows:
             if row.get("frequency_band") == band:
@@ -487,12 +558,14 @@ def summaries_by_frequency_band(rows: Sequence[dict[str, Any]]) -> list[dict[str
     return summaries
 
 
-def summaries_by_method_and_frequency_band(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+def summaries_by_method_and_frequency_band(
+    rows: Sequence[dict[str, Any]], frequency_bands: Sequence[str] = FREQUENCY_BANDS
+) -> list[dict[str, Any]]:
     result = []
     methods = sorted({str(row["method"]) for row in rows})
     for method in methods:
         method_rows = [row for row in rows if row["method"] == method]
-        for band in FREQUENCY_BANDS:
+        for band in frequency_bands:
             run_groups: dict[int, list[dict[str, Any]]] = defaultdict(list)
             for row in method_rows:
                 if row.get("frequency_band") == band:
@@ -537,8 +610,64 @@ def detail_output_rows(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{column: row.get(column, "") for column in DETAIL_FIELDNAMES} for row in rows]
 
 
+def write_fixed_range_plots(
+    output_dir: Path,
+    summaries: Sequence[dict[str, Any]],
+    frequency_bands: Sequence[str],
+    rows: Sequence[dict[str, Any]],
+) -> list[str]:
+    """Write proposed-only fixed-range charts without changing CSV aggregation."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    by_band = {str(row["frequency_band"]): row for row in summaries}
+    labels = list(frequency_bands)
+    run_ids = {int(row.get("run") or 1) for row in rows}
+    mean_patterns = [
+        sum(1 for row in rows if row.get("frequency_band") == label) / len(run_ids)
+        if run_ids
+        else 0.0
+        for label in labels
+    ]
+
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    ax.bar(labels, mean_patterns, color="#4C78A8")
+    ax.set_xlabel("num_occurrences range")
+    ax.set_ylabel("mean patterns per run")
+    ax.set_title("Evaluation 8: fixed-range pattern-frequency distribution")
+    ax.tick_params(axis="x", rotation=35)
+    fig.tight_layout()
+    distribution_path = output_dir / "evaluation8_frequency_distribution.png"
+    fig.savefig(distribution_path, dpi=160)
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    for column, label, color in (
+        ("mean_multilabel_precision", "Precision", "#E45756"),
+        ("mean_multilabel_recall", "Recall", "#54A24B"),
+        ("mean_multilabel_f1", "F1", "#B279A2"),
+    ):
+        values = [float(by_band.get(band, {}).get(column, 0.0)) for band in labels]
+        ax.plot(labels, values, marker="o", label=label, color=color)
+    ax.set_xlabel("num_occurrences range")
+    ax.set_ylabel("mean score per run")
+    ax.set_ylim(0, 1)
+    ax.set_title("Evaluation 8: ADL consistency by fixed frequency range")
+    ax.tick_params(axis="x", rotation=35)
+    ax.legend()
+    fig.tight_layout()
+    metrics_path = output_dir / "evaluation8_frequency_band_metrics.png"
+    fig.savefig(metrics_path, dpi=160)
+    plt.close(fig)
+    return [distribution_path.name, metrics_path.name]
+
+
 def main() -> None:
     args = parse_args()
+    if args.output_dir is None:
+        args.output_dir = default_output_dir(args.analysis_scope)
     if args.analysis_scope == "comparison_30days":
         if args.evaluation6_details is None:
             raise ValueError("--evaluation6-details is required for --analysis-scope comparison_30days")
@@ -546,10 +675,14 @@ def main() -> None:
         input_summary = {"evaluation6_details": str(args.evaluation6_details)}
     else:
         rows, occurrence_count_source, input_summary = evaluate_proposed_154days(args)
-    assign_frequency_bands(rows)
+    fixed_edges = parse_fixed_frequency_bin_edges(
+        getattr(args, "fixed_frequency_bin_edges", ",".join(map(str, DEFAULT_FIXED_FREQUENCY_BIN_EDGES)))
+    )
+    frequency_bands = frequency_bands_for_mode(args.frequency_band_mode, fixed_edges)
+    assign_frequency_bands(rows, args.frequency_band_mode, fixed_edges)
 
-    overall_by_band = summaries_by_frequency_band(rows)
-    by_method_band = summaries_by_method_and_frequency_band(rows)
+    overall_by_band = summaries_by_frequency_band(rows, frequency_bands)
+    by_method_band = summaries_by_method_and_frequency_band(rows, frequency_bands)
     weighted_summary = occurrence_weighted_summaries(rows)
     methods = sorted({str(row["method"]) for row in rows})
     runs_evaluated = sorted({int(row.get("run") or 1) for row in rows})
@@ -574,10 +707,22 @@ def main() -> None:
         OCCURRENCE_WEIGHTED_FIELDNAMES,
     )
     output_files.extend(["evaluation8_occurrence_weighted_summary.csv", "evaluation8_summary.json"])
+    if (
+        args.analysis_scope == "proposed_154days"
+        and args.frequency_band_mode == "fixed"
+        and getattr(args, "write_distribution_plots", True)
+    ):
+        output_files.extend(write_fixed_range_plots(args.output_dir, overall_by_band, frequency_bands, rows))
 
     summary = {
         "evaluation_type": "frequency_stratified_adl_consistency",
-        "frequency_band_mode": "tertile_by_num_occurrences",
+        "frequency_band_mode": (
+            "tertile_by_num_occurrences"
+            if args.frequency_band_mode == "tertile"
+            else "fixed_ranges_by_num_occurrences"
+        ),
+        "fixed_frequency_bin_edges": list(fixed_edges) if args.frequency_band_mode == "fixed" else None,
+        "frequency_bands": list(frequency_bands),
         "analysis_scope": args.analysis_scope,
         "n_states": getattr(args, "n_states", None),
         "hamming_threshold": getattr(args, "hamming_threshold", None),

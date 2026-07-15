@@ -10,8 +10,8 @@
 
 | 条件 | scope | 入力 | 出力先 |
 |---|---|---|---|
-| 30日・手法比較 | `comparison_30days` | 評価6のproposed / direct-log詳細CSV | `results/e8_30_c_{K}_{hamming}/` |
-| 154日・提案手法のみ | `proposed_154days` | 154日提案手法JSON 5 run、154日state series、ADL正解データ | `results/e8_154_p_{K}_{hamming}/` |
+| 30日・手法比較 | `comparison_30days` | 評価6のproposed / direct-log詳細CSV | `results/8_vs_llm/` |
+| 154日・提案手法のみ | `proposed_154days` | 154日提案手法JSON 5 run、154日state series、ADL正解データ | `results/8_proposed/` |
 
 ### 30日・手法比較
 
@@ -44,6 +44,19 @@
 
 同値を閾値で一括扱いしないため、各レコードは必ず1つの帯に属する。3件未満では、Lowから順に可能な帯だけが作られる。
 
+154日・提案手法のみでは、三分位とは別に固定回数帯を使う `fixed` モードも利用できる。既定の境界は `0,1,10,100,1000,10000` で、次の範囲になる。境界は `--fixed-frequency-bin-edges` で変更でき、すべてのrunで同じ範囲を使う。
+
+| frequency_band | num_occurrences の範囲 |
+|---|---:|
+| `0` | 0回 |
+| `1-9` | 1–9回 |
+| `10-99` | 10–99回 |
+| `100-999` | 100–999回 |
+| `1000-9999` | 1,000–9,999回 |
+| `10000+` | 10,000回以上 |
+
+固定帯は、各帯に含まれるパターン数の分布と、帯別Precision / Recall / F1の変化を可視化するための分析軸である。空の帯はCSV集計行を作らず、分布図では0件として表示する。頻度が高いことだけでパターンの有用性を結論付けない。
+
 ## 出力
 
 | ファイル | 内容 |
@@ -53,6 +66,8 @@
 | `evaluation8_by_frequency_band_by_method.csv` | 30日・手法比較だけで出力するmethod × frequency band別集計。提案手法のみでは重複するため出力しない。 |
 | `evaluation8_occurrence_weighted_summary.csv` | methodごとの全体occurrence-weighted指標。 |
 | `evaluation8_summary.json` | 入力、モード、method一覧、各集計を記録する再現用summary。 |
+| `evaluation8_frequency_distribution.png` | 154日・提案手法のみの固定帯モードで出力する、帯別の平均パターン数分布。 |
+| `evaluation8_frequency_band_metrics.png` | 154日・提案手法のみの固定帯モードで出力する、帯別平均Precision / Recall / F1。 |
 
 各頻度帯では、pattern単位平均のExact Set Match / Jaccard / multi-label Precision / Recall / F1と、出現回数で重み付けしたJaccard / Precision / Recall / F1を出力する。
 
@@ -66,9 +81,28 @@
 uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
   --analysis-scope comparison_30days \
   --evaluation6-details results/6_adl_match/15_1_30days/evaluation6_pattern_set_details_by_method.csv \
-  --output-dir results/e8_30_c_30_2 \
+  --output-dir results/8_vs_llm \
   --frequency-band-mode tertile
 ```
+
+### 154日・提案手法のみ（固定回数帯と図）
+
+```bash
+uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
+  --analysis-scope proposed_154days \
+  --patterns-proposed output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
+  --state-series output/5_adl_evaluation/state_series.csv \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --n-states 30 \
+  --hamming-threshold 2 \
+  --days 154 \
+  --runs 5 \
+  --output-dir results/8_proposed \
+  --frequency-band-mode fixed \
+  --fixed-frequency-bin-edges 0,1,10,100,1000,10000
+```
+
+図を保存しない場合は `--no-write-distribution-plots` を指定する。
 
 ### 154日・提案手法のみ
 
@@ -88,7 +122,7 @@ uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
   --hamming-threshold 2 \
   --days 154 \
   --runs 5 \
-  --output-dir results/e8_154_p_30_2 \
+  --output-dir results/8_proposed \
   --frequency-band-mode tertile
 ```
 

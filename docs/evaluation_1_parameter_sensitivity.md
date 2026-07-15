@@ -123,7 +123,7 @@ uv run python scripts/run_all.py
 | 代表状態数 `K` | `15` | `configs/default.yaml` |
 | ハミング距離閾値 | `1` | `configs/default.yaml` |
 | サンプリング間隔 | `1`秒 | `configs/default.yaml` |
-| 遅延OFF窓幅 | `180`秒 | `configs/default.yaml` |
+| 遅延OFF窓幅 | `5`秒 | `configs/default.yaml` |
 | 時間帯分割 | Morning / Daytime / Night / Midnight | `configs/default.yaml` |
 | 可視化用遷移確率閾値 | `0.1` | `configs/default.yaml` |
 | ベースライン遷移確率閾値 | `0.2` | `configs/default.yaml` |

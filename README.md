@@ -203,7 +203,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 - ハミング距離閾値: `1`
 - 分析期間: `154`日
 - サンプリング間隔: `1s`
-- 遅延OFF窓幅: `180`秒
+- 遅延OFF窓幅: `5`秒
 - 可視化の最小遷移確率: `0.1`
 - ベースライン遷移確率閾値: `0.2`
 - パターン長: `2-4`
@@ -224,7 +224,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 - `results/4_adl_detect/*.csv`, `evaluation_summary.json`: ADLラベル付き単一手法評価の出力。`merged_predictions.csv`, `filtered_predictions.csv`, `adl_interval_hit_metrics.csv` も含む。
 - `results/5_pattern_quality/evaluation5_*.csv`, `evaluation5_summary.json`: 複数手法のパターン単位ADL-grounded/Useless評価の出力。
 - `results/6_adl_match/15_1_30days/*.csv`, `evaluation6_comparison_summary.json`: 評価6の提案手法/LLM単独ベースライン比較。`evaluation6_method_comparison.csv` は主比較表、`evaluation6_method_comparison_by_run.csv` はrun別結果。
-- `results/e8_30_c_{K}_{hamming}/*.csv` と `results/e8_154_p_{K}_{hamming}/*.csv`: 評価8の頻度帯別ADL整合性分析。前者は30日proposed / direct-log比較、後者は154日提案手法5 runの平均で、結果を混在させない。
+- `results/8_vs_llm/*.csv` と `results/8_proposed/*.csv`: 評価8の頻度帯別ADL整合性分析。前者は30日proposed / direct-log比較、後者は154日提案手法5 runの平均で、結果を混在させない。
 
 ## 再現実験
 

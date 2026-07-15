@@ -11,7 +11,7 @@ state_extraction:
   representative_states_k: 15
   hamming_threshold: 1
   sampling_interval: 1s
-  smoothing_window_sec: 180
+  smoothing_window_sec: 5
   unknown_state: その他
 
 time_modes:

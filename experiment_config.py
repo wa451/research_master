@@ -15,7 +15,7 @@ HAMMING_THRESHOLD = int(get_config_value(CONFIG, "state_extraction.hamming_thres
 DAYS = int(get_config_value(CONFIG, "dataset.days", 154))
 DATA_DURATION_RATIO = float(get_config_value(CONFIG, "dataset.duration_ratio_when_days_is_null", 0.7))
 SAMPLING_INTERVAL = str(get_config_value(CONFIG, "state_extraction.sampling_interval", "1s"))
-SMOOTHING_WINDOW_SEC = int(get_config_value(CONFIG, "state_extraction.smoothing_window_sec", 180))
+SMOOTHING_WINDOW_SEC = int(get_config_value(CONFIG, "state_extraction.smoothing_window_sec", 5))
 UNKNOWN_STATE = str(get_config_value(CONFIG, "state_extraction.unknown_state", "その他"))
 
 TIME_MODES = {

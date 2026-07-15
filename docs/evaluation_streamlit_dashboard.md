@@ -134,7 +134,7 @@ Streamlit画面では、`代表状態数 K` と `ハミング距離閾値` を `
 
 参照ドキュメント: `docs/evaluation_8_frequency_stratified_adl_consistency.md`
 
-評価8ではラジオボタンで「154日: 提案手法のみ」（既定）または「30日: 提案手法 vs LLM単独ベースライン」を選択して実行する。代表状態数K（既定30）、ハミング距離閾値（既定2）、runs（既定5）を変更できる。154日条件は提案手法JSONを指定run数、154日state series、ラベル付きCASASを入力にし、runごとに評価6と同じset一致処理と頻度三分位を実行してから帯別指標を平均する。出力先は短い条件別名称（例: `results/e8_154_p_30_2/`, `results/e8_30_c_30_2/`）であり、結果を混在させない。154日提案手法のみでは重複する `evaluation8_by_frequency_band_by_method.csv` を生成しない。結果タブでは帯別CSVを選ぶと、Low / Middle / HighごとのPrecision / Recall / F1簡易表を表示する。
+評価8ではラジオボタンで「154日: 提案手法のみ」（既定）または「30日: 提案手法 vs LLM単独ベースライン」を選択して実行する。代表状態数K（既定30）、ハミング距離閾値（既定2）、runs（既定5）を変更できる。154日条件は提案手法JSONを指定run数、154日state series、ラベル付きCASASを入力にし、runごとに評価6と同じset一致処理と頻度三分位を実行してから帯別指標を平均する。出力先は条件別に `results/8_proposed/` と `results/8_vs_llm/` を使い、結果を混在させない。154日提案手法のみでは重複する `evaluation8_by_frequency_band_by_method.csv` を生成しない。frequency band modeは既定の`tertile`に加えて`fixed`を選べ、固定帯の下限（既定`0,1,10,100,1000,10000`）を指定できる。154日・提案手法のみの`fixed`では、帯別の平均パターン数分布とPrecision / Recall / F1図を保存するか選択でき、結果タブでPNGも表示できる。結果タブでは帯別CSVを選ぶと、帯ごとのPrecision / Recall / F1簡易表を表示する。
 
 ## ログとコマンド履歴
 

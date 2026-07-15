@@ -141,7 +141,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 | ハミング距離閾値 | `1` | `configs/default.yaml` |
 | 分析日数 | `154` | `configs/default.yaml` |
 | サンプリング間隔 | `1s` | `configs/default.yaml` |
-| 遅延OFF窓幅 | `180`秒 | `configs/default.yaml` |
+| 遅延OFF窓幅 | `5`秒 | `configs/default.yaml` |
 | 可視化の最小遷移確率 | `0.1` | `configs/default.yaml` |
 | ベースライン遷移確率閾値 | `0.2` | `configs/default.yaml` |
 | パターン長 | `2-4` | `configs/default.yaml` |

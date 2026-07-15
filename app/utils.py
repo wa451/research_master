@@ -120,7 +120,7 @@ def discover_result_files(base_dirs: Iterable[Path]) -> list[Path]:
     for base_dir in base_dirs:
         if not base_dir.exists():
             continue
-        for pattern in ("*.csv", "*.json"):
+        for pattern in ("*.csv", "*.json", "*.png"):
             files.extend(base_dir.rglob(pattern))
     return sorted(set(files))
 
@@ -139,7 +139,7 @@ def discover_result_dirs() -> list[Path]:
         if candidate.exists():
             dirs.add(candidate)
             for child in candidate.rglob("*"):
-                if child.is_dir() and any(child.glob("*.csv")) or child.is_dir() and any(child.glob("*.json")):
+                if child.is_dir() and (any(child.glob("*.csv")) or any(child.glob("*.json")) or any(child.glob("*.png"))):
                     dirs.add(child)
     return sorted(dirs)
 

@@ -120,7 +120,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
   --analysis-scope comparison_30days \
   --evaluation6-details results/6_adl_match/15_1_30days/evaluation6_pattern_set_details_by_method.csv \
-  --output-dir results/e8_30_c_30_2 \
+  --output-dir results/8_vs_llm \
   --frequency-band-mode tertile
 ```
 
@@ -131,7 +131,7 @@ uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
   --state-series output/5_adl_evaluation/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
   --runs 5 \
-  --output-dir results/e8_154_p_30_2 \
+  --output-dir results/8_proposed \
   --frequency-band-mode tertile
 ```
 
@@ -149,7 +149,7 @@ uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
 - 期間: 最初の154日
 - サンプリング: 1秒
 - 状態生成: Sample-and-Hold
-- スムージング: 遅延OFF窓幅180秒
+- スムージング: 遅延OFF窓幅5秒
 - 圧縮: 連続する同一状態ベクトルを1つに圧縮
 - ON値: `ON`, `OPEN`, `PRESENT`, `1`, `1`
 - OFF値: `OFF`, `CLOSE`, `ABSENT`, `0`, `0`

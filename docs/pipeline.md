@@ -14,7 +14,7 @@
 - 入力: イベントDataFrame
 - 出力: 1秒粒度の状態ベクトルDataFrame、連続同一状態を圧縮した状態ベクトル
 - 対応ファイル: `src/behavior_pattern_mining/visualization/state_transition_visualizer.py`, `scripts/run_build_network_from_labeled_casas.py`
-- 役割: Sample-and-Holdで各センサーのON/OFF状態を生成し、遅延OFF窓幅180秒でスムージングし、連続する同一状態を圧縮する。
+- 役割: Sample-and-Holdで各センサーのON/OFF状態を生成し、遅延OFF窓幅5秒でスムージングし、連続する同一状態を圧縮する。
 
 ## 3. Representative state extraction / mapping
 
@@ -75,7 +75,7 @@
 ## 7.5 評価8: Frequency-stratified ADL consistency
 
 - 入力: 30日手法比較では評価6の `evaluation6_pattern_set_details_by_method.csv`、154日提案手法単独では提案手法JSON・154日state series・ADL正解データ。
-- 出力: `results/e8_30_c_{K}_{hamming}/` と `results/e8_154_p_{K}_{hamming}/` に保存する。後者は単一methodなので重複する `evaluation8_by_frequency_band_by_method.csv` を出力しない。
+- 出力: `results/8_vs_llm/` と `results/8_proposed/` に保存する。後者は単一methodなので重複する `evaluation8_by_frequency_band_by_method.csv` を出力しない。
 - 対応ファイル: `scripts/evaluate_8_frequency_stratified_adl_consistency.py`。
 - 役割: 評価6のパターン単位set指標を、`num_occurrences` のmethod内三分位（Low / Middle / High）で後段集計する。time-band awareな提案手法レコードは `sequence × time_band` ごとの出現回数を使う。
 

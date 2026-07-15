@@ -122,7 +122,11 @@ RESULT_GUIDES: dict[str, list[dict[str, str]]] = {
     "評価8": [
         {
             "files": "evaluation8_by_frequency_band_by_method.csv, evaluation8_by_frequency_band.csv",
-            "how_to_read": "Low / Middle / Highごとに、pattern単位のPrecision / Recall / F1とJaccardを比較する。高頻度でPrecisionが高いかは、同一method内の帯間で確認する。",
+            "how_to_read": "三分位モードではLow / Middle / High、固定帯モードでは回数範囲ごとに、pattern単位のPrecision / Recall / F1とJaccardを比較する。高頻度でPrecisionが高いかは、同一method内の帯間で確認する。",
+        },
+        {
+            "files": "evaluation8_frequency_distribution.png, evaluation8_frequency_band_metrics.png",
+            "how_to_read": "154日・提案手法のみの固定帯モードで出力する図。前者は帯ごとの平均パターン数、後者は帯ごとの平均Precision / Recall / F1を示す。",
         },
         {
             "files": "evaluation8_occurrence_weighted_summary.csv",
@@ -134,7 +138,7 @@ RESULT_GUIDES: dict[str, list[dict[str, str]]] = {
         },
         {
             "files": "evaluation8_summary.json",
-            "how_to_read": "analysis_scope、入力した評価6詳細CSVまたは154日提案手法入力、三分位モード、手法別・全体集計を再現条件として確認する。",
+            "how_to_read": "analysis_scope、入力、頻度帯モードと固定帯境界（該当時）、手法別・全体集計を再現条件として確認する。",
         },
     ],
 }
@@ -179,6 +183,8 @@ RESULT_FILE_ORDER: dict[str, list[str]] = {
         "evaluation7_by_true_label.csv",
     ],
     "評価8": [
+        "evaluation8_frequency_distribution.png",
+        "evaluation8_frequency_band_metrics.png",
         "evaluation8_by_frequency_band_by_method.csv",
         "evaluation8_by_frequency_band.csv",
         "evaluation8_occurrence_weighted_summary.csv",
@@ -643,7 +649,7 @@ def render_eval7_settings(common: dict) -> dict:
 
 def render_eval8_settings(common: dict) -> dict:
     st.subheader("評価8: 頻度帯別ADL整合性評価")
-    st.caption("評価6の指標を置き換えず、出現頻度の三分位で後段分析します。")
+    st.caption("評価6の指標を置き換えず、出現頻度の三分位または固定回数帯で後段分析します。")
     scope_label = st.radio(
         "実行条件",
         ["154日: 提案手法のみ", "30日: 提案手法 vs LLM単独ベースライン"],
@@ -674,7 +680,7 @@ def render_eval8_settings(common: dict) -> dict:
         adl_intervals = ""
         output_dir = st.text_input(
             "output directory",
-            f"results/e8_30_c_{int(n_states)}_{int(hamming)}",
+            "results/8_vs_llm",
         )
         st.caption("評価6詳細CSVには5 run分のレコードを含めてください。評価8ではrunごとの帯別指標を平均します。")
         patterns_proposed_template = ""
@@ -698,10 +704,22 @@ def render_eval8_settings(common: dict) -> dict:
         )
         output_dir = st.text_input(
             "output directory",
-            f"results/e8_154_p_{int(n_states)}_{int(hamming)}",
+            "results/8_proposed",
         )
-    frequency_band_mode = st.selectbox("frequency band mode", ["tertile"], index=0)
-    st.caption("methodごとにnum_occurrences昇順で安定ソートし、できるだけ同数のLow / Middle / Highへ割り当てます。")
+    frequency_band_mode = st.selectbox("frequency band mode", ["tertile", "fixed"], index=0)
+    fixed_frequency_bin_edges = "0,1,10,100,1000,10000"
+    write_distribution_plots = True
+    if frequency_band_mode == "tertile":
+        st.caption("methodごとにnum_occurrences昇順で安定ソートし、できるだけ同数のLow / Middle / Highへ割り当てます。")
+    else:
+        fixed_frequency_bin_edges = st.text_input(
+            "固定頻度境界（カンマまたは空白区切り）",
+            fixed_frequency_bin_edges,
+            help="各帯の下限です。0,1,10,100,1000,10000 は 0回、1–9回、…、10,000回以上を表します。",
+        )
+        st.caption("固定回数帯はrun間で共通です。154日・提案手法のみでは分布図とPrecision / Recall / F1図も保存できます。")
+        if analysis_scope == "proposed_154days":
+            write_distribution_plots = st.checkbox("分布図・帯別指標図を保存", value=True)
 
     return {
         **common,
@@ -717,6 +735,8 @@ def render_eval8_settings(common: dict) -> dict:
         "adl_intervals": adl_intervals,
         "output_dir": output_dir,
         "frequency_band_mode": frequency_band_mode,
+        "fixed_frequency_bin_edges": fixed_frequency_bin_edges,
+        "write_distribution_plots": write_distribution_plots,
         "runs": int(runs),
         "min_overlap_ratio_for_true_label": 0.10,
         "no_overlap_label": "Ambiguous",
@@ -992,7 +1012,7 @@ def render_results(default_dirs: list[Path], current_evaluation: str | None = No
     selected_dir = all_dirs[labels.index(selected_label)]
     files = discover_result_files([selected_dir])
     if not files:
-        st.info("CSV/JSONが見つかりません。")
+        st.info("CSV/JSON/PNGが見つかりません。")
         return
     evaluation = infer_evaluation_for_results(selected_dir, files, current_evaluation)
     render_result_guide(evaluation)
@@ -1036,9 +1056,11 @@ def render_results(default_dirs: list[Path], current_evaluation: str | None = No
             elif "condition_id" in filtered_df.columns:
                 chart_df = filtered_df[["condition_id", metric]].dropna().set_index("condition_id")
                 st.bar_chart(chart_df)
-    else:
+    elif selected_file.suffix == ".json":
         payload = json.loads(selected_file.read_text(encoding="utf-8"))
         st.json(payload)
+    else:
+        st.image(str(selected_file), caption=selected_file.name, use_container_width=True)
     if description:
         st.info(f"このファイルの見方: {description}")
 

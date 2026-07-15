@@ -29,6 +29,10 @@ def row(pattern_id: str, occurrences: int, precision: float) -> dict[str, object
 
 
 class Evaluation8FrequencyStratifiedTests(unittest.TestCase):
+    def test_default_output_directories_follow_analysis_scope(self) -> None:
+        self.assertEqual(evaluation8.default_output_dir("comparison_30days").name, "8_vs_llm")
+        self.assertEqual(evaluation8.default_output_dir("proposed_154days").name, "8_proposed")
+
     def test_tertiles_are_stable_and_near_equal(self) -> None:
         rows = [
             row("P3", 1, 0.3),
@@ -57,6 +61,29 @@ class Evaluation8FrequencyStratifiedTests(unittest.TestCase):
         self.assertEqual(summary["num_patterns"], 2)
         self.assertAlmostEqual(summary["mean_multilabel_precision"], 0.5)
         self.assertAlmostEqual(summary["weighted_multilabel_precision"], 0.9)
+
+    def test_fixed_frequency_bands_use_configured_numeric_ranges(self) -> None:
+        rows = [
+            row("P0", 0, 0.1),
+            row("P1", 1, 0.2),
+            row("P9", 9, 0.3),
+            row("P10", 10, 0.4),
+            row("P99", 99, 0.5),
+            row("P100", 100, 0.6),
+            row("P1000", 1000, 0.7),
+        ]
+        edges = evaluation8.parse_fixed_frequency_bin_edges("0,1,10,100,1000")
+
+        evaluation8.assign_frequency_bands(rows, "fixed", edges)
+
+        by_id = {item["eval_pattern_id"]: item["frequency_band"] for item in rows}
+        self.assertEqual(by_id["P0"], "0")
+        self.assertEqual(by_id["P1"], "1-9")
+        self.assertEqual(by_id["P9"], "1-9")
+        self.assertEqual(by_id["P10"], "10-99")
+        self.assertEqual(by_id["P99"], "10-99")
+        self.assertEqual(by_id["P100"], "100-999")
+        self.assertEqual(by_id["P1000"], "1000+")
 
     def test_method_summary_averages_per_run_after_run_specific_tertiles(self) -> None:
         rows = [
@@ -141,6 +168,40 @@ class Evaluation8FrequencyStratifiedTests(unittest.TestCase):
             self.assertEqual(headers, evaluation8.METHOD_SUMMARY_FIELDNAMES)
             payload = json.loads((output_dir / "evaluation8_summary.json").read_text(encoding="utf-8"))
             self.assertEqual(payload["frequency_band_mode"], "tertile_by_num_occurrences")
+
+    def test_main_writes_fixed_range_summary_without_method_csv_for_proposed_scope(self) -> None:
+        source_rows = [row("P1", 1, 0.1), row("P2", 10, 0.2), row("P3", 100, 0.3)]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            output_dir = root / "evaluation8"
+            original_parse_args = evaluation8.parse_args
+            original_evaluate = evaluation8.evaluate_proposed_154days
+            evaluation8.parse_args = lambda: type(
+                "Args", (),
+                {
+                    "analysis_scope": "proposed_154days",
+                    "evaluation6_details": None,
+                    "output_dir": output_dir,
+                    "frequency_band_mode": "fixed",
+                    "fixed_frequency_bin_edges": "0,1,10,100",
+                    "write_distribution_plots": False,
+                },
+            )()
+            evaluation8.evaluate_proposed_154days = lambda args: (
+                [{**item, "run": 1} for item in source_rows],
+                "test",
+                {},
+            )
+            try:
+                evaluation8.main()
+            finally:
+                evaluation8.parse_args = original_parse_args
+                evaluation8.evaluate_proposed_154days = original_evaluate
+
+            self.assertFalse((output_dir / "evaluation8_by_frequency_band_by_method.csv").exists())
+            payload = json.loads((output_dir / "evaluation8_summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(payload["frequency_band_mode"], "fixed_ranges_by_num_occurrences")
+            self.assertEqual(payload["frequency_bands"], ["0", "1-9", "10-99", "100+"])
 
     def test_proposed_154day_scope_evaluates_proposed_patterns_directly(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
