@@ -94,7 +94,8 @@ uv run python scripts/run_build_network_from_labeled_casas.py \
   --sensor-map configs/aruba_sensor_map.json \
   --days 154 \
   --n-states 15 \
-  --hamming-threshold 1
+  --hamming-threshold 1 \
+  --smoothing-window-sec 5
 ```
 
 ### 2. 🟨 **条件付き** 提案手法LLM出力を生成する

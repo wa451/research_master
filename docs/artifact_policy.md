@@ -22,18 +22,18 @@ results/
 ├── 4_adl_detect/
 ├── 5_pattern_quality/
 ├── 6_adl_match/
-│   ├── 15_1_30days/
-│   └── 30_1_30days/
+│   ├── 15_1_14days/
+│   └── 30_1_14days/
 ├── 7_param_search/
 ├── 8_vs_llm/
 └── 8_proposed/
 
 output/
 ├── 5_rule_filter/
-├── 6_adl_evaluation_30/
+├── 6_adl_evaluation_14/
 ├── aruba_15_1_154days/
-├── aruba_15_1_30days/
-├── llm_direct_15_1_30days/
+├── aruba_15_1_14days/
+├── llm_direct_15_1_14days/
 ├── tmp/
 └── logs/
 ```

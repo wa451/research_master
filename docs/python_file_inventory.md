@@ -20,17 +20,18 @@
 |---|---|
 | `scripts/run_all.py` | 提案手法の主要パイプラインを一括実行する。`run_build_network -> run_baselines -> run_llm_eval_batch` の順に呼ぶ。 |
 | `scripts/run_build_network.py` | センサログの前処理、代表状態抽出、状態遷移ネットワーク構築、図・JSON・状態テーブル出力を実行する。 |
-| `scripts/run_build_network_from_labeled_casas.py` | ラベル付きCASAS txtからセンサーイベントを抽出し、センサーIDを代表状態テーブル用の部屋名へ変換して、状態遷移ネットワークと代表状態テーブルを生成する。評価6では `--days 30` で30日版成果物を生成し、条件変更時は `--n-states` と `--hamming-threshold` を指定する。 |
+| `scripts/run_build_network_from_labeled_casas.py` | ラベル付きCASAS txtからセンサーイベントを抽出し、センサーIDを代表状態テーブル用の部屋名へ変換して、状態遷移ネットワークと代表状態テーブルを生成する。評価6では `--days 14` で14日版成果物を生成し、条件変更時は `--n-states`、`--hamming-threshold`、`--smoothing-window-sec` を指定する。 |
 | `scripts/run_baselines.py` | 遷移確率ベースラインと頻度ベースラインをまとめて実行する。 |
-| `scripts/run_llm_extraction.py` | 提案手法のLLMパターン抽出のみを実行する。`--days`, `--n-states`, `--hamming-threshold` で評価6用の条件別ネットワークを入力にでき、`--runs` で複数回分を生成できる。 |
+| `scripts/run_llm_extraction.py` | 提案手法のLLMパターン抽出のみを実行する。`--days`, `--n-states`, `--hamming-threshold` で評価6用の条件別ネットワークを入力にでき、`--runs` で複数回分、`--run-ids` で特定runだけを生成できる。 |
+| `scripts/run_evaluation7_top_condition_repeats.py` | 評価7の初回summaryから上位N条件を選び、初回を含む合計run数まで不足分だけを生成して選抜条件manifestを保存する。 |
 | `scripts/run_llm_eval_batch.py` | 提案手法のLLM抽出とベースライン比較評価を複数回実行し、Excelへ集計する。 |
-| `scripts/run_direct_log_baseline.py` | ラベル付きCASAS txtからactivity labelを除いたセンサーイベントを使い、直接ログLLMベースラインを実行し、その出力を評価する。評価6では `--log-days 30 --extract-only` で30日分のみ抽出し、`--n-states`, `--hamming-threshold`, `--runs` で条件別・複数回分を生成できる。 |
+| `scripts/run_direct_log_baseline.py` | ラベル付きCASAS txtからactivity labelを除いたセンサーイベントを使い、直接ログLLMベースラインを実行し、その出力を評価する。評価6では `--log-days 14 --extract-only` で14日分のみ抽出し、`--n-states`, `--hamming-threshold`, `--runs` で条件別・複数回分を生成できる。 |
 | `scripts/run_evaluation.py` | 既存のLLM出力JSONを、遷移確率ベースライン・頻度ベースラインと比較評価する。 |
 | `scripts/run_groundedness.py` | LLM出力系列が状態遷移グラフ上の根拠を持つかを評価する。 |
 | `scripts/evaluate_condition_metrics.py` | support, confidence, 時間間隔条件を用いた系列評価を実行する。 |
 | `scripts/evaluate_adl_labels.py` | ラベル付きCASASデータを使い、抽出パターンとADL区間の対応付け、ADLカテゴリ別Precision/Recall/F1、境界誤差を評価する。 |
 | `scripts/evaluate_adl_correspondence.py` | frequency, rule-filtered frequency, FP-Growth系baseline, transition_probability baseline, proposed method のパターンを共通形式に正規化し、評価5の3指標を手法別に比較する。`--runs` で提案手法の複数run平均も出せる。 |
-| `scripts/evaluate_6_compare_adl_interpretation_set.py` | 評価6について、30日版の提案手法とLLM単独ベースラインを同じ状態系列・同じADL正解区間で比較する。`--runs` で複数run平均も出力する。 |
+| `scripts/evaluate_6_compare_adl_interpretation_set.py` | 評価6について、14日版の提案手法とLLM単独ベースラインを同じ状態系列・同じADL正解区間で比較する。`--runs` で複数run平均も出力する。 |
 | `scripts/evaluate_8_frequency_stratified_adl_consistency.py` | 評価6詳細CSVを入力に、パターンの代表状態系列上の出現回数でLow / Middle / Highへ分け、ADL解釈ラベル整合性を後段集計する。 |
 
 ## 3. src/behavior_pattern_mining/

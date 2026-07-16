@@ -131,6 +131,8 @@ def discover_result_dirs() -> list[Path]:
         PROJECT_ROOT / "results" / "5_pattern_quality",
         PROJECT_ROOT / "results" / "6_adl_match",
         PROJECT_ROOT / "results" / "7_param_search",
+        PROJECT_ROOT / "output" / "6_adl_evaluation_14",
+        PROJECT_ROOT / "output" / "6_adl_evaluation_15_1_14days",
         PROJECT_ROOT / "output" / "6_adl_evaluation_30",
         PROJECT_ROOT / "output" / "6_adl_evaluation_30_1_30days",
     ]

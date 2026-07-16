@@ -107,26 +107,26 @@ uv run python scripts/evaluate_adl_correspondence.py \
 uv run python scripts/run_build_network_from_labeled_casas.py \
   --labeled-casas new_labeled_data/aruba.txt \
   --sensor-map configs/aruba_sensor_map.json \
-  --days 30
+  --days 14
 
-uv run python scripts/run_llm_extraction.py --days 30
+uv run python scripts/run_llm_extraction.py --days 14
 
 uv run python scripts/evaluate_adl_labels.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --state-table state/aruba_15_1_30days.txt \
+  --state-table state/aruba_15_1_14days.txt \
   --sensor-map configs/aruba_sensor_map.json \
-  --patterns output/aruba_15_1_30days/llm_sequences_modes_15_1_30days_1.json \
-  --output-dir output/6_adl_evaluation_30 \
-  --write-state-series output/6_adl_evaluation_30/state_series.csv
+  --patterns output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json \
+  --output-dir output/6_adl_evaluation_14 \
+  --write-state-series output/6_adl_evaluation_14/state_series.csv
 
 uv run python scripts/run_direct_log_baseline.py \
-  --log-days 30 \
+  --log-days 14 \
   --extract-only
 
 uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
-  --patterns-proposed output/aruba_15_1_30days/llm_sequences_modes_15_1_30days_1.json \
-  --patterns-direct output/llm_direct_15_1_30days/1.json \
-  --state-series output/6_adl_evaluation_30/state_series.csv \
+  --patterns-proposed output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json \
+  --patterns-direct output/llm_direct_15_1_14days/1.json \
+  --state-series output/6_adl_evaluation_14/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
   --output-dir results/6_adl_match \
   --min-overlap-ratio-for-true-label 0.10

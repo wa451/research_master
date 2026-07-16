@@ -539,6 +539,7 @@ def main(
     input_modes_dir: Path | None = None,
     output_dir: Path | None = None,
     runs: int | None = None,
+    run_ids: list[int] | None = None,
     n_states: int | None = None,
     hamming_threshold: int | None = None,
 ) -> None:
@@ -548,6 +549,11 @@ def main(
     effective_runs = runs if runs is not None else RUNS
     if effective_runs <= 0:
         raise ValueError("runs must be >= 1")
+    effective_run_ids = list(run_ids) if run_ids is not None else list(range(1, effective_runs + 1))
+    if not effective_run_ids or any(run_id < 1 for run_id in effective_run_ids):
+        raise ValueError("run IDs must all be >= 1")
+    if len(set(effective_run_ids)) != len(effective_run_ids):
+        raise ValueError("run IDs must be unique")
     effective_n_states = n_states if n_states is not None else N_STATES
     if effective_n_states <= 0:
         raise ValueError("n_states must be >= 1")
@@ -583,13 +589,13 @@ def main(
     effective_output_dir.mkdir(parents=True, exist_ok=True)
 
     # 3) 同じ入力で複数回実行
-    for run_idx in range(1, effective_runs + 1):
+    for run_position, run_idx in enumerate(effective_run_ids, start=1):
         per_mode_records: List[Tuple[str, List[dict]]] = []
         per_mode_counts: List[Tuple[str, int]] = []
         backend_name = "unknown"
         metrics_rows: List[dict] = []
 
-        print(f"\n=== Run {run_idx}/{effective_runs} ===")
+        print(f"\n=== Run {run_idx} ({run_position}/{len(effective_run_ids)}) ===")
         for mode_path in mode_files:
             print(f"Processing mode file: {mode_path.name}")
             checkpoint_paths = mode_checkpoint_paths(effective_output_dir, run_idx, mode_path)

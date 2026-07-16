@@ -38,9 +38,12 @@ from app.utils import (  # noqa: E402
     metric_columns,
     run_command,
 )
+from experiment_config import SMOOTHING_WINDOW_SEC  # noqa: E402
 
 
 LOG_ROOT = PROJECT_ROOT / "output" / "logs" / "evaluation_dashboard"
+DEFAULT_N_STATES = 15
+DEFAULT_HAMMING_THRESHOLD = 0
 
 RESULT_GUIDES: dict[str, list[dict[str, str]]] = {
     "評価4": [
@@ -94,7 +97,7 @@ RESULT_GUIDES: dict[str, list[dict[str, str]]] = {
         },
         {
             "files": "evaluation6_comparison_summary.json",
-            "how_to_read": "再現条件として、入力パス、run数、30日版で揃っているか、min_overlap_ratio_for_true_label, 許可ラベルを確認する。",
+            "how_to_read": "再現条件として、入力パス、run数、14日版で揃っているか、min_overlap_ratio_for_true_label, 許可ラベルを確認する。",
         },
     ],
     "評価7": [
@@ -223,12 +226,24 @@ def common_sidebar() -> dict:
     evaluation = st.sidebar.radio("評価を選択", ["評価4", "評価5", "評価6", "評価7", "評価8"], horizontal=True)
     runner = st.sidebar.selectbox("Python実行方法", ["uv run python", "python"], index=0)
     run_name = st.sidebar.text_input("run名（ログ用）", "manual")
+    smoothing_window_sec = st.sidebar.number_input(
+        "チャタリング除去時間（秒）",
+        min_value=0,
+        value=SMOOTHING_WINDOW_SEC,
+        step=1,
+        help="同じセンサの遅延OFF窓幅です。0で無効化します。",
+    )
     dry_run = st.sidebar.checkbox("dry-run（実行せずコマンドだけ記録）", value=False)
+    st.sidebar.caption(
+        "秒数を変更して既存条件を作り直す場合は「全ステップを再実行」を選んでください。"
+        "現在の成果物名には秒数が含まれません。"
+    )
     st.sidebar.caption("seed / overwrite は既存CLI引数がないためUI化していません。")
     return {
         "evaluation": evaluation,
         "runner": runner,
         "run_name": run_name,
+        "smoothing_window_sec": int(smoothing_window_sec),
         "dry_run": dry_run,
         "dataset": "aruba",
     }
@@ -240,9 +255,9 @@ def render_eval4_settings(common: dict) -> dict:
     with col1:
         days = st.number_input("使用日数", min_value=1, value=154, step=1)
     with col2:
-        n_states = st.number_input("代表状態数 K", min_value=1, value=15, step=1)
+        n_states = st.number_input("代表状態数 K", min_value=1, value=DEFAULT_N_STATES, step=1)
     with col3:
-        hamming = st.number_input("ハミング距離閾値", min_value=0, value=1, step=1)
+        hamming = st.number_input("ハミング距離閾値", min_value=0, value=DEFAULT_HAMMING_THRESHOLD, step=1)
 
     default_state = default_state_table("aruba", int(n_states), int(hamming), int(days))
     default_patterns = default_proposed_path("aruba", int(n_states), int(hamming), int(days))
@@ -305,16 +320,17 @@ def render_eval5_settings(common: dict) -> dict:
     with col1:
         days = st.number_input("使用日数", min_value=1, value=154, step=1)
     with col2:
-        n_states = st.number_input("代表状態数 K", min_value=1, value=30, step=1)
+        n_states = st.number_input("代表状態数 K", min_value=1, value=DEFAULT_N_STATES, step=1)
     with col3:
-        hamming = st.number_input("ハミング距離閾値", min_value=0, value=2, step=1)
+        hamming = st.number_input("ハミング距離閾値", min_value=0, value=DEFAULT_HAMMING_THRESHOLD, step=1)
     with col4:
         runs = st.number_input("runs", min_value=1, value=5, step=1)
 
     suffix = short_suffix(int(n_states), int(hamming), int(days))
+    default_eval5_intermediate = f"output/5_adl_evaluation_{suffix}"
     st.markdown("**入力パス**")
     labeled = st.text_input("ラベル付きCASAS", "new_labeled_data/aruba.txt")
-    state_series = st.text_input("state-series", "output/5_adl_evaluation/state_series.csv")
+    state_series = st.text_input("state-series", f"{default_eval5_intermediate}/state_series.csv")
     state_table = st.text_input("代表状態テーブル", rel_default(default_state_table("aruba", int(n_states), int(hamming), int(days))))
     sensor_map = st.text_input("センサーマップ", "configs/aruba_sensor_map.json")
     patterns_frequency = st.text_input("patterns-frequency", f"output/aruba_{suffix}/state_sequence_counts_{suffix}.json")
@@ -413,7 +429,7 @@ def render_eval5_settings(common: dict) -> dict:
 
     st.markdown("**出力**")
     output_dir = st.text_input("output-dir", "results/5_pattern_quality")
-    eval5_intermediate_output = st.text_input("中間output-dir（state_series作成用）", "output/5_adl_evaluation")
+    eval5_intermediate_output = st.text_input("中間output-dir（state_series作成用）", default_eval5_intermediate)
 
     return {
         **common,
@@ -476,18 +492,18 @@ def render_eval6_settings(common: dict) -> dict:
     st.subheader("評価6: ADL解釈ラベルSet一致評価")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        days = st.number_input("使用日数", min_value=1, value=30, step=1)
+        days = st.number_input("使用日数", min_value=1, value=14, step=1)
     with col2:
-        n_states = st.number_input("代表状態数 K", min_value=1, value=30, step=1)
+        n_states = st.number_input("代表状態数 K", min_value=1, value=DEFAULT_N_STATES, step=1)
     with col3:
-        hamming = st.number_input("ハミング距離閾値", min_value=0, value=2, step=1)
+        hamming = st.number_input("ハミング距離閾値", min_value=0, value=DEFAULT_HAMMING_THRESHOLD, step=1)
     with col4:
         runs = st.number_input("runs", min_value=1, value=1, step=1)
 
     suffix = short_suffix(int(n_states), int(hamming), int(days))
     default_intermediate = (
-        "output/6_adl_evaluation_30"
-        if int(n_states) == 30 and int(hamming) == 2 and int(days) == 30
+        "output/6_adl_evaluation_14"
+        if int(n_states) == 15 and int(hamming) == 1 and int(days) == 14
         else f"output/6_adl_evaluation_{suffix}"
     )
     st.markdown("**入力パス**")
@@ -555,22 +571,22 @@ def render_eval7_settings(common: dict) -> dict:
     with col1:
         days = st.number_input("使用日数", min_value=1, value=30, step=1)
     with col2:
-        n_states_text = st.text_input("代表状態数 K（複数指定）", "15,30")
+        n_states_text = st.text_input("代表状態数 K（複数指定）", "10,15,20,25,30,35,40")
     with col3:
-        hamming_text = st.text_input("ハミング距離閾値（複数指定）", "1")
+        hamming_text = st.text_input("ハミング距離閾値（複数指定）", "0,1,2,3")
     try:
         n_states_list = parse_int_list(n_states_text)
         hamming_thresholds = parse_int_list(hamming_text)
     except ValueError:
         st.error("代表状態数Kとハミング距離閾値は整数で指定してください。")
-        n_states_list = [15]
-        hamming_thresholds = [1]
+        n_states_list = [DEFAULT_N_STATES]
+        hamming_thresholds = [DEFAULT_HAMMING_THRESHOLD]
     if not n_states_list:
-        st.warning("代表状態数Kが空なので、既定値 15 を使います。")
-        n_states_list = [15]
+        st.warning(f"代表状態数Kが空なので、既定値 {DEFAULT_N_STATES} を使います。")
+        n_states_list = [DEFAULT_N_STATES]
     if not hamming_thresholds:
-        st.warning("ハミング距離閾値が空なので、既定値 1 を使います。")
-        hamming_thresholds = [1]
+        st.warning(f"ハミング距離閾値が空なので、既定値 {DEFAULT_HAMMING_THRESHOLD} を使います。")
+        hamming_thresholds = [DEFAULT_HAMMING_THRESHOLD]
 
     st.markdown("**入力パス**")
     labeled = st.text_input("ラベル付きCASAS", "new_labeled_data/aruba.txt")
@@ -590,9 +606,21 @@ def render_eval7_settings(common: dict) -> dict:
         )
 
     st.markdown("**評価パラメータ**")
+    staged_search = st.checkbox(
+        "二段階実行（全条件を1回評価 → 上位条件だけ反復）",
+        value=True,
+    )
     col1, col2, col3 = st.columns(3)
     with col1:
-        runs = st.number_input("runs", min_value=1, value=1, step=1)
+        if staged_search:
+            top_n = st.number_input("上位条件数", min_value=1, value=10, step=1)
+            total_runs = st.number_input("上位条件の合計実行回数", min_value=2, value=3, step=1)
+            runs = 1
+            st.caption("初回run 1を平均に含め、不足するrun 2以降だけを追加生成します。")
+        else:
+            runs = st.number_input("runs", min_value=1, value=1, step=1)
+            top_n = 10
+            total_runs = 3
         min_ratio = st.number_input("min-overlap-ratio-for-true-label", min_value=0.0, max_value=1.0, value=0.10)
         selection_metric = st.selectbox(
             "selection-metric",
@@ -617,6 +645,8 @@ def render_eval7_settings(common: dict) -> dict:
     skip_missing_runs = st.checkbox("skip-missing-runs", value=False)
     skip_missing_conditions = st.checkbox("skip-missing-conditions", value=True)
     show_preparation_steps = st.checkbox("不足ファイル作成ステップを表示", value=True)
+    if staged_search and patterns_template:
+        st.warning("二段階実行の反復生成は標準のoutput命名を使います。patterns-templateは空にしてください。")
 
     st.markdown("**出力**")
     output_dir = st.text_input("output-dir", "results/7_param_search")
@@ -627,6 +657,9 @@ def render_eval7_settings(common: dict) -> dict:
         "n_states_list": n_states_list,
         "hamming_thresholds": hamming_thresholds,
         "runs": int(runs),
+        "staged_search": staged_search,
+        "top_n": int(top_n),
+        "total_runs": int(total_runs),
         "labeled_casas": labeled,
         "sensor_map": sensor_map,
         "adl_intervals": adl_intervals,
@@ -650,26 +683,30 @@ def render_eval7_settings(common: dict) -> dict:
 def render_eval8_settings(common: dict) -> dict:
     st.subheader("評価8: 頻度帯別ADL整合性評価")
     st.caption("評価6の指標を置き換えず、出現頻度の三分位または固定回数帯で後段分析します。")
+    st.info(
+        "チャタリング除去時間は評価8が読む提案手法JSON・state-series・評価6詳細CSVを作成したときの条件です。"
+        "評価8の後段集計では再適用しません。"
+    )
     scope_label = st.radio(
         "実行条件",
-        ["154日: 提案手法のみ", "30日: 提案手法 vs LLM単独ベースライン"],
+        ["154日: 提案手法のみ", "14日: 提案手法 vs LLM単独ベースライン"],
         index=0,
         horizontal=True,
     )
-    analysis_scope = "comparison_30days" if scope_label.startswith("30日") else "proposed_154days"
-    days = 30 if analysis_scope == "comparison_30days" else 154
+    analysis_scope = "comparison_14days" if scope_label.startswith("14日") else "proposed_154days"
+    days = 14 if analysis_scope == "comparison_14days" else 154
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        n_states = st.number_input("代表状態数 K", min_value=1, value=30, step=1)
+        n_states = st.number_input("代表状態数 K", min_value=1, value=DEFAULT_N_STATES, step=1)
     with col2:
-        hamming = st.number_input("ハミング距離閾値", min_value=0, value=2, step=1)
+        hamming = st.number_input("ハミング距離閾値", min_value=0, value=DEFAULT_HAMMING_THRESHOLD, step=1)
     with col3:
         runs = st.number_input("runs", min_value=1, value=5, step=1)
     suffix = short_suffix(int(n_states), int(hamming), days)
 
     st.markdown("**入力・出力**")
-    if analysis_scope == "comparison_30days":
+    if analysis_scope == "comparison_14days":
         details = st.text_input(
             "evaluation6 details file path",
             f"results/6_adl_match/{suffix}/evaluation6_pattern_set_details_by_method.csv",
@@ -691,7 +728,11 @@ def render_eval8_settings(common: dict) -> dict:
             "patterns-proposed (154日)",
             f"output/aruba_{suffix}/llm_sequences_modes_{suffix}_1.json",
         )
-        state_series_default = "output/5_adl_evaluation/state_series.csv" if (int(n_states), int(hamming)) == (30, 2) else ""
+        state_series_default = (
+            f"output/5_adl_evaluation_{suffix}/state_series.csv"
+            if (int(n_states), int(hamming)) == (DEFAULT_N_STATES, DEFAULT_HAMMING_THRESHOLD)
+            else ""
+        )
         state_series = st.text_input("state-series (154日)", state_series_default)
         if not state_series_default:
             st.caption("Kまたはハミング距離を変更した場合は、その条件で作成した154日state-series CSVを指定してください。")
@@ -700,7 +741,7 @@ def render_eval8_settings(common: dict) -> dict:
         patterns_proposed_template = st.text_input(
             "patterns-proposed-template（任意）",
             "",
-            placeholder="output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_{run}.json",
+            placeholder="output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_{run}.json",
         )
         output_dir = st.text_input(
             "output directory",

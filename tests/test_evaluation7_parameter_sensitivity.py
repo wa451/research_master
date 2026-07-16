@@ -126,6 +126,95 @@ class Evaluation7ParameterSensitivityTests(unittest.TestCase):
             self.assertTrue((output_dir / "evaluation7_by_true_label.csv").exists())
             self.assertTrue((output_dir / "evaluation7_by_time_band.csv").exists())
 
+    def test_cli_evaluates_exact_condition_pairs_and_explicit_run_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            selected = [(10, 0), (20, 1)]
+            for n_states, hamming in selected:
+                suffix = f"{n_states}_{hamming}_30days"
+                write_state_series(tmp / "output" / f"6_adl_evaluation_{suffix}" / "state_series.csv")
+                for run in (2, 3, 4):
+                    labels = ["Wake-up"] if n_states == 10 else ["Meal"]
+                    write_patterns(
+                        tmp / "output" / f"aruba_{suffix}" / f"llm_sequences_modes_{suffix}_{run}.json",
+                        labels,
+                    )
+
+            manifest = tmp / "top_conditions.csv"
+            with manifest.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=["rank", "n_states", "hamming_threshold", "days"],
+                )
+                writer.writeheader()
+                for rank, (n_states, hamming) in enumerate(selected, start=1):
+                    writer.writerow(
+                        {
+                            "rank": rank,
+                            "n_states": n_states,
+                            "hamming_threshold": hamming,
+                            "days": 30,
+                        }
+                    )
+
+            adl_path = tmp / "adl_intervals.csv"
+            write_adl_intervals(adl_path)
+            output_dir = tmp / "results"
+            summary_copy = tmp / "evaluation7_top2_3runs_conditions.csv"
+            command = [
+                sys.executable,
+                "scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py",
+                "--conditions-file",
+                str(manifest),
+                "--condition-summary-copy",
+                str(summary_copy),
+                "--run-ids",
+                "2",
+                "3",
+                "4",
+                "--days",
+                "30",
+                "--patterns-template",
+                str(tmp / "output" / "aruba_{suffix}" / "llm_sequences_modes_{suffix}_{run}.json"),
+                "--state-series-template",
+                str(tmp / "output" / "6_adl_evaluation_{suffix}" / "state_series.csv"),
+                "--adl-intervals",
+                str(adl_path),
+                "--labeled-casas",
+                str(tmp / "missing_labeled_casas.txt"),
+                "--output-dir",
+                str(output_dir),
+            ]
+            subprocess.run(command, cwd=ROOT_DIR, check=True, text=True, capture_output=True)
+
+            with (output_dir / "evaluation7_condition_summary.csv").open(
+                encoding="utf-8", newline=""
+            ) as handle:
+                summary_rows = list(csv.DictReader(handle))
+            self.assertEqual(len(summary_rows), 2)
+            self.assertEqual({int(row["num_runs"]) for row in summary_rows}, {3})
+            self.assertEqual(
+                summary_copy.read_text(encoding="utf-8"),
+                (output_dir / "evaluation7_condition_summary.csv").read_text(encoding="utf-8"),
+            )
+
+            with (output_dir / "evaluation7_condition_summary_by_run.csv").open(
+                encoding="utf-8", newline=""
+            ) as handle:
+                run_rows = list(csv.DictReader(handle))
+            self.assertEqual({int(row["run"]) for row in run_rows}, {2, 3, 4})
+            payload = json.loads((output_dir / "evaluation7_summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(payload["run_ids_requested"], [2, 3, 4])
+            self.assertEqual(payload["conditions_file"], str(manifest))
+            self.assertEqual(payload["condition_summary_copy"], str(summary_copy))
+            self.assertEqual(
+                payload["condition_pairs"],
+                [
+                    {"n_states": 10, "hamming_threshold": 0},
+                    {"n_states": 20, "hamming_threshold": 1},
+                ],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -34,7 +34,7 @@ from src.behavior_pattern_mining.evaluation.adl_interpretation_set import (
 )
 
 
-EVAL6_DAYS = 30
+EVAL6_DAYS = 14
 
 DETAIL_FIELDNAMES = [
     "run",
@@ -134,7 +134,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Optional proposed pattern path template for multi-run evaluation. "
-            "Use {run}, e.g. output/aruba_15_1_30days/llm_sequences_modes_15_1_30days_{run}.json"
+            "Use {run}, e.g. output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_{run}.json"
         ),
     )
     parser.add_argument(
@@ -152,7 +152,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Optional direct-baseline pattern path template for multi-run evaluation. "
-            "Use {run}, e.g. output/llm_direct_15_1_30days/{run}.json"
+            "Use {run}, e.g. output/llm_direct_15_1_14days/{run}.json"
         ),
     )
     parser.add_argument(

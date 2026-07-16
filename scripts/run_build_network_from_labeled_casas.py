@@ -14,7 +14,11 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from experiment_config import DATASET_NAME, ROOT_DIR as PROJECT_ROOT
+from experiment_config import (
+    DATASET_NAME,
+    ROOT_DIR as PROJECT_ROOT,
+    SMOOTHING_WINDOW_SEC,
+)
 from src.behavior_pattern_mining.evaluation.adl import DEFAULT_ARUBA_SENSOR_ID_MAP
 from src.behavior_pattern_mining.visualization.state_transition_visualizer import (
     StateTransitionVisualizer,
@@ -61,6 +65,15 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Hamming distance threshold for state mapping. Defaults to configs/default.yaml.",
     )
+    parser.add_argument(
+        "--smoothing-window-sec",
+        type=int,
+        default=SMOOTHING_WINDOW_SEC,
+        help=(
+            "Delayed-OFF window in seconds used for chattering removal. "
+            "Use 0 to disable smoothing. Defaults to configs/default.yaml."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -100,6 +113,8 @@ def main() -> None:
     args = parse_args()
     if not args.labeled_casas.exists():
         raise FileNotFoundError(f"Labeled CASAS file not found: {args.labeled_casas}")
+    if args.smoothing_window_sec < 0:
+        raise ValueError("--smoothing-window-sec must be non-negative")
 
     sensor_map = load_sensor_map(args.sensor_map)
 
@@ -107,7 +122,10 @@ def main() -> None:
         converted_csv = args.keep_converted_csv
         event_count = convert_labeled_casas_to_event_csv(args.labeled_casas, converted_csv, sensor_map)
         print(f"Converted labeled CASAS events: {event_count} -> {converted_csv}")
-        visualizer_kwargs = {"data_duration_days": args.days}
+        visualizer_kwargs = {
+            "data_duration_days": args.days,
+            "smoothing_window_sec": args.smoothing_window_sec,
+        }
         if args.n_states is not None:
             visualizer_kwargs["n_representative_states"] = args.n_states
         if args.hamming_threshold is not None:
@@ -120,7 +138,10 @@ def main() -> None:
         converted_csv = Path(tmpdir) / f"{DATASET_NAME}.csv"
         event_count = convert_labeled_casas_to_event_csv(args.labeled_casas, converted_csv, sensor_map)
         print(f"Converted labeled CASAS events: {event_count} -> {converted_csv}")
-        visualizer_kwargs = {"data_duration_days": args.days}
+        visualizer_kwargs = {
+            "data_duration_days": args.days,
+            "smoothing_window_sec": args.smoothing_window_sec,
+        }
         if args.n_states is not None:
             visualizer_kwargs["n_representative_states"] = args.n_states
         if args.hamming_threshold is not None:

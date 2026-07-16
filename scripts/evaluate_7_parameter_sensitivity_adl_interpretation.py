@@ -30,6 +30,9 @@ from src.behavior_pattern_mining.evaluation.adl_interpretation_set import (
     aggregate_by_label,
     aggregate_by_time_band,
 )
+from src.behavior_pattern_mining.evaluation.evaluation7_staged import (
+    condition_pairs_from_file,
+)
 
 
 DEFAULT_DAYS = 30
@@ -155,8 +158,33 @@ def parse_args() -> argparse.Namespace:
         help="Hamming thresholds. Accepts space or comma separated values, e.g. 0 1 2 or 0,1,2.",
     )
     parser.add_argument("--days", type=int, default=DEFAULT_DAYS)
-    parser.add_argument("--runs", type=int, default=1)
+    run_group = parser.add_mutually_exclusive_group()
+    run_group.add_argument("--runs", type=int, default=1)
+    run_group.add_argument(
+        "--run-ids",
+        nargs="+",
+        default=None,
+        help="Explicit run IDs to evaluate, e.g. 2 3 4. Cannot be combined with --runs.",
+    )
     parser.add_argument("--dataset", default=DATASET_NAME)
+    parser.add_argument(
+        "--conditions-file",
+        type=Path,
+        default=None,
+        help=(
+            "Optional CSV containing n_states and hamming_threshold columns. "
+            "When set, these exact condition pairs replace the Cartesian parameter grid."
+        ),
+    )
+    parser.add_argument(
+        "--condition-summary-copy",
+        type=Path,
+        default=None,
+        help=(
+            "Optional path that receives the same rows and columns as "
+            "evaluation7_condition_summary.csv."
+        ),
+    )
     parser.add_argument(
         "--patterns-template",
         default=None,
@@ -216,6 +244,7 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     args.n_states_list = parse_int_list(args.n_states_list)
     args.hamming_thresholds = parse_int_list(args.hamming_thresholds)
+    args.run_ids = parse_int_list(args.run_ids) if args.run_ids else None
     return args
 
 
@@ -437,8 +466,23 @@ def condition_time_band_rows(detail_rows: list[dict]) -> list[dict]:
 
 
 def evaluate_conditions(args: argparse.Namespace) -> dict[str, Any]:
-    if args.runs < 1:
-        raise ValueError("--runs must be >= 1")
+    run_ids = args.run_ids or list(range(1, args.runs + 1))
+    if not run_ids or any(run < 1 for run in run_ids):
+        raise ValueError("requested run IDs must all be >= 1")
+    if len(set(run_ids)) != len(run_ids):
+        raise ValueError("requested run IDs must be unique")
+
+    if args.conditions_file:
+        condition_pairs = condition_pairs_from_file(
+            args.conditions_file,
+            expected_days=args.days,
+        )
+    else:
+        condition_pairs = [
+            (n_states, hamming_threshold)
+            for n_states in args.n_states_list
+            for hamming_threshold in args.hamming_thresholds
+        ]
 
     adl_intervals, adl_source = load_truth_intervals(args)
     all_detail_rows: list[dict] = []
@@ -446,119 +490,118 @@ def evaluate_conditions(args: argparse.Namespace) -> dict[str, Any]:
     skipped_conditions: list[dict] = []
     skipped_runs: list[dict] = []
 
-    for n_states in args.n_states_list:
-        for hamming_threshold in args.hamming_thresholds:
-            cond_id = condition_id(n_states, hamming_threshold, args.days)
-            state_series_path = resolve_state_series_path(args, n_states, hamming_threshold)
-            if not state_series_path.exists():
+    for n_states, hamming_threshold in condition_pairs:
+        cond_id = condition_id(n_states, hamming_threshold, args.days)
+        state_series_path = resolve_state_series_path(args, n_states, hamming_threshold)
+        if not state_series_path.exists():
+            skipped = {
+                "condition_id": cond_id,
+                "n_states": n_states,
+                "hamming_threshold": hamming_threshold,
+                "days": args.days,
+                "state_series": str(state_series_path),
+                "reason": "state_series_missing",
+            }
+            if args.skip_missing_conditions:
+                skipped_conditions.append(skipped)
+                continue
+            raise FileNotFoundError(
+                f"state-series does not exist for condition {cond_id}: {state_series_path}. "
+                "Use --skip-missing-conditions to skip missing conditions."
+            )
+
+        state_intervals = load_state_series_csv(state_series_path)
+        pattern_paths = [
+            (run, resolve_pattern_path(args, n_states, hamming_threshold, run))
+            for run in run_ids
+        ]
+        missing_pattern_paths = [
+            (run, path) for run, path in pattern_paths
+            if not path.exists()
+        ]
+        if missing_pattern_paths and not args.skip_missing_runs:
+            run, path = missing_pattern_paths[0]
+            skipped = {
+                "condition_id": cond_id,
+                "n_states": n_states,
+                "hamming_threshold": hamming_threshold,
+                "days": args.days,
+                "run": run,
+                "patterns_path": str(path),
+                "reason": "condition_pattern_file_missing",
+            }
+            if args.skip_missing_conditions:
+                skipped_conditions.append(skipped)
+                continue
+            raise FileNotFoundError(
+                f"pattern file does not exist for condition {cond_id} run {run}: {path}. "
+                "Use --skip-missing-runs or --skip-missing-conditions to skip missing files."
+            )
+
+        condition_had_run = False
+        for run, patterns_path in pattern_paths:
+            if not patterns_path.exists():
                 skipped = {
-                    "condition_id": cond_id,
-                    "n_states": n_states,
-                    "hamming_threshold": hamming_threshold,
-                    "days": args.days,
-                    "state_series": str(state_series_path),
-                    "reason": "state_series_missing",
-                }
-                if args.skip_missing_conditions:
-                    skipped_conditions.append(skipped)
-                    continue
-                raise FileNotFoundError(
-                    f"state-series does not exist for condition {cond_id}: {state_series_path}. "
-                    "Use --skip-missing-conditions to skip missing conditions."
-                )
-
-            state_intervals = load_state_series_csv(state_series_path)
-            pattern_paths = [
-                (run, resolve_pattern_path(args, n_states, hamming_threshold, run))
-                for run in range(1, args.runs + 1)
-            ]
-            missing_pattern_paths = [
-                (run, path) for run, path in pattern_paths
-                if not path.exists()
-            ]
-            if missing_pattern_paths and not args.skip_missing_runs:
-                run, path = missing_pattern_paths[0]
-                skipped = {
-                    "condition_id": cond_id,
-                    "n_states": n_states,
-                    "hamming_threshold": hamming_threshold,
-                    "days": args.days,
-                    "run": run,
-                    "patterns_path": str(path),
-                    "reason": "condition_pattern_file_missing",
-                }
-                if args.skip_missing_conditions:
-                    skipped_conditions.append(skipped)
-                    continue
-                raise FileNotFoundError(
-                    f"pattern file does not exist for condition {cond_id} run {run}: {path}. "
-                    "Use --skip-missing-runs or --skip-missing-conditions to skip missing files."
-                )
-
-            condition_had_run = False
-            for run, patterns_path in pattern_paths:
-                if not patterns_path.exists():
-                    skipped = {
-                        "condition_id": cond_id,
-                        "n_states": n_states,
-                        "hamming_threshold": hamming_threshold,
-                        "days": args.days,
-                        "run": run,
-                        "patterns_path": str(patterns_path),
-                        "reason": "pattern_file_missing",
-                    }
-                    if args.skip_missing_runs:
-                        skipped_runs.append(skipped)
-                        continue
-                    raise FileNotFoundError(
-                        f"pattern file does not exist for condition {cond_id} run {run}: {patterns_path}. "
-                        "Use --skip-missing-runs or --skip-missing-conditions to skip missing files."
-                    )
-
-                detail_rows, summary_metrics = evaluate_method(
-                    method="proposed",
-                    patterns_path=patterns_path,
-                    state_intervals=state_intervals,
-                    adl_intervals=adl_intervals,
-                    args=args,
-                )
-                condition_had_run = True
-                detail_rows = [{"run": run, **row} for row in detail_rows]
-                all_detail_rows.extend(
-                    add_condition_to_rows(
-                        detail_rows,
-                        n_states=n_states,
-                        hamming_threshold=hamming_threshold,
-                        days=args.days,
-                        state_series_path=state_series_path,
-                        patterns_path=patterns_path,
-                    )
-                )
-                run_summary = {
                     "condition_id": cond_id,
                     "n_states": n_states,
                     "hamming_threshold": hamming_threshold,
                     "days": args.days,
                     "run": run,
                     "patterns_path": str(patterns_path),
-                    "state_series": str(state_series_path),
-                    **summary_metrics,
+                    "reason": "pattern_file_missing",
                 }
-                run_summary["mean_accuracy"] = run_summary["mean_exact_set_match"]
-                run_summary_rows.append(run_summary)
+                if args.skip_missing_runs:
+                    skipped_runs.append(skipped)
+                    continue
+                raise FileNotFoundError(
+                    f"pattern file does not exist for condition {cond_id} run {run}: {patterns_path}. "
+                    "Use --skip-missing-runs or --skip-missing-conditions to skip missing files."
+                )
 
-            if not condition_had_run and args.skip_missing_conditions:
-                already_recorded = any(item["condition_id"] == cond_id for item in skipped_conditions)
-                if not already_recorded:
-                    skipped_conditions.append(
-                        {
-                            "condition_id": cond_id,
-                            "n_states": n_states,
-                            "hamming_threshold": hamming_threshold,
-                            "days": args.days,
-                            "reason": "no_valid_runs",
-                        }
-                    )
+            detail_rows, summary_metrics = evaluate_method(
+                method="proposed",
+                patterns_path=patterns_path,
+                state_intervals=state_intervals,
+                adl_intervals=adl_intervals,
+                args=args,
+            )
+            condition_had_run = True
+            detail_rows = [{"run": run, **row} for row in detail_rows]
+            all_detail_rows.extend(
+                add_condition_to_rows(
+                    detail_rows,
+                    n_states=n_states,
+                    hamming_threshold=hamming_threshold,
+                    days=args.days,
+                    state_series_path=state_series_path,
+                    patterns_path=patterns_path,
+                )
+            )
+            run_summary = {
+                "condition_id": cond_id,
+                "n_states": n_states,
+                "hamming_threshold": hamming_threshold,
+                "days": args.days,
+                "run": run,
+                "patterns_path": str(patterns_path),
+                "state_series": str(state_series_path),
+                **summary_metrics,
+            }
+            run_summary["mean_accuracy"] = run_summary["mean_exact_set_match"]
+            run_summary_rows.append(run_summary)
+
+        if not condition_had_run and args.skip_missing_conditions:
+            already_recorded = any(item["condition_id"] == cond_id for item in skipped_conditions)
+            if not already_recorded:
+                skipped_conditions.append(
+                    {
+                        "condition_id": cond_id,
+                        "n_states": n_states,
+                        "hamming_threshold": hamming_threshold,
+                        "days": args.days,
+                        "reason": "no_valid_runs",
+                    }
+                )
 
     if not run_summary_rows:
         skipped_preview = [*skipped_conditions, *skipped_runs][:10]
@@ -584,6 +627,7 @@ def evaluate_conditions(args: argparse.Namespace) -> dict[str, Any]:
 
     return {
         "adl_source": adl_source,
+        "condition_pairs": condition_pairs,
         "detail_rows": all_detail_rows,
         "run_summary_rows": run_summary_rows,
         "condition_summary_rows": condition_summary_rows,
@@ -603,6 +647,12 @@ def write_outputs(args: argparse.Namespace, result: dict[str, Any]) -> None:
         result["condition_summary_rows"],
         CONDITION_SUMMARY_FIELDNAMES,
     )
+    if args.condition_summary_copy is not None:
+        write_csv_rows(
+            args.condition_summary_copy,
+            result["condition_summary_rows"],
+            CONDITION_SUMMARY_FIELDNAMES,
+        )
     write_csv_rows(
         args.output_dir / "evaluation7_condition_summary_by_run.csv",
         result["run_summary_rows"],
@@ -636,9 +686,18 @@ def write_outputs(args: argparse.Namespace, result: dict[str, Any]) -> None:
         "time_band_aware": True,
         "dataset": args.dataset,
         "days": args.days,
-        "n_states_list": args.n_states_list,
-        "hamming_thresholds": args.hamming_thresholds,
-        "runs_requested": args.runs,
+        "n_states_list": sorted({pair[0] for pair in result["condition_pairs"]}),
+        "hamming_thresholds": sorted({pair[1] for pair in result["condition_pairs"]}),
+        "condition_pairs": [
+            {"n_states": n_states, "hamming_threshold": hamming_threshold}
+            for n_states, hamming_threshold in result["condition_pairs"]
+        ],
+        "runs_requested": len(args.run_ids) if args.run_ids else args.runs,
+        "run_ids_requested": args.run_ids or list(range(1, args.runs + 1)),
+        "conditions_file": str(args.conditions_file) if args.conditions_file else None,
+        "condition_summary_copy": (
+            str(args.condition_summary_copy) if args.condition_summary_copy else None
+        ),
         "patterns_template": args.patterns_template,
         "state_series_template": args.state_series_template,
         "adl_intervals": result["adl_source"],

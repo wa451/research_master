@@ -83,43 +83,43 @@ uv run python scripts/evaluate_adl_correspondence.py \
 
 提案手法を5回平均する場合は、先に `scripts/run_llm_extraction.py --runs 5` で `_1.json` から `_5.json` までを作成し、評価5本体に `--runs 5` を追加する。標準命名以外を使う場合は `--patterns-proposed-template` で `{run}` を含むパスを指定する。
 
-評価6で提案手法とLLM単独ベースラインのADL解釈ラベルを比較する場合は、コンテキスト長を揃えるため両手法を30日版で実行する。
+評価6で提案手法とLLM単独ベースラインのADL解釈ラベルを比較する場合は、コンテキスト長を揃えるため両手法を14日版で実行する。
 
 ```bash
 uv run python scripts/run_build_network_from_labeled_casas.py \
   --labeled-casas new_labeled_data/aruba.txt \
   --sensor-map configs/aruba_sensor_map.json \
-  --days 30
+  --days 14
 
-uv run python scripts/run_llm_extraction.py --days 30
+uv run python scripts/run_llm_extraction.py --days 14
 
 uv run python scripts/evaluate_adl_labels.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --state-table state/aruba_15_1_30days.txt \
+  --state-table state/aruba_15_1_14days.txt \
   --sensor-map configs/aruba_sensor_map.json \
-  --patterns output/aruba_15_1_30days/llm_sequences_modes_15_1_30days_1.json \
-  --output-dir output/6_adl_evaluation_30 \
-  --write-state-series output/6_adl_evaluation_30/state_series.csv
+  --patterns output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json \
+  --output-dir output/6_adl_evaluation_14 \
+  --write-state-series output/6_adl_evaluation_14/state_series.csv
 
 uv run python scripts/run_direct_log_baseline.py \
-  --log-days 30 \
+  --log-days 14 \
   --extract-only
 
 uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
-  --patterns-proposed output/aruba_15_1_30days/llm_sequences_modes_15_1_30days_1.json \
-  --patterns-direct output/llm_direct_15_1_30days/1.json \
-  --state-series output/6_adl_evaluation_30/state_series.csv \
+  --patterns-proposed output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json \
+  --patterns-direct output/llm_direct_15_1_14days/1.json \
+  --state-series output/6_adl_evaluation_14/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
   --output-dir results/6_adl_match \
   --min-overlap-ratio-for-true-label 0.10
 ```
 
-評価8は、30日条件の手法比較と154日条件の提案手法単独を別ディレクトリへ出力する。
+評価8は、14日条件の手法比較と154日条件の提案手法単独を別ディレクトリへ出力する。
 
 ```bash
 uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
-  --analysis-scope comparison_30days \
-  --evaluation6-details results/6_adl_match/15_1_30days/evaluation6_pattern_set_details_by_method.csv \
+  --analysis-scope comparison_14days \
+  --evaluation6-details results/6_adl_match/15_1_14days/evaluation6_pattern_set_details_by_method.csv \
   --output-dir results/8_vs_llm \
   --frequency-band-mode tertile
 ```
@@ -327,30 +327,30 @@ uv run python scripts/evaluate_adl_correspondence.py \
   --exclude-other-adl-from-any \
   --min-overlap-seconds 1
 
-# 8. 評価6: ADL解釈ラベルset評価。提案手法とLLM単独ベースラインを30日版で比較
+# 8. 評価6: ADL解釈ラベルset評価。提案手法とLLM単独ベースラインを14日版で比較
 uv run python scripts/run_build_network_from_labeled_casas.py \
   --labeled-casas new_labeled_data/aruba.txt \
   --sensor-map configs/aruba_sensor_map.json \
-  --days 30
+  --days 14
 
-uv run python scripts/run_llm_extraction.py --days 30
+uv run python scripts/run_llm_extraction.py --days 14
 
 uv run python scripts/evaluate_adl_labels.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --state-table state/aruba_15_1_30days.txt \
+  --state-table state/aruba_15_1_14days.txt \
   --sensor-map configs/aruba_sensor_map.json \
-  --patterns output/aruba_15_1_30days/llm_sequences_modes_15_1_30days_1.json \
-  --output-dir output/6_adl_evaluation_30 \
-  --write-state-series output/6_adl_evaluation_30/state_series.csv
+  --patterns output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json \
+  --output-dir output/6_adl_evaluation_14 \
+  --write-state-series output/6_adl_evaluation_14/state_series.csv
 
 uv run python scripts/run_direct_log_baseline.py \
-  --log-days 30 \
+  --log-days 14 \
   --extract-only
 
 uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
-  --patterns-proposed output/aruba_15_1_30days/llm_sequences_modes_15_1_30days_1.json \
-  --patterns-direct output/llm_direct_15_1_30days/1.json \
-  --state-series output/6_adl_evaluation_30/state_series.csv \
+  --patterns-proposed output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json \
+  --patterns-direct output/llm_direct_15_1_14days/1.json \
+  --state-series output/6_adl_evaluation_14/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
   --output-dir results/6_adl_match \
   --min-overlap-ratio-for-true-label 0.10

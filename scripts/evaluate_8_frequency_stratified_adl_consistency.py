@@ -37,6 +37,7 @@ from src.behavior_pattern_mining.evaluation.adl_interpretation_set import (
 
 FREQUENCY_BANDS = ("Low", "Middle", "High")
 DEFAULT_FIXED_FREQUENCY_BIN_EDGES = (0, 1, 10, 100, 1000, 10000)
+COMPARISON_SCOPES = {"comparison_14days", "comparison_30days"}
 DETAIL_FIELDNAMES = [
     "run",
     "method",
@@ -98,7 +99,7 @@ METRIC_COLUMNS = (
 
 
 def default_output_dir(analysis_scope: str) -> Path:
-    directory_name = "8_vs_llm" if analysis_scope == "comparison_30days" else "8_proposed"
+    directory_name = "8_vs_llm" if analysis_scope in COMPARISON_SCOPES else "8_proposed"
     return ROOT_DIR / "results" / directory_name
 
 
@@ -116,10 +117,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--analysis-scope",
-        choices=["comparison_30days", "proposed_154days"],
-        default="comparison_30days",
+        choices=["comparison_14days", "comparison_30days", "proposed_154days"],
+        default="comparison_14days",
         help=(
-            "comparison_30days stratifies an existing proposed/direct Evaluation 6 detail CSV; "
+            "comparison_14days stratifies an existing proposed/direct 14-day Evaluation 6 detail CSV; "
+            "comparison_30days remains available for previously generated 30-day details; "
             "proposed_154days evaluates only the proposed 154-day JSON before stratification."
         ),
     )
@@ -668,9 +670,9 @@ def main() -> None:
     args = parse_args()
     if args.output_dir is None:
         args.output_dir = default_output_dir(args.analysis_scope)
-    if args.analysis_scope == "comparison_30days":
+    if args.analysis_scope in COMPARISON_SCOPES:
         if args.evaluation6_details is None:
-            raise ValueError("--evaluation6-details is required for --analysis-scope comparison_30days")
+            raise ValueError("--evaluation6-details is required for a comparison analysis scope")
         rows, occurrence_count_source = load_details(args.evaluation6_details, args)
         input_summary = {"evaluation6_details": str(args.evaluation6_details)}
     else:
@@ -694,7 +696,7 @@ def main() -> None:
         "evaluation8_frequency_band_details.csv",
         "evaluation8_by_frequency_band.csv",
     ]
-    if args.analysis_scope == "comparison_30days":
+    if args.analysis_scope in COMPARISON_SCOPES:
         write_csv_rows(
             args.output_dir / "evaluation8_by_frequency_band_by_method.csv",
             by_method_band,
@@ -738,7 +740,7 @@ def main() -> None:
         "occurrence_weighted_summary": weighted_summary,
         "output_files": output_files,
     }
-    if args.analysis_scope == "comparison_30days":
+    if args.analysis_scope in COMPARISON_SCOPES:
         summary["by_method_frequency_band"] = by_method_band
     (args.output_dir / "evaluation8_summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
@@ -746,7 +748,7 @@ def main() -> None:
     )
 
     print(f"Evaluation 8 outputs saved to: {args.output_dir}")
-    rows_to_print = by_method_band if args.analysis_scope == "comparison_30days" else overall_by_band
+    rows_to_print = by_method_band if args.analysis_scope in COMPARISON_SCOPES else overall_by_band
     for row in rows_to_print:
         method = row.get("method", "proposed")
         print(

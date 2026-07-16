@@ -52,16 +52,21 @@ uv run streamlit run app/streamlit_app.py
 |---|---|
 | Python実行方法 | READMEの既定に合わせて `uv run python` を既定にしています。 |
 | run名 | ログディレクトリ名に使います。CLI引数には渡しません。 |
+| チャタリング除去時間（秒） | 代表状態・状態遷移ネットワーク作成時の遅延OFF窓幅。既定は `5` 秒で、`0` は無効。評価4〜7の前段CLIへ渡す。 |
 | dry-run | 実行せず、コマンドとログファイルだけを保存します。 |
 
+評価4・5・6・8の代表状態数とハミング距離閾値は、評価7の選定結果に合わせて `K=15`、`hamming=0` を既定値にしています。評価7は感度分析のため、複数条件を指定する探索範囲を維持します。
+
 `seed` や `overwrite` は対象CLIに実在する引数がないため、UI項目として追加していません。
+
+チャタリング除去時間を変更しても既存成果物のファイル名は変わらない。既存条件を別の秒数で作り直す場合は「全ステップを再実行」を使うか、入力・出力パスを条件別に分ける。評価8は既存の評価6詳細CSV、提案手法JSON、state seriesを読む後段分析なので、この値を再適用しない。評価8では入力成果物を生成したときの値と合わせる。
 
 ## 評価4のステップ
 
 参照ドキュメント: `docs/evaluation_4_labeled_casas_adl.md`
 
 1. 代表状態・状態遷移ネットワークを作成  
-   `scripts/run_build_network_from_labeled_casas.py` を実行します。入力は `--labeled-casas`, `--sensor-map`, `--days`, `--n-states`, `--hamming-threshold` です。
+   `scripts/run_build_network_from_labeled_casas.py` を実行します。入力は `--labeled-casas`, `--sensor-map`, `--days`, `--n-states`, `--hamming-threshold`, `--smoothing-window-sec` です。
 
 2. 提案手法LLMパターンを抽出  
    `scripts/run_llm_extraction.py` を実行します。APIキーを使う重い処理です。
@@ -80,7 +85,7 @@ uv run streamlit run app/streamlit_app.py
    `scripts/run_llm_extraction.py` を実行し、評価5で使う proposed JSON を作成します。APIキーを使う重い処理です。
 
 3. 評価5用 `state_series.csv` を作成  
-   `scripts/evaluate_adl_labels.py --write-state-series` を使い、評価5専用の中間出力 `output/5_adl_evaluation/state_series.csv` を作成します。
+   `scripts/evaluate_adl_labels.py --write-state-series` を使い、評価5専用の中間出力 `output/5_adl_evaluation_15_0_154days/state_series.csv` を作成します。K、ハミング距離、日数を変えた場合は、それらを含む別ディレクトリを使います。
 
 4. 評価5を実行  
    `scripts/evaluate_adl_correspondence.py` を実行します。主な出力は `evaluation5_summary_by_method.csv`, `evaluation5_pattern_details.csv`, `evaluation5_summary.json` です。
@@ -93,22 +98,22 @@ uv run streamlit run app/streamlit_app.py
 
 参照ドキュメント: `docs/evaluation_6_adl_interpretation_set.md`
 
-1. 30日版の代表状態・状態遷移ネットワークを作成  
-   `scripts/run_build_network_from_labeled_casas.py --days 30` を実行します。
+1. 14日版の代表状態・状態遷移ネットワークを作成
+   `scripts/run_build_network_from_labeled_casas.py --days 14` を実行します。
 
 2. 提案手法LLM出力を生成  
-   `scripts/run_llm_extraction.py --days 30` を実行します。`--runs` で複数runを生成できます。
+   `scripts/run_llm_extraction.py --days 14` を実行します。`--runs` で複数runを生成できます。
 
 3. 評価6用 `state_series.csv` を作成  
-   `scripts/evaluate_adl_labels.py` で比較用の状態系列を `output/6_adl_evaluation_30/state_series.csv` へ保存します。
+   `scripts/evaluate_adl_labels.py` で比較用の状態系列を `output/6_adl_evaluation_15_0_14days/state_series.csv` へ保存します。
 
 4. LLM単独ベースラインを生成  
-   `scripts/run_direct_log_baseline.py --log-days 30 --extract-only` を実行します。
+   `scripts/run_direct_log_baseline.py --log-days 14 --extract-only` を実行します。
 
 5. 評価6の手法間比較を実行  
    `scripts/evaluate_6_compare_adl_interpretation_set.py` を実行します。主な出力は `evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_*_by_method.csv`, `evaluation6_comparison_summary.json` です。
 
-標準条件の中間出力はREADMEに合わせて `output/6_adl_evaluation_30/` を使います。Kやハミング距離を変えた場合は `output/6_adl_evaluation_{K}_{hamming}_{days}days/` を使えます。
+アプリの標準条件は、評価7の選定結果に合わせて代表状態数 `K=15`、ハミング距離閾値 `0` です。中間出力には `output/6_adl_evaluation_15_0_14days/` を使い、Kやハミング距離を変えた場合も `output/6_adl_evaluation_{K}_{hamming}_{days}days/` を使います。
 
 ## 評価7のステップ
 
@@ -117,24 +122,30 @@ uv run streamlit run app/streamlit_app.py
 1. 条件別の代表状態・状態遷移ネットワークを作成  
    `scripts/run_build_network_from_labeled_casas.py` を条件ごとに実行します。`state/aruba_{K}_{hamming}_{days}days.txt` や `picture/aruba_{K}_{hamming}_{days}days/state_transition_all.json` がない場合に使います。
 
-2. 条件別の提案手法LLM出力を生成  
+2. 条件別の提案手法LLM run 1を生成
    `scripts/run_llm_extraction.py` を条件ごとに実行します。`output/aruba_{K}_{hamming}_{days}days/llm_sequences_modes_{K}_{hamming}_{days}days_1.json` がない場合に使います。
 
 3. 条件別の `state_series.csv` を作成  
    `scripts/evaluate_adl_labels.py --write-state-series` を条件ごとに実行します。`output/6_adl_evaluation_{K}_{hamming}_{days}days/state_series.csv` がない場合に使います。
 
-4. 評価7を実行  
-   `scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py` を実行します。代表状態数Kとハミング距離を複数指定し、提案手法JSONと状態系列CSVを条件ごとに読み込んでADL解釈ラベルset一致を比較します。
+4. 全条件をrun 1で評価
+   `scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py` を実行し、上位条件を決めるための初回summaryを作成します。
+
+5. 上位10条件を合計3回まで実行
+   `scripts/run_evaluation7_top_condition_repeats.py` が初回summaryの上位10条件を選び、不足分のrun 2, 3だけを生成します。run JSONごとに存在確認し、生成済みrunはスキップしてそのまま利用します。全20ファイルが存在する場合は、このステップ自体が一括実行対象から外れます。
+
+6. 上位10条件の3回平均を評価
+   `--conditions-file` と `--run-ids 1 2 3` を使い、選抜に使ったrun 1も含めて平均と標準偏差を計算します。最終評価後、`evaluation7_top10_3runs_conditions.csv` も `evaluation7_condition_summary.csv` と同じ指標列・3回平均値へ更新します。
 
 主な出力は `evaluation7_condition_summary.csv`, `evaluation7_condition_summary_by_run.csv`, `evaluation7_pattern_set_details.csv`, `evaluation7_by_pred_label.csv`, `evaluation7_by_true_label.csv`, `evaluation7_by_time_band.csv`, `evaluation7_summary.json` です。
 
-Streamlit画面では、`代表状態数 K` と `ハミング距離閾値` を `10,15,20,30` のようにカンマ区切りまたは空白区切りで指定できます。`不足ファイル作成ステップを表示` をONにすると、各条件ごとの前段3ステップも表示されます。一括実行の「不足ファイル生成 + 評価本体」では、既に出力が揃っている前段ステップを対象外にし、不足している条件別ファイルを作ったうえで評価7本体を実行します。結果タブでは条件別summaryと `evaluation7_summary.json` の `best_condition` を確認できます。
+Streamlit画面では、`代表状態数 K` と `ハミング距離閾値` をカンマ区切りまたは空白区切りで指定できます。「二段階実行」は既定でON、上位条件数は10、合計実行回数は3です。一括実行の「不足ファイル生成 + 評価本体」では、初回summaryが既に存在すれば初回生成・評価をスキップし、上位10条件の不足分run 2, 3と最終平均へ進みます。初回結果は `results/7_param_search/`、最終結果は `results/7_param_search/top10_3runs/` に分けて保存します。
 
 ## 評価8のステップ
 
 参照ドキュメント: `docs/evaluation_8_frequency_stratified_adl_consistency.md`
 
-評価8ではラジオボタンで「154日: 提案手法のみ」（既定）または「30日: 提案手法 vs LLM単独ベースライン」を選択して実行する。代表状態数K（既定30）、ハミング距離閾値（既定2）、runs（既定5）を変更できる。154日条件は提案手法JSONを指定run数、154日state series、ラベル付きCASASを入力にし、runごとに評価6と同じset一致処理と頻度三分位を実行してから帯別指標を平均する。出力先は条件別に `results/8_proposed/` と `results/8_vs_llm/` を使い、結果を混在させない。154日提案手法のみでは重複する `evaluation8_by_frequency_band_by_method.csv` を生成しない。frequency band modeは既定の`tertile`に加えて`fixed`を選べ、固定帯の下限（既定`0,1,10,100,1000,10000`）を指定できる。154日・提案手法のみの`fixed`では、帯別の平均パターン数分布とPrecision / Recall / F1図を保存するか選択でき、結果タブでPNGも表示できる。結果タブでは帯別CSVを選ぶと、帯ごとのPrecision / Recall / F1簡易表を表示する。
+評価8ではラジオボタンで「154日: 提案手法のみ」（既定）または「14日: 提案手法 vs LLM単独ベースライン」を選択して実行する。代表状態数K（既定15）、ハミング距離閾値（既定0）、runs（既定5）を変更できる。154日条件は提案手法JSONを指定run数、154日state series、ラベル付きCASASを入力にし、runごとに評価6と同じset一致処理と頻度三分位を実行してから帯別指標を平均する。出力先は条件別に `results/8_proposed/` と `results/8_vs_llm/` を使い、結果を混在させない。154日提案手法のみでは重複する `evaluation8_by_frequency_band_by_method.csv` を生成しない。frequency band modeは既定の`tertile`に加えて`fixed`を選べ、固定帯の下限（既定`0,1,10,100,1000,10000`）を指定できる。154日・提案手法のみの`fixed`では、帯別の平均パターン数分布とPrecision / Recall / F1図を保存するか選択でき、結果タブでPNGも表示できる。結果タブでは帯別CSVを選ぶと、帯ごとのPrecision / Recall / F1簡易表を表示する。
 
 ## ログとコマンド履歴
 

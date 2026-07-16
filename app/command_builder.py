@@ -11,6 +11,11 @@ from pathlib import Path
 import shlex
 from typing import Any
 
+from experiment_config import SMOOTHING_WINDOW_SEC
+from src.behavior_pattern_mining.evaluation.evaluation7_staged import (
+    select_top_condition_rows,
+)
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -98,8 +103,8 @@ def default_direct_path(n_states: int, hamming_threshold: int, days: int, run: i
 
 
 def default_eval_state_series_path(n_states: int, hamming_threshold: int, days: int) -> Path:
-    if n_states == 15 and hamming_threshold == 1 and days == 30:
-        return PROJECT_ROOT / "output" / "6_adl_evaluation_30" / "state_series.csv"
+    if n_states == 15 and hamming_threshold == 1 and days in {14, 30}:
+        return PROJECT_ROOT / "output" / f"6_adl_evaluation_{days}" / "state_series.csv"
     return PROJECT_ROOT / "output" / f"6_adl_evaluation_{short_suffix(n_states, hamming_threshold, days)}" / "state_series.csv"
 
 
@@ -160,6 +165,11 @@ def build_evaluation4_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_arg(build_cmd, "--days", days)
     add_arg(build_cmd, "--n-states", n_states)
     add_arg(build_cmd, "--hamming-threshold", hamming)
+    add_arg(
+        build_cmd,
+        "--smoothing-window-sec",
+        settings.get("smoothing_window_sec", SMOOTHING_WINDOW_SEC),
+    )
 
     llm_cmd = script_cmd(runner, "scripts/run_llm_extraction.py")
     add_arg(llm_cmd, "--days", days)
@@ -255,6 +265,11 @@ def build_evaluation5_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_arg(build_cmd, "--days", days)
     add_arg(build_cmd, "--n-states", n_states)
     add_arg(build_cmd, "--hamming-threshold", hamming)
+    add_arg(
+        build_cmd,
+        "--smoothing-window-sec",
+        settings.get("smoothing_window_sec", SMOOTHING_WINDOW_SEC),
+    )
 
     llm_cmd = script_cmd(runner, "scripts/run_llm_extraction.py")
     add_arg(llm_cmd, "--days", days)
@@ -410,6 +425,11 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_arg(build_cmd, "--days", days)
     add_arg(build_cmd, "--n-states", n_states)
     add_arg(build_cmd, "--hamming-threshold", hamming)
+    add_arg(
+        build_cmd,
+        "--smoothing-window-sec",
+        settings.get("smoothing_window_sec", SMOOTHING_WINDOW_SEC),
+    )
 
     proposed_cmd = script_cmd(runner, "scripts/run_llm_extraction.py")
     add_arg(proposed_cmd, "--days", days)
@@ -467,7 +487,7 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     return [
         EvaluationStep(
             "eval6_build_network",
-            "1. 30日版の代表状態・状態遷移ネットワークを作成",
+            "1. 14日版の代表状態・状態遷移ネットワークを作成",
             "評価6条件の state table と状態遷移JSONを作成します。",
             build_cmd,
             [p for p in [labeled, sensor_map] if p is not None],
@@ -517,7 +537,7 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
 
 
 def build_evaluation8_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
-    """Build either the 30-day comparison or 154-day proposed-only Evaluation 8 command."""
+    """Build either the 14-day comparison or 154-day proposed-only Evaluation 8 command."""
     analysis_scope = settings["analysis_scope"]
     n_states = int(settings["n_states"])
     hamming = int(settings["hamming_threshold"])
@@ -536,13 +556,13 @@ def build_evaluation8_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_arg(command, "--hamming-threshold", hamming)
     add_arg(command, "--days", days)
 
-    if analysis_scope == "comparison_30days":
+    if analysis_scope in {"comparison_14days", "comparison_30days"}:
         details = as_path(settings["evaluation6_details"])
         if details is None:
-            raise ValueError("30-day comparison requires an Evaluation 6 details path.")
+            raise ValueError("Comparison analysis requires an Evaluation 6 details path.")
         add_arg(command, "--evaluation6-details", details)
         required_inputs = [details]
-        description = "30日条件の評価6手法比較詳細CSVを、手法ごとの頻度帯へ後段集計します。"
+        description = f"{days}日条件の評価6手法比較詳細CSVを、手法ごとの頻度帯へ後段集計します。"
         expected_outputs = [
             output_dir / "evaluation8_frequency_band_details.csv",
             output_dir / "evaluation8_by_frequency_band.csv",
@@ -622,15 +642,105 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     dataset = settings["dataset"]
     days = settings["days"]
     runs = settings["runs"]
+    staged_search = settings.get("staged_search", False)
+    top_n = int(settings.get("top_n", 10))
+    total_runs = int(settings.get("total_runs", settings.get("repeat_runs", 3)))
+    patterns_template = None if staged_search else settings.get("patterns_template")
     n_states_list = settings["n_states_list"]
     hamming_thresholds = settings["hamming_thresholds"]
     labeled = as_path(settings["labeled_casas"])
     sensor_map = as_path(settings["sensor_map"])
     adl_intervals = as_path(settings["adl_intervals"])
     output_dir = as_path(settings["output_dir"])
+    if output_dir is None:
+        raise ValueError("Evaluation 7 output_dir is required")
+
+    screening_summary = output_dir / "evaluation7_condition_summary.csv"
+    screening_complete = staged_search and screening_summary.exists()
+
+    def build_eval_command(
+        *,
+        destination: Path,
+        condition_file: Path | None = None,
+        run_ids: list[int] | None = None,
+        run_count: int | None = None,
+        strict_inputs: bool = False,
+        condition_summary_copy: Path | None = None,
+    ) -> list[str]:
+        command = script_cmd(runner, "scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py")
+        if condition_file is not None:
+            add_arg(command, "--conditions-file", condition_file)
+        else:
+            add_multi_arg(command, "--n-states-list", n_states_list)
+            add_multi_arg(command, "--hamming-thresholds", hamming_thresholds)
+        add_arg(command, "--days", days)
+        if run_ids is not None:
+            add_multi_arg(command, "--run-ids", run_ids)
+        else:
+            add_arg(command, "--runs", run_count if run_count is not None else runs)
+        add_arg(command, "--dataset", dataset)
+        add_arg(command, "--condition-summary-copy", condition_summary_copy)
+        add_arg(command, "--patterns-template", patterns_template)
+        add_arg(command, "--state-series-template", settings.get("state_series_template"))
+        add_arg(command, "--adl-intervals", adl_intervals)
+        add_arg(command, "--labeled-casas", labeled)
+        add_arg(command, "--output-dir", destination)
+        add_arg(command, "--min-overlap-ratio-for-true-label", settings["min_overlap_ratio_for_true_label"])
+        add_arg(command, "--no-overlap-label", settings["no_overlap_label"])
+        add_arg(command, "--missing-pred-label", settings["missing_pred_label"])
+        add_arg(command, "--unknown-pred-label", settings["unknown_pred_label"])
+        add_arg(command, "--wake-window-minutes", settings["wake_window_minutes"])
+        add_arg(command, "--match-mode", settings["match_mode"])
+        add_arg(command, "--max-skip-duration-minutes", settings["max_skip_duration_minutes"])
+        add_arg(command, "--selection-metric", settings["selection_metric"])
+        if not strict_inputs:
+            add_flag(command, "--skip-missing-runs", settings["skip_missing_runs"])
+            add_flag(command, "--skip-missing-conditions", settings["skip_missing_conditions"])
+        return command
+
+    def grid_required_inputs(run_ids: list[int]) -> list[Path]:
+        required: list[Path] = []
+        if labeled is not None:
+            required.append(labeled)
+        elif adl_intervals is not None:
+            required.append(adl_intervals)
+        for n_states in n_states_list:
+            for hamming in hamming_thresholds:
+                if settings.get("state_series_template"):
+                    required.append(
+                        template_path(settings["state_series_template"], dataset, n_states, hamming, days)
+                    )
+                else:
+                    required.append(default_eval_state_series_path(n_states, hamming, days))
+                for run_id in run_ids:
+                    if patterns_template:
+                        required.append(
+                            template_path(
+                                patterns_template,
+                                dataset,
+                                n_states,
+                                hamming,
+                                days,
+                                run=run_id,
+                            )
+                        )
+                    else:
+                        required.append(default_proposed_path(dataset, n_states, hamming, days, run=run_id))
+        return required
+
+    def evaluation_outputs(destination: Path) -> list[Path]:
+        return [
+            destination / "evaluation7_condition_summary.csv",
+            destination / "evaluation7_condition_summary_by_run.csv",
+            destination / "evaluation7_pattern_set_details.csv",
+            destination / "evaluation7_by_pred_label.csv",
+            destination / "evaluation7_by_true_label.csv",
+            destination / "evaluation7_by_time_band.csv",
+            destination / "evaluation7_summary.json",
+        ]
 
     steps: list[EvaluationStep] = []
-    if settings.get("show_preparation_steps", True):
+    if settings.get("show_preparation_steps", True) and not screening_complete:
         for n_states in n_states_list:
             for hamming in hamming_thresholds:
                 cond_id = short_suffix(n_states, hamming, days)
@@ -643,22 +753,21 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                 )
                 intermediate_dir = state_series.parent
                 first_pattern = (
-                    template_path(settings["patterns_template"], dataset, n_states, hamming, days, run=1)
-                    if settings.get("patterns_template")
+                    template_path(patterns_template, dataset, n_states, hamming, days, run=1)
+                    if patterns_template
                     else default_proposed_path(dataset, n_states, hamming, days, run=1)
                 )
-                last_pattern = (
-                    template_path(settings["patterns_template"], dataset, n_states, hamming, days, run=runs)
-                    if settings.get("patterns_template")
-                    else default_proposed_path(dataset, n_states, hamming, days, run=runs)
-                )
-
                 build_cmd = script_cmd(runner, "scripts/run_build_network_from_labeled_casas.py")
                 add_arg(build_cmd, "--labeled-casas", labeled)
                 add_arg(build_cmd, "--sensor-map", sensor_map)
                 add_arg(build_cmd, "--days", days)
                 add_arg(build_cmd, "--n-states", n_states)
                 add_arg(build_cmd, "--hamming-threshold", hamming)
+                add_arg(
+                    build_cmd,
+                    "--smoothing-window-sec",
+                    settings.get("smoothing_window_sec", SMOOTHING_WINDOW_SEC),
+                )
                 steps.append(
                     EvaluationStep(
                         f"eval7_{cond_id}_build_network",
@@ -674,10 +783,14 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                 add_arg(llm_cmd, "--days", days)
                 add_arg(llm_cmd, "--n-states", n_states)
                 add_arg(llm_cmd, "--hamming-threshold", hamming)
-                add_arg(llm_cmd, "--runs", runs)
+                add_arg(llm_cmd, "--runs", 1 if staged_search else runs)
                 expected_patterns = [first_pattern]
-                if runs > 1:
-                    expected_patterns.append(last_pattern)
+                if not staged_search and runs > 1:
+                    expected_patterns.append(
+                        template_path(patterns_template, dataset, n_states, hamming, days, run=runs)
+                        if patterns_template
+                        else default_proposed_path(dataset, n_states, hamming, days, run=runs)
+                    )
                 steps.append(
                     EvaluationStep(
                         f"eval7_{cond_id}_llm",
@@ -708,67 +821,88 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                     )
                 )
 
-    eval_cmd = script_cmd(runner, "scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py")
-    add_multi_arg(eval_cmd, "--n-states-list", n_states_list)
-    add_multi_arg(eval_cmd, "--hamming-thresholds", hamming_thresholds)
-    add_arg(eval_cmd, "--days", days)
-    add_arg(eval_cmd, "--runs", runs)
-    add_arg(eval_cmd, "--dataset", dataset)
-    add_arg(eval_cmd, "--patterns-template", settings.get("patterns_template"))
-    add_arg(eval_cmd, "--state-series-template", settings.get("state_series_template"))
-    add_arg(eval_cmd, "--adl-intervals", adl_intervals)
-    add_arg(eval_cmd, "--labeled-casas", labeled)
-    add_arg(eval_cmd, "--output-dir", output_dir)
-    add_arg(eval_cmd, "--min-overlap-ratio-for-true-label", settings["min_overlap_ratio_for_true_label"])
-    add_arg(eval_cmd, "--no-overlap-label", settings["no_overlap_label"])
-    add_arg(eval_cmd, "--missing-pred-label", settings["missing_pred_label"])
-    add_arg(eval_cmd, "--unknown-pred-label", settings["unknown_pred_label"])
-    add_arg(eval_cmd, "--wake-window-minutes", settings["wake_window_minutes"])
-    add_arg(eval_cmd, "--match-mode", settings["match_mode"])
-    add_arg(eval_cmd, "--max-skip-duration-minutes", settings["max_skip_duration_minutes"])
-    add_arg(eval_cmd, "--selection-metric", settings["selection_metric"])
-    add_flag(eval_cmd, "--skip-missing-runs", settings["skip_missing_runs"])
-    add_flag(eval_cmd, "--skip-missing-conditions", settings["skip_missing_conditions"])
+    if not staged_search:
+        steps.append(
+            EvaluationStep(
+                "eval7_evaluate",
+                "4. 評価7を実行",
+                "提案手法のみを対象に、Kとハミング距離の全条件でADL解釈ラベルset一致を比較します。",
+                build_eval_command(destination=output_dir, run_count=runs),
+                grid_required_inputs(list(range(1, runs + 1))),
+                evaluation_outputs(output_dir),
+            )
+        )
+        return steps
 
-    required_inputs: list[Path] = []
+    if not screening_complete:
+        steps.append(
+            EvaluationStep(
+                "eval7_screening",
+                "4. 全条件を1回評価して上位候補を決める",
+                "全条件のrun 1を評価します。summaryが既にあれば一括実行ではスキップされます。",
+                build_eval_command(destination=output_dir, run_count=1),
+                grid_required_inputs([1]),
+                [screening_summary],
+            )
+        )
+
+    manifest = output_dir / f"evaluation7_top{top_n}_{total_runs}runs_conditions.csv"
+    evaluation_run_ids = list(range(1, total_runs + 1))
+    repeat_cmd = script_cmd(runner, "scripts/run_evaluation7_top_condition_repeats.py")
+    add_arg(repeat_cmd, "--screening-summary", screening_summary)
+    add_arg(repeat_cmd, "--manifest", manifest)
+    add_arg(repeat_cmd, "--top-n", top_n)
+    add_arg(repeat_cmd, "--total-runs", total_runs)
+    add_arg(repeat_cmd, "--days", days)
+    add_arg(repeat_cmd, "--dataset", dataset)
+    repeat_expected_outputs = [manifest]
+    if screening_summary.exists():
+        try:
+            selected_rows = select_top_condition_rows(screening_summary, top_n)
+        except (OSError, ValueError):
+            selected_rows = []
+        repeat_expected_outputs.extend(
+            default_proposed_path(
+                dataset,
+                int(row["n_states"]),
+                int(row["hamming_threshold"]),
+                days,
+                run=run_id,
+            )
+            for row in selected_rows
+            for run_id in range(2, total_runs + 1)
+        )
+    steps.append(
+        EvaluationStep(
+            "eval7_top_repeats",
+            f"5. 上位{top_n}条件を合計{total_runs}回まで実行",
+            f"既存のrun 1を再利用し、上位条件についてrun 2〜{total_runs}だけを追加生成します。",
+            repeat_cmd,
+            [screening_summary],
+            repeat_expected_outputs,
+        )
+    )
+
+    final_output_dir = output_dir / f"top{top_n}_{total_runs}runs"
+    final_required_inputs = [manifest]
     if labeled is not None:
-        required_inputs.append(labeled)
+        final_required_inputs.append(labeled)
     elif adl_intervals is not None:
-        required_inputs.append(adl_intervals)
-    for n_states in n_states_list:
-        for hamming in hamming_thresholds:
-            if settings.get("state_series_template"):
-                required_inputs.append(
-                    template_path(settings["state_series_template"], dataset, n_states, hamming, days)
-                )
-            else:
-                required_inputs.append(default_eval_state_series_path(n_states, hamming, days))
-            for run in range(1, runs + 1):
-                if settings.get("patterns_template"):
-                    required_inputs.append(
-                        template_path(settings["patterns_template"], dataset, n_states, hamming, days, run=run)
-                    )
-                else:
-                    required_inputs.append(default_proposed_path(dataset, n_states, hamming, days, run=run))
-
-    expected_outputs = [
-        output_dir / "evaluation7_condition_summary.csv",
-        output_dir / "evaluation7_condition_summary_by_run.csv",
-        output_dir / "evaluation7_pattern_set_details.csv",
-        output_dir / "evaluation7_by_pred_label.csv",
-        output_dir / "evaluation7_by_true_label.csv",
-        output_dir / "evaluation7_by_time_band.csv",
-        output_dir / "evaluation7_summary.json",
-    ]
-
+        final_required_inputs.append(adl_intervals)
     steps.append(
         EvaluationStep(
             "eval7_evaluate",
-            "4. 評価7を実行",
-            "提案手法のみを対象に、Kとハミング距離の全条件でADL解釈ラベルset一致を比較します。",
-            eval_cmd,
-            required_inputs,
-            expected_outputs,
+            f"6. 上位{top_n}条件の{total_runs}回平均で最適条件を選ぶ",
+            f"初回スクリーニングrun 1を含むrun 1〜{total_runs}の平均を比較します。",
+            build_eval_command(
+                destination=final_output_dir,
+                condition_file=manifest,
+                run_ids=evaluation_run_ids,
+                strict_inputs=True,
+                condition_summary_copy=manifest,
+            ),
+            final_required_inputs,
+            evaluation_outputs(final_output_dir),
         )
     )
     return steps

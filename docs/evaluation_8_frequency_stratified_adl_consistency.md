@@ -10,10 +10,10 @@
 
 | 条件 | scope | 入力 | 出力先 |
 |---|---|---|---|
-| 30日・手法比較 | `comparison_30days` | 評価6のproposed / direct-log詳細CSV | `results/8_vs_llm/` |
+| 14日・手法比較 | `comparison_14days` | 評価6のproposed / direct-log詳細CSV | `results/8_vs_llm/` |
 | 154日・提案手法のみ | `proposed_154days` | 154日提案手法JSON 5 run、154日state series、ADL正解データ | `results/8_proposed/` |
 
-### 30日・手法比較
+### 14日・手法比較
 
 更新後の評価6詳細CSVを使う。
 
@@ -63,7 +63,7 @@
 |---|---|
 | `evaluation8_frequency_band_details.csv` | 評価6の詳細に `num_occurrences` と `frequency_band` を加えたレコード単位出力。 |
 | `evaluation8_by_frequency_band.csv` | methodをまとめた頻度帯別集計。 |
-| `evaluation8_by_frequency_band_by_method.csv` | 30日・手法比較だけで出力するmethod × frequency band別集計。提案手法のみでは重複するため出力しない。 |
+| `evaluation8_by_frequency_band_by_method.csv` | 14日・手法比較だけで出力するmethod × frequency band別集計。提案手法のみでは重複するため出力しない。 |
 | `evaluation8_occurrence_weighted_summary.csv` | methodごとの全体occurrence-weighted指標。 |
 | `evaluation8_summary.json` | 入力、モード、method一覧、各集計を記録する再現用summary。 |
 | `evaluation8_frequency_distribution.png` | 154日・提案手法のみの固定帯モードで出力する、帯別の平均パターン数分布。 |
@@ -75,12 +75,12 @@
 
 ## 実行方法
 
-### 30日・手法比較
+### 14日・手法比較
 
 ```bash
 uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
-  --analysis-scope comparison_30days \
-  --evaluation6-details results/6_adl_match/15_1_30days/evaluation6_pattern_set_details_by_method.csv \
+  --analysis-scope comparison_14days \
+  --evaluation6-details results/6_adl_match/15_1_14days/evaluation6_pattern_set_details_by_method.csv \
   --output-dir results/8_vs_llm \
   --frequency-band-mode tertile
 ```
@@ -126,4 +126,4 @@ uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
   --frequency-band-mode tertile
 ```
 
-30日比較の結果は `evaluation8_by_frequency_band_by_method.csv`、154日提案手法のみの結果は `evaluation8_by_frequency_band.csv` でLow / Middle / Highの`mean_multilabel_precision`、`mean_multilabel_recall`、`mean_multilabel_f1`を比較する。高頻度帯のPrecisionが高いかは、その値を確認して判断し、頻度のみから有用性を結論付けない。
+14日比較の結果は `evaluation8_by_frequency_band_by_method.csv`、154日提案手法のみの結果は `evaluation8_by_frequency_band.csv` でLow / Middle / Highの`mean_multilabel_precision`、`mean_multilabel_recall`、`mean_multilabel_f1`を比較する。高頻度帯のPrecisionが高いかは、その値を確認して判断し、頻度のみから有用性を結論付けない。

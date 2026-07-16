@@ -14,7 +14,7 @@
 - 入力: イベントDataFrame
 - 出力: 1秒粒度の状態ベクトルDataFrame、連続同一状態を圧縮した状態ベクトル
 - 対応ファイル: `src/behavior_pattern_mining/visualization/state_transition_visualizer.py`, `scripts/run_build_network_from_labeled_casas.py`
-- 役割: Sample-and-Holdで各センサーのON/OFF状態を生成し、遅延OFF窓幅5秒でスムージングし、連続する同一状態を圧縮する。
+- 役割: Sample-and-Holdで各センサーのON/OFF状態を生成し、遅延OFF窓幅（既定5秒、`--smoothing-window-sec` で変更可能）でスムージングし、連続する同一状態を圧縮する。
 
 ## 3. Representative state extraction / mapping
 
@@ -67,14 +67,14 @@
 
 ## 7.3 評価6: LLM ADL interpretation set match
 
-- 入力: `output/aruba_15_1_30days/llm_sequences_modes_15_1_30days_1.json`, `output/llm_direct_15_1_30days/1.json`, `output/6_adl_evaluation_30/state_series.csv`, `new_labeled_data/aruba.txt`
-- 出力: `results/6_adl_match/15_1_30days/evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_time_band_by_method.csv`, `evaluation6_comparison_summary.json`
+- 入力: `output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json`, `output/llm_direct_15_1_14days/1.json`, `output/6_adl_evaluation_14/state_series.csv`, `new_labeled_data/aruba.txt`
+- 出力: `results/6_adl_match/15_1_14days/evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_time_band_by_method.csv`, `evaluation6_comparison_summary.json`
 - 対応ファイル: `scripts/evaluate_6_compare_adl_interpretation_set.py`, `src/behavior_pattern_mining/evaluation/adl_interpretation_set.py`
-- 役割: LLMが `ADL系列ラベル` として付けた解釈ラベル集合と、パターン出現区間がCASAS ADL区間と重なって得られる正解ADL集合を、順序を無視したset評価で比較する。提案手法は `sequence × time_band` 単位へ展開し、対象時間帯の出現だけで評価する。提案手法とLLM単独ベースラインの比較では、両手法を30日版に揃える。`--runs` で複数回実行結果の平均を出せる。
+- 役割: LLMが `ADL系列ラベル` として付けた解釈ラベル集合と、パターン出現区間がCASAS ADL区間と重なって得られる正解ADL集合を、順序を無視したset評価で比較する。提案手法は `sequence × time_band` 単位へ展開し、対象時間帯の出現だけで評価する。提案手法とLLM単独ベースラインの比較では、両手法を14日版に揃える。`--runs` で複数回実行結果の平均を出せる。
 
 ## 7.5 評価8: Frequency-stratified ADL consistency
 
-- 入力: 30日手法比較では評価6の `evaluation6_pattern_set_details_by_method.csv`、154日提案手法単独では提案手法JSON・154日state series・ADL正解データ。
+- 入力: 14日手法比較では評価6の `evaluation6_pattern_set_details_by_method.csv`、154日提案手法単独では提案手法JSON・154日state series・ADL正解データ。
 - 出力: `results/8_vs_llm/` と `results/8_proposed/` に保存する。後者は単一methodなので重複する `evaluation8_by_frequency_band_by_method.csv` を出力しない。
 - 対応ファイル: `scripts/evaluate_8_frequency_stratified_adl_consistency.py`。
 - 役割: 評価6のパターン単位set指標を、`num_occurrences` のmethod内三分位（Low / Middle / High）で後段集計する。time-band awareな提案手法レコードは `sequence × time_band` ごとの出現回数を使う。

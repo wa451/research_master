@@ -72,7 +72,8 @@
 ```bash
 uv run python scripts/run_build_network_from_labeled_casas.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --sensor-map configs/aruba_sensor_map.json
+  --sensor-map configs/aruba_sensor_map.json \
+  --smoothing-window-sec 5
 ```
 
 ### 2. 🟨 **条件付き** 状態遷移ネットワークからLLMパターンを抽出する

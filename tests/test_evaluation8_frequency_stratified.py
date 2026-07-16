@@ -3,9 +3,11 @@ from __future__ import annotations
 import csv
 import importlib.util
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "evaluate_8_frequency_stratified_adl_consistency.py"
@@ -30,8 +32,15 @@ def row(pattern_id: str, occurrences: int, precision: float) -> dict[str, object
 
 class Evaluation8FrequencyStratifiedTests(unittest.TestCase):
     def test_default_output_directories_follow_analysis_scope(self) -> None:
+        self.assertEqual(evaluation8.default_output_dir("comparison_14days").name, "8_vs_llm")
         self.assertEqual(evaluation8.default_output_dir("comparison_30days").name, "8_vs_llm")
         self.assertEqual(evaluation8.default_output_dir("proposed_154days").name, "8_proposed")
+
+    def test_default_scope_is_14_day_comparison(self) -> None:
+        with patch.object(sys, "argv", [str(SCRIPT_PATH)]):
+            args = evaluation8.parse_args()
+
+        self.assertEqual(args.analysis_scope, "comparison_14days")
 
     def test_tertiles_are_stable_and_near_equal(self) -> None:
         rows = [

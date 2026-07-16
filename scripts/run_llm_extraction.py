@@ -24,11 +24,19 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Number of days used to choose picture/input and output directories",
     )
-    parser.add_argument(
+    run_group = parser.add_mutually_exclusive_group()
+    run_group.add_argument(
         "--runs",
         type=int,
         default=None,
         help="Number of LLM runs to generate. Defaults to configs/default.yaml llm.runs_default.",
+    )
+    run_group.add_argument(
+        "--run-ids",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Explicit run IDs to generate, e.g. 2 3 4. Cannot be combined with --runs.",
     )
     parser.add_argument(
         "--n-states",
@@ -50,6 +58,7 @@ if __name__ == "__main__":
     pattern_extractor.main(
         days=args.days,
         runs=args.runs,
+        run_ids=args.run_ids,
         n_states=args.n_states,
         hamming_threshold=args.hamming_threshold,
     )

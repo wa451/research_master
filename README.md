@@ -145,45 +145,45 @@ uv run python scripts/evaluate_adl_correspondence.py \
 
 `frequency`, `rule_light`, `rule_medium`, `rule_strong` の入力ファイルが存在しない場合は、既定では `--state-series` から自動生成します。
 
-評価6で提案手法とLLM単独ベースラインのADL解釈ラベルを比較する場合は、両手法を30日版で揃えます。
+評価6で提案手法とLLM単独ベースラインのADL解釈ラベルを比較する場合は、両手法を14日版で揃えます。
 
 ```bash
 uv run python scripts/run_build_network_from_labeled_casas.py \
   --labeled-casas new_labeled_data/aruba.txt \
   --sensor-map configs/aruba_sensor_map.json \
-  --days 30
+  --days 14
 
-uv run python scripts/run_llm_extraction.py --days 30
+uv run python scripts/run_llm_extraction.py --days 14
 
 uv run python scripts/evaluate_adl_labels.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --state-table state/aruba_15_1_30days.txt \
+  --state-table state/aruba_15_1_14days.txt \
   --sensor-map configs/aruba_sensor_map.json \
-  --patterns output/aruba_15_1_30days/llm_sequences_modes_15_1_30days_1.json \
-  --output-dir output/6_adl_evaluation_30 \
-  --write-state-series output/6_adl_evaluation_30/state_series.csv
+  --patterns output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json \
+  --output-dir output/6_adl_evaluation_14 \
+  --write-state-series output/6_adl_evaluation_14/state_series.csv
 
 uv run python scripts/run_direct_log_baseline.py \
-  --log-days 30 \
+  --log-days 14 \
   --extract-only
 
 uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
-  --patterns-proposed output/aruba_15_1_30days/llm_sequences_modes_15_1_30days_1.json \
-  --patterns-direct output/llm_direct_15_1_30days/1.json \
-  --state-series output/6_adl_evaluation_30/state_series.csv \
+  --patterns-proposed output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json \
+  --patterns-direct output/llm_direct_15_1_14days/1.json \
+  --state-series output/6_adl_evaluation_14/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
   --output-dir results/6_adl_match \
   --min-overlap-ratio-for-true-label 0.10
 ```
 
-評価6の結果は、指定したroot直下の条件別ディレクトリに保存されます。既定条件では `results/6_adl_match/15_1_30days/` です。
+評価6の結果は、指定したroot直下の条件別ディレクトリに保存されます。既定条件では `results/6_adl_match/15_1_14days/` です。
 
 5回分の平均を出す場合は、提案手法JSONと直接ログJSONをそれぞれ5回分用意し、最後の評価6比較コマンドに `--runs 5` を追加します。生成コマンドは `docs/evaluation_6_adl_interpretation_set.md` を参照してください。
 
 ## 主要スクリプト
 
 - `scripts/run_build_network.py`: 前処理、代表状態抽出、遷移ネットワーク構築、可視化、JSON出力。
-- `scripts/run_build_network_from_labeled_casas.py`: ラベル付きCASAS txtからセンサーイベントを取り出し、代表状態抽出、遷移ネットワーク構築、図・JSON・状態テーブル出力を実行。`--n-states` と `--hamming-threshold` で条件を変更できる。
+- `scripts/run_build_network_from_labeled_casas.py`: ラベル付きCASAS txtからセンサーイベントを取り出し、代表状態抽出、遷移ネットワーク構築、図・JSON・状態テーブル出力を実行。`--n-states`、`--hamming-threshold`、`--smoothing-window-sec` で条件を変更できる。
 - `scripts/run_baselines.py`: 遷移確率ベースラインと頻度ベースラインを生成。
 - `scripts/run_llm_extraction.py`: モード別遷移JSONからLLMで行動パターンを抽出。`--n-states`, `--hamming-threshold`, `--runs 5` で条件別・複数回の提案手法出力を生成。
 - `scripts/run_direct_log_baseline.py`: ラベル付きCASAS txt由来のセンサーイベントを使い、直接ログLLMベースラインを実行。`--n-states`, `--hamming-threshold`, `--runs 5` で条件別・複数回のLLM単独ベースライン出力を生成。
@@ -193,7 +193,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 - `scripts/evaluate_condition_metrics.py`: support/confidence/時間間隔条件でLLM系列を評価。
 - `scripts/evaluate_adl_labels.py`: ラベル付きCASASデータのADL区間とLLM系列パターンを照合し、ADLカテゴリ別Precision/Recall/F1と境界誤差を評価。
 - `scripts/evaluate_adl_correspondence.py`: frequency, rule-filtered frequency, FP-Growth系baseline, proposed method の系列パターンについて、ADL-grounded pattern rate と Useless pattern rate を比較。
-- `scripts/evaluate_6_compare_adl_interpretation_set.py`: 評価6について、30日版の提案手法とLLM単独ベースラインを比較。`--runs 5` で5回分の平均も出力できる。
+- `scripts/evaluate_6_compare_adl_interpretation_set.py`: 評価6について、14日版の提案手法とLLM単独ベースラインを比較。`--runs 5` で5回分の平均も出力できる。
 
 新しい実行では `scripts/` 側を使ってください。
 
@@ -223,8 +223,8 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 - `output/aruba_15_1_154days/evaluation_report_15_1_154days_*.txt`: 評価レポート。
 - `results/4_adl_detect/*.csv`, `evaluation_summary.json`: ADLラベル付き単一手法評価の出力。`merged_predictions.csv`, `filtered_predictions.csv`, `adl_interval_hit_metrics.csv` も含む。
 - `results/5_pattern_quality/evaluation5_*.csv`, `evaluation5_summary.json`: 複数手法のパターン単位ADL-grounded/Useless評価の出力。
-- `results/6_adl_match/15_1_30days/*.csv`, `evaluation6_comparison_summary.json`: 評価6の提案手法/LLM単独ベースライン比較。`evaluation6_method_comparison.csv` は主比較表、`evaluation6_method_comparison_by_run.csv` はrun別結果。
-- `results/8_vs_llm/*.csv` と `results/8_proposed/*.csv`: 評価8の頻度帯別ADL整合性分析。前者は30日proposed / direct-log比較、後者は154日提案手法5 runの平均で、結果を混在させない。
+- `results/6_adl_match/15_1_14days/*.csv`, `evaluation6_comparison_summary.json`: 評価6の提案手法/LLM単独ベースライン比較。`evaluation6_method_comparison.csv` は主比較表、`evaluation6_method_comparison_by_run.csv` はrun別結果。
+- `results/8_vs_llm/*.csv` と `results/8_proposed/*.csv`: 評価8の頻度帯別ADL整合性分析。前者は14日proposed / direct-log比較、後者は154日提案手法5 runの平均で、結果を混在させない。
 
 ## 再現実験
 
