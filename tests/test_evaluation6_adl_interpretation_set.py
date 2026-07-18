@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import tempfile
 import unittest
@@ -17,6 +18,11 @@ from src.behavior_pattern_mining.evaluation.adl_interpretation_set import (
     normalize_label_set,
     set_metrics,
 )
+from src.behavior_pattern_mining.evaluation.llm_usage import (
+    load_direct_usage_by_run,
+    load_proposed_run_usage,
+    summarize_usage,
+)
 
 
 def ts(value: str) -> datetime:
@@ -24,6 +30,104 @@ def ts(value: str) -> datetime:
 
 
 class Evaluation6ADLInterpretationSetTests(unittest.TestCase):
+    def test_llm_usage_comparison_averages_run_totals_across_five_runs(self) -> None:
+        fieldnames = [
+            "run",
+            "mode",
+            "duration_sec",
+            "prompt_tokens",
+            "response_tokens",
+            "total_tokens",
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            proposed_usage_rows = []
+            for run in range(1, 6):
+                path = root / f"llm_modes_metrics_15_1_14days_run{run}.csv"
+                with path.open("w", encoding="utf-8", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    for mode in ("Morning", "Daytime", "Night", "Midnight"):
+                        writer.writerow(
+                            {
+                                "run": run,
+                                "mode": mode,
+                                "duration_sec": 1.0,
+                                "prompt_tokens": 10,
+                                "response_tokens": 2,
+                                "total_tokens": 12,
+                            }
+                        )
+                usage, reason = load_proposed_run_usage(path, run)
+                self.assertIsNone(reason)
+                self.assertIsNotNone(usage)
+                proposed_usage_rows.append(usage)
+
+            direct_path = root / "llm_direct_metrics_14days.csv"
+            with direct_path.open("w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(
+                    f,
+                    fieldnames=[
+                        "run",
+                        "duration_sec",
+                        "prompt_tokens",
+                        "response_tokens",
+                        "total_tokens",
+                    ],
+                )
+                writer.writeheader()
+                for run in range(1, 6):
+                    writer.writerow(
+                        {
+                            "run": run,
+                            "duration_sec": 3.0,
+                            "prompt_tokens": 100,
+                            "response_tokens": 10,
+                            "total_tokens": 110,
+                        }
+                    )
+
+            direct_usage_rows, missing = load_direct_usage_by_run(direct_path, range(1, 6))
+
+        self.assertEqual(missing, [])
+        proposed_summary = summarize_usage("proposed", list(range(1, 6)), proposed_usage_rows)
+        direct_summary = summarize_usage(
+            "direct_log_baseline",
+            list(range(1, 6)),
+            direct_usage_rows,
+        )
+
+        self.assertEqual(proposed_summary["num_runs_with_complete_metrics"], 5)
+        self.assertEqual(proposed_summary["avg_recorded_api_calls_per_run"], 4.0)
+        self.assertEqual(proposed_summary["avg_api_response_duration_sec_per_run"], 4.0)
+        self.assertEqual(proposed_summary["avg_total_tokens_per_run"], 48.0)
+        self.assertEqual(direct_summary["num_runs_with_complete_metrics"], 5)
+        self.assertEqual(direct_summary["avg_recorded_api_calls_per_run"], 1.0)
+        self.assertEqual(direct_summary["avg_api_response_duration_sec_per_run"], 3.0)
+        self.assertEqual(direct_summary["avg_total_tokens_per_run"], 110.0)
+
+    def test_llm_usage_missing_run_is_not_replaced_with_zero(self) -> None:
+        summary = summarize_usage(
+            "proposed",
+            [1, 2, 3, 4, 5],
+            [
+                {
+                    "method": "proposed",
+                    "run": 1,
+                    "recorded_api_calls": 4,
+                    "api_response_duration_sec": 8.0,
+                    "prompt_tokens": 40.0,
+                    "response_tokens": 4.0,
+                    "total_tokens": 44.0,
+                }
+            ],
+        )
+
+        self.assertEqual(summary["num_runs_evaluated"], 5)
+        self.assertEqual(summary["num_runs_with_complete_metrics"], 1)
+        self.assertEqual(summary["avg_api_response_duration_sec_per_run"], 8.0)
+        self.assertEqual(summary["avg_total_tokens_per_run"], 44.0)
+
     def test_exact_set_match_ignores_order(self) -> None:
         metrics = set_metrics(["Meal", "Relax"], ["Relax", "Meal"])
 

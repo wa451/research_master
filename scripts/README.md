@@ -17,6 +17,6 @@
 - `evaluate_condition_metrics.py`: 条件ベース評価。
 - `evaluate_adl_labels.py`: ラベル付きCASASデータによるADL評価。
 - `evaluate_adl_correspondence.py`: 頻度ベースライン、ルールフィルタ済み頻度ベースライン、提案手法のADLラベル対応を横比較する評価。
-- `evaluate_6_compare_adl_interpretation_set.py`: 評価6について、14日版の提案手法とLLM単独ベースラインを同じ状態系列上で比較する。`--runs 5` で複数run平均も出力できる。
+- `evaluate_6_compare_adl_interpretation_set.py`: 評価6について、14日版の提案手法とLLM単独ベースラインを同じ状態系列上で比較する。`--runs 5` でset一致指標に加え、1 run合計のトークン数・API応答時間の5回平均も出力する。
 
 新しく実行する場合は、この `scripts/` 側を使ってください。

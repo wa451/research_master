@@ -57,6 +57,8 @@
 
 固定帯は、各帯に含まれるパターン数の分布と、帯別Precision / Recall / F1の変化を可視化するための分析軸である。空の帯はCSV集計行を作らず、分布図では0件として表示する。頻度が高いことだけでパターンの有用性を結論付けない。
 
+`both` モードは入力評価を一度だけ実行し、その同じ評価レコードから `tertile` と `fixed` を続けて集計する。出力の上書きを避けるため、指定した `--output-dir` の下に `tertile/` と `fixed/` を作る。Streamlitアプリは選択式ではなく、常にこの `both` モードを使う。
+
 ## 出力
 
 | ファイル | 内容 |
@@ -103,6 +105,22 @@ uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
 ```
 
 図を保存しない場合は `--no-write-distribution-plots` を指定する。
+
+### 154日・提案手法のみ（三分位と固定回数帯を同時実行）
+
+```bash
+uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
+  --analysis-scope proposed_154days \
+  --patterns-proposed output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
+  --state-series output/5_adl_evaluation/state_series.csv \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --runs 5 \
+  --output-dir results/8_proposed \
+  --frequency-band-mode both \
+  --fixed-frequency-bin-edges 0,1,10,100,1000,10000
+```
+
+三分位の結果は `results/8_proposed/tertile/`、固定回数帯と図は `results/8_proposed/fixed/` に保存する。
 
 ### 154日・提案手法のみ
 

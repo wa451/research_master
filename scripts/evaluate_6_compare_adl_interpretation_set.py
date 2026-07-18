@@ -32,6 +32,12 @@ from src.behavior_pattern_mining.evaluation.adl_interpretation_set import (
     load_interpretation_patterns,
     time_band_for_timestamp,
 )
+from src.behavior_pattern_mining.evaluation.llm_usage import (
+    LLM_USAGE_COMPARISON_FIELDNAMES,
+    load_direct_usage_by_run,
+    load_proposed_run_usage,
+    summarize_usage,
+)
 
 
 EVAL6_DAYS = 14
@@ -156,6 +162,25 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--proposed-metrics-template",
+        type=str,
+        default=None,
+        help=(
+            "Optional proposed-method metrics path template. Use {run}. "
+            "By default, llm_modes_metrics_{K}_{hamming}_{days}days_run{run}.csv "
+            "is read beside --patterns-proposed."
+        ),
+    )
+    parser.add_argument(
+        "--direct-metrics",
+        type=Path,
+        default=None,
+        help=(
+            "Optional direct-baseline metrics CSV. By default, "
+            "llm_direct_metrics_{days}days.csv is read beside --patterns-direct."
+        ),
+    )
+    parser.add_argument(
         "--state-series",
         type=Path,
         default=ROOT_DIR / "output" / f"6_adl_evaluation_{EVAL6_DAYS}" / "state_series.csv",
@@ -273,6 +298,23 @@ def path_for_run(base_path: Path, run: int, template: str | None) -> Path:
     if sep and last.isdigit():
         return base_path.with_name(f"{prefix}_{run}{suffix}")
     return base_path.with_name(f"{stem}_{run}{suffix}")
+
+
+def proposed_metrics_path_for_run(
+    patterns_path: Path,
+    run: int,
+    template: str | None,
+    condition: str,
+) -> Path:
+    if template:
+        return Path(template.format(run=run))
+    return patterns_path.parent / f"llm_modes_metrics_{condition}_run{run}.csv"
+
+
+def direct_metrics_path(patterns_path: Path, explicit_path: Path | None, days: int) -> Path:
+    if explicit_path is not None:
+        return explicit_path
+    return patterns_path.parent / f"llm_direct_metrics_{days}days.csv"
 
 
 def pattern_records_from_interpretation_patterns(
@@ -481,6 +523,64 @@ def main() -> None:
             run_summary_rows.append(summary_metrics)
 
     summary_rows = summarize_runs(run_summary_rows)
+    evaluated_runs_by_method = {
+        method: sorted(
+            {
+                int(row["run"])
+                for row in run_summary_rows
+                if row["method"] == method
+            }
+        )
+        for method in ("proposed", "direct_log_baseline")
+    }
+    llm_usage_run_rows: list[dict] = []
+    missing_llm_usage: list[dict] = []
+
+    for run in evaluated_runs_by_method["proposed"]:
+        patterns_path = path_for_run(
+            args.patterns_proposed,
+            run,
+            args.patterns_proposed_template,
+        )
+        metrics_path = proposed_metrics_path_for_run(
+            patterns_path,
+            run,
+            args.proposed_metrics_template,
+            output_suffix,
+        )
+        usage, reason = load_proposed_run_usage(metrics_path, run)
+        if usage is not None:
+            llm_usage_run_rows.append(usage)
+        else:
+            missing_llm_usage.append(
+                {
+                    "method": "proposed",
+                    "run": run,
+                    "source_path": str(metrics_path),
+                    "reason": reason,
+                }
+            )
+
+    resolved_direct_metrics_path = direct_metrics_path(
+        args.patterns_direct,
+        args.direct_metrics,
+        args.days,
+    )
+    direct_usage_rows, direct_missing_rows = load_direct_usage_by_run(
+        resolved_direct_metrics_path,
+        evaluated_runs_by_method["direct_log_baseline"],
+    )
+    llm_usage_run_rows.extend(direct_usage_rows)
+    missing_llm_usage.extend(direct_missing_rows)
+    llm_usage_summary_rows = [
+        summarize_usage(
+            method,
+            evaluated_runs_by_method[method],
+            llm_usage_run_rows,
+        )
+        for method in ("proposed", "direct_log_baseline")
+    ]
+
     pred_label_rows = []
     true_label_rows = []
     time_band_rows = []
@@ -517,6 +617,11 @@ def main() -> None:
         SUMMARY_FIELDNAMES,
     )
     write_csv_rows(
+        args.output_dir / "evaluation6_llm_usage_comparison.csv",
+        llm_usage_summary_rows,
+        LLM_USAGE_COMPARISON_FIELDNAMES,
+    )
+    write_csv_rows(
         args.output_dir / "evaluation6_pattern_set_details_by_method.csv",
         all_detail_rows,
         DETAIL_FIELDNAMES,
@@ -551,6 +656,8 @@ def main() -> None:
         "patterns_proposed_template": args.patterns_proposed_template,
         "patterns_direct": str(args.patterns_direct),
         "patterns_direct_template": args.patterns_direct_template,
+        "proposed_metrics_template": args.proposed_metrics_template,
+        "direct_metrics": str(resolved_direct_metrics_path),
         "runs_requested": args.runs,
         "skip_missing_runs": args.skip_missing_runs,
         "skipped_runs": skipped_runs,
@@ -572,6 +679,19 @@ def main() -> None:
         "methods": {row["method"]: row for row in summary_rows},
         "method_runs": run_summary_rows,
         "by_time_band": time_band_rows,
+        "llm_usage_comparison": {
+            "aggregation": (
+                "Sum recorded successful API calls within each run, then average "
+                "the run totals across runs with complete metrics."
+            ),
+            "duration_scope": "Gemini API response duration only",
+            "run_rows": llm_usage_run_rows,
+            "methods": {
+                row["method"]: row
+                for row in llm_usage_summary_rows
+            },
+            "missing_metrics": missing_llm_usage,
+        },
     }
     (args.output_dir / "evaluation6_comparison_summary.json").write_text(
         json.dumps(summary_payload, ensure_ascii=False, indent=2) + "\n",
@@ -586,6 +706,14 @@ def main() -> None:
             f"avg_occurrences={row['avg_num_pattern_occurrences']:.3f}, "
             f"mean_jaccard={row['mean_jaccard']:.6f}, "
             f"mean_f1={row['mean_multilabel_f1']:.6f}"
+        )
+    for row in llm_usage_summary_rows:
+        print(
+            f"{row['method']} usage: "
+            f"complete_runs={row['num_runs_with_complete_metrics']}/"
+            f"{row['num_runs_evaluated']}, "
+            f"avg_total_tokens={row['avg_total_tokens_per_run']}, "
+            f"avg_api_response_sec={row['avg_api_response_duration_sec_per_run']}"
         )
     if skipped_runs:
         print(f"Skipped method/runs: {len(skipped_runs)}")

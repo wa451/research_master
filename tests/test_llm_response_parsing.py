@@ -8,7 +8,9 @@ from pathlib import Path
 from src.behavior_pattern_mining.llm.client import parse_pattern_records
 from src.behavior_pattern_mining.llm.direct_log_extractor import (
     convert_labeled_casas_to_event_csv,
+    load_direct_metrics_by_run,
     output_has_adl_sequence_labels,
+    write_direct_metrics_by_run,
 )
 from src.behavior_pattern_mining.llm.pattern_extractor import (
     load_checkpoint_records,
@@ -19,6 +21,43 @@ from src.behavior_pattern_mining.llm.pattern_extractor import (
 
 
 class LlmResponseParsingTests(unittest.TestCase):
+    def test_direct_metrics_persist_across_incremental_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "llm_direct_metrics_14days.csv"
+            write_direct_metrics_by_run(
+                path,
+                {
+                    1: {
+                        "run": 1,
+                        "model": "test-model",
+                        "backend": "test",
+                        "duration_sec": 1.5,
+                        "prompt_tokens": 10,
+                        "response_tokens": 2,
+                        "total_tokens": 12,
+                        "attempts": 1,
+                    }
+                },
+            )
+            rows = load_direct_metrics_by_run(path)
+            rows[2] = {
+                "run": 2,
+                "model": "test-model",
+                "backend": "test",
+                "duration_sec": 2.5,
+                "prompt_tokens": 20,
+                "response_tokens": 3,
+                "total_tokens": 23,
+                "attempts": 1,
+            }
+            write_direct_metrics_by_run(path, rows)
+
+            reloaded = load_direct_metrics_by_run(path)
+
+        self.assertEqual(sorted(reloaded), [1, 2])
+        self.assertEqual(reloaded[1]["total_tokens"], "12")
+        self.assertEqual(reloaded[2]["total_tokens"], "23")
+
     def test_parse_json_array_only_response(self) -> None:
         records = parse_pattern_records(
             json.dumps(

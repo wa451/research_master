@@ -88,6 +88,10 @@ RESULT_GUIDES: dict[str, list[dict[str, str]]] = {
             "how_to_read": "runごとのばらつきを確認する。平均値だけでなく、特定runだけ大きく外れていないかを見る。",
         },
         {
+            "files": "evaluation6_llm_usage_comparison.csv",
+            "how_to_read": "手法ごとの1 run合計について、トークン数とAPI応答時間のrun平均・標準偏差を比較する。num_runs_with_complete_metricsも確認する。",
+        },
+        {
             "files": "evaluation6_pattern_set_details_by_method.csv",
             "how_to_read": "detailsとして、run, method, eval_pattern_id, group_pattern_id, time_band, pred_adl_labels, true_adl_labels, intersection_labels, union_labelsを見てズレの原因を確認する。",
         },
@@ -170,6 +174,7 @@ RESULT_FILE_ORDER: dict[str, list[str]] = {
     "評価6": [
         "evaluation6_method_comparison.csv",
         "evaluation6_method_comparison_by_run.csv",
+        "evaluation6_llm_usage_comparison.csv",
         "evaluation6_pattern_set_details_by_method.csv",
         "evaluation6_by_time_band_by_method.csv",
         "evaluation6_by_pred_label_by_method.csv",
@@ -680,6 +685,15 @@ def render_eval7_settings(common: dict) -> dict:
     }
 
 
+def evaluation8_scope_config(scope_label: str) -> tuple[str, int]:
+    """Map current and persisted Evaluation 8 labels to a CLI scope."""
+    if scope_label.startswith("154日"):
+        return "proposed_154days", 154
+    if scope_label.startswith("30日"):
+        return "comparison_30days", 30
+    return "comparison_14days", 14
+
+
 def render_eval8_settings(common: dict) -> dict:
     st.subheader("評価8: 頻度帯別ADL整合性評価")
     st.caption("評価6の指標を置き換えず、出現頻度の三分位または固定回数帯で後段分析します。")
@@ -692,9 +706,12 @@ def render_eval8_settings(common: dict) -> dict:
         ["154日: 提案手法のみ", "14日: 提案手法 vs LLM単独ベースライン"],
         index=0,
         horizontal=True,
+        key="evaluation8_analysis_scope",
     )
-    analysis_scope = "comparison_14days" if scope_label.startswith("14日") else "proposed_154days"
-    days = 14 if analysis_scope == "comparison_14days" else 154
+    # A previous dashboard version exposed a 30-day comparison label.  Treat a
+    # persisted value from that version as comparison rather than accidentally
+    # sending it through the 154-day proposed-only branch.
+    analysis_scope, days = evaluation8_scope_config(scope_label)
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -706,7 +723,7 @@ def render_eval8_settings(common: dict) -> dict:
     suffix = short_suffix(int(n_states), int(hamming), days)
 
     st.markdown("**入力・出力**")
-    if analysis_scope == "comparison_14days":
+    if analysis_scope in {"comparison_14days", "comparison_30days"}:
         details = st.text_input(
             "evaluation6 details file path",
             f"results/6_adl_match/{suffix}/evaluation6_pattern_set_details_by_method.csv",
@@ -747,20 +764,20 @@ def render_eval8_settings(common: dict) -> dict:
             "output directory",
             "results/8_proposed",
         )
-    frequency_band_mode = st.selectbox("frequency band mode", ["tertile", "fixed"], index=0)
-    fixed_frequency_bin_edges = "0,1,10,100,1000,10000"
+    frequency_band_mode = "both"
+    st.markdown("**頻度帯評価: 三分位 + 固定回数帯（同時実行）**")
+    fixed_frequency_bin_edges = st.text_input(
+        "固定頻度境界（カンマまたは空白区切り）",
+        "0,1,10,100,1000,10000",
+        help="各帯の下限です。0,1,10,100,1000,10000 は 0回、1–9回、…、10,000回以上を表します。",
+    )
     write_distribution_plots = True
-    if frequency_band_mode == "tertile":
-        st.caption("methodごとにnum_occurrences昇順で安定ソートし、できるだけ同数のLow / Middle / Highへ割り当てます。")
-    else:
-        fixed_frequency_bin_edges = st.text_input(
-            "固定頻度境界（カンマまたは空白区切り）",
-            fixed_frequency_bin_edges,
-            help="各帯の下限です。0,1,10,100,1000,10000 は 0回、1–9回、…、10,000回以上を表します。",
-        )
-        st.caption("固定回数帯はrun間で共通です。154日・提案手法のみでは分布図とPrecision / Recall / F1図も保存できます。")
-        if analysis_scope == "proposed_154days":
-            write_distribution_plots = st.checkbox("分布図・帯別指標図を保存", value=True)
+    st.caption(
+        "同じ評価レコードから三分位と固定回数帯を続けて集計し、結果を output directory の "
+        "tertile/ と fixed/ に分けて保存します。"
+    )
+    if analysis_scope == "proposed_154days":
+        write_distribution_plots = st.checkbox("固定回数帯の分布図・帯別指標図を保存", value=True)
 
     return {
         **common,
@@ -1122,7 +1139,7 @@ def render_results(default_dirs: list[Path], current_evaluation: str | None = No
             )
 
     st.markdown("**複数run比較**")
-    comparison_files = [path for path in discover_result_files([PROJECT_ROOT / "results"]) if path.name in {"evaluation8_by_frequency_band_by_method.csv", "evaluation7_condition_summary.csv", "evaluation6_method_comparison.csv", "evaluation5_summary_by_method.csv", "evaluation5_summary_by_method_by_run.csv", "adl_interval_hit_metrics.csv"}]
+    comparison_files = [path for path in discover_result_files([PROJECT_ROOT / "results"]) if path.name in {"evaluation8_by_frequency_band_by_method.csv", "evaluation7_condition_summary.csv", "evaluation6_method_comparison.csv", "evaluation6_llm_usage_comparison.csv", "evaluation5_summary_by_method.csv", "evaluation5_summary_by_method_by_run.csv", "adl_interval_hit_metrics.csv"}]
     if comparison_files:
         chosen = st.multiselect("比較に使うCSV", [display_path(path) for path in comparison_files], default=[display_path(comparison_files[0])])
         frames = []

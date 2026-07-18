@@ -50,6 +50,44 @@ SENSOR_MAP_PATH = ROOT_DIR / "configs" / "aruba_sensor_map.json"
 # 出力ルート（評価6の30日条件では llm_direct_{K}_{H}_{DAYS}days 配下に保存する）
 OUTPUT_DIR = ROOT_DIR / "output" / f"llm_direct_{LOG_DAYS}"
 
+DIRECT_METRICS_FIELDNAMES = [
+    "run",
+    "model",
+    "backend",
+    "duration_sec",
+    "prompt_tokens",
+    "response_tokens",
+    "total_tokens",
+    "attempts",
+]
+
+
+def load_direct_metrics_by_run(path: Path) -> dict[int, dict]:
+    """Load existing successful-run metrics so incremental runs do not erase them."""
+    if not path.exists():
+        return {}
+    with path.open(encoding="utf-8", newline="") as f:
+        rows = list(csv.DictReader(f))
+
+    by_run: dict[int, dict] = {}
+    for row in rows:
+        try:
+            run = int(row.get("run", ""))
+        except (TypeError, ValueError):
+            continue
+        by_run[run] = {field: row.get(field) for field in DIRECT_METRICS_FIELDNAMES}
+    return by_run
+
+
+def write_direct_metrics_by_run(path: Path, rows_by_run: dict[int, dict]) -> None:
+    """Write one durable metrics row per successful direct-log run."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=DIRECT_METRICS_FIELDNAMES)
+        writer.writeheader()
+        for run in sorted(rows_by_run):
+            writer.writerow(rows_by_run[run])
+
 PROMPT_TEMPLATE = """
 あなたはスマートホームのデータサイエンティストであり、人間の行動分析のエキスパートです。
 以下の入力は、ある単身高齢者宅のセンサログ（{DATASET}）から抽出された「代表状態の時系列」です。
@@ -526,7 +564,8 @@ def main(
         effective_output_dir.mkdir(parents=True, exist_ok=True)
 
         backend_name = "unknown"
-        metrics_rows: List[dict] = []
+        metrics_path = effective_output_dir / f"llm_direct_metrics_{effective_log_days}days.csv"
+        metrics_by_run = load_direct_metrics_by_run(metrics_path)
         for run_idx in range(1, effective_runs + 1):
             output_path = effective_output_dir / f"{run_idx}.json"
             if output_path.exists() and output_has_adl_sequence_labels(output_path):
@@ -557,18 +596,16 @@ def main(
                         json.dumps(records, ensure_ascii=False, indent=2),
                         encoding="utf-8",
                     )
-                    metrics_rows.append(
-                        {
-                            "run": run_idx,
-                            "model": MODEL_NAME,
-                            "backend": backend,
-                            "duration_sec": duration_sec,
-                            "prompt_tokens": usage.get("prompt_tokens"),
-                            "response_tokens": usage.get("response_tokens"),
-                            "total_tokens": usage.get("total_tokens"),
-                            "attempts": attempt + 1,
-                        }
-                    )
+                    metrics_by_run[run_idx] = {
+                        "run": run_idx,
+                        "model": MODEL_NAME,
+                        "backend": backend,
+                        "duration_sec": duration_sec,
+                        "prompt_tokens": usage.get("prompt_tokens"),
+                        "response_tokens": usage.get("response_tokens"),
+                        "total_tokens": usage.get("total_tokens"),
+                        "attempts": attempt + 1,
+                    }
                     break
                 except Exception as exc:
                     attempt += 1
@@ -600,22 +637,8 @@ def main(
             print("=" * 80)
 
         # メトリクスをCSVに保存
-        if metrics_rows:
-            metrics_path = effective_output_dir / f"llm_direct_metrics_{effective_log_days}days.csv"
-            with open(metrics_path, "w", encoding="utf-8", newline="") as f:
-                fieldnames = [
-                    "run",
-                    "model",
-                    "backend",
-                    "duration_sec",
-                    "prompt_tokens",
-                    "response_tokens",
-                    "total_tokens",
-                    "attempts",
-                ]
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(metrics_rows)
+        if metrics_by_run:
+            write_direct_metrics_by_run(metrics_path, metrics_by_run)
             print(f"トークン使用量と応答時間を保存しました: {metrics_path}")
     finally:
         if input_tmpdir is not None:

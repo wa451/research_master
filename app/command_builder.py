@@ -526,6 +526,7 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
             [
                 final_dir / "evaluation6_method_comparison.csv",
                 final_dir / "evaluation6_method_comparison_by_run.csv",
+                final_dir / "evaluation6_llm_usage_comparison.csv",
                 final_dir / "evaluation6_pattern_set_details_by_method.csv",
                 final_dir / "evaluation6_by_pred_label_by_method.csv",
                 final_dir / "evaluation6_by_true_label_by_method.csv",
@@ -549,8 +550,9 @@ def build_evaluation8_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     command = script_cmd(settings["runner"], "scripts/evaluate_8_frequency_stratified_adl_consistency.py")
     add_arg(command, "--analysis-scope", analysis_scope)
     add_arg(command, "--output-dir", output_dir)
-    add_arg(command, "--frequency-band-mode", settings["frequency_band_mode"])
-    if settings["frequency_band_mode"] == "fixed":
+    frequency_band_mode = settings["frequency_band_mode"]
+    add_arg(command, "--frequency-band-mode", frequency_band_mode)
+    if frequency_band_mode in {"fixed", "both"}:
         add_arg(command, "--fixed-frequency-bin-edges", settings["fixed_frequency_bin_edges"])
     add_arg(command, "--n-states", n_states)
     add_arg(command, "--hamming-threshold", hamming)
@@ -562,14 +564,19 @@ def build_evaluation8_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
             raise ValueError("Comparison analysis requires an Evaluation 6 details path.")
         add_arg(command, "--evaluation6-details", details)
         required_inputs = [details]
-        description = f"{days}日条件の評価6手法比較詳細CSVを、手法ごとの頻度帯へ後段集計します。"
-        expected_outputs = [
-            output_dir / "evaluation8_frequency_band_details.csv",
-            output_dir / "evaluation8_by_frequency_band.csv",
-            output_dir / "evaluation8_by_frequency_band_by_method.csv",
-            output_dir / "evaluation8_occurrence_weighted_summary.csv",
-            output_dir / "evaluation8_summary.json",
-        ]
+        description = f"{days}日条件の評価6手法比較詳細CSVを、三分位と固定回数帯の両方で後段集計します。"
+        mode_output_dirs = [output_dir / "tertile", output_dir / "fixed"] if frequency_band_mode == "both" else [output_dir]
+        expected_outputs = []
+        for mode_output_dir in mode_output_dirs:
+            expected_outputs.extend(
+                [
+                    mode_output_dir / "evaluation8_frequency_band_details.csv",
+                    mode_output_dir / "evaluation8_by_frequency_band.csv",
+                    mode_output_dir / "evaluation8_by_frequency_band_by_method.csv",
+                    mode_output_dir / "evaluation8_occurrence_weighted_summary.csv",
+                    mode_output_dir / "evaluation8_summary.json",
+                ]
+            )
     else:
         patterns = as_path(settings["patterns_proposed"])
         state_series = as_path(settings["state_series"])
@@ -590,9 +597,9 @@ def build_evaluation8_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
         add_arg(command, "--wake-window-minutes", settings["wake_window_minutes"])
         add_arg(command, "--match-mode", settings["match_mode"])
         add_arg(command, "--max-skip-duration-minutes", settings["max_skip_duration_minutes"])
-        if settings["frequency_band_mode"] == "fixed" and settings.get("write_distribution_plots", True):
+        if frequency_band_mode in {"fixed", "both"} and settings.get("write_distribution_plots", True):
             add_flag(command, "--write-distribution-plots", True)
-        elif settings["frequency_band_mode"] == "fixed":
+        elif frequency_band_mode in {"fixed", "both"}:
             add_flag(command, "--no-write-distribution-plots", True)
         run_paths = [
             proposed_run_path(
@@ -609,19 +616,25 @@ def build_evaluation8_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
         required_inputs = [*run_paths, state_series, *([labeled_casas or adl_intervals] if labeled_casas or adl_intervals else [])]
         description = (
             f"154日条件の提案手法JSONを{int(settings['runs'])} runで評価6と同じset一致処理へ通し、"
-            "runごとの頻度帯別結果を平均します。"
+            "三分位と固定回数帯の両方を一度に集計します。"
         )
-        expected_outputs = [
-            output_dir / "evaluation8_frequency_band_details.csv",
-            output_dir / "evaluation8_by_frequency_band.csv",
-            output_dir / "evaluation8_occurrence_weighted_summary.csv",
-            output_dir / "evaluation8_summary.json",
-        ]
-        if settings["frequency_band_mode"] == "fixed" and settings.get("write_distribution_plots", True):
+        mode_output_dirs = [output_dir / "tertile", output_dir / "fixed"] if frequency_band_mode == "both" else [output_dir]
+        expected_outputs = []
+        for mode_output_dir in mode_output_dirs:
             expected_outputs.extend(
                 [
-                    output_dir / "evaluation8_frequency_distribution.png",
-                    output_dir / "evaluation8_frequency_band_metrics.png",
+                    mode_output_dir / "evaluation8_frequency_band_details.csv",
+                    mode_output_dir / "evaluation8_by_frequency_band.csv",
+                    mode_output_dir / "evaluation8_occurrence_weighted_summary.csv",
+                    mode_output_dir / "evaluation8_summary.json",
+                ]
+            )
+        if frequency_band_mode in {"fixed", "both"} and settings.get("write_distribution_plots", True):
+            fixed_output_dir = output_dir / "fixed" if frequency_band_mode == "both" else output_dir
+            expected_outputs.extend(
+                [
+                    fixed_output_dir / "evaluation8_frequency_distribution.png",
+                    fixed_output_dir / "evaluation8_frequency_band_metrics.png",
                 ]
             )
 

@@ -133,11 +133,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--frequency-band-mode",
-        choices=["tertile", "fixed"],
+        choices=["tertile", "fixed", "both"],
         default="tertile",
         help=(
             "Frequency stratification mode. tertile assigns near-equal record counts per method; "
-            "fixed assigns numeric num_occurrences ranges."
+            "fixed assigns numeric num_occurrences ranges; both writes each mode to its own subdirectory."
         ),
     )
     parser.add_argument(
@@ -666,64 +666,60 @@ def write_fixed_range_plots(
     return [distribution_path.name, metrics_path.name]
 
 
-def main() -> None:
-    args = parse_args()
-    if args.output_dir is None:
-        args.output_dir = default_output_dir(args.analysis_scope)
-    if args.analysis_scope in COMPARISON_SCOPES:
-        if args.evaluation6_details is None:
-            raise ValueError("--evaluation6-details is required for a comparison analysis scope")
-        rows, occurrence_count_source = load_details(args.evaluation6_details, args)
-        input_summary = {"evaluation6_details": str(args.evaluation6_details)}
-    else:
-        rows, occurrence_count_source, input_summary = evaluate_proposed_154days(args)
-    fixed_edges = parse_fixed_frequency_bin_edges(
-        getattr(args, "fixed_frequency_bin_edges", ",".join(map(str, DEFAULT_FIXED_FREQUENCY_BIN_EDGES)))
-    )
-    frequency_bands = frequency_bands_for_mode(args.frequency_band_mode, fixed_edges)
-    assign_frequency_bands(rows, args.frequency_band_mode, fixed_edges)
-
+def write_mode_outputs(
+    args: argparse.Namespace,
+    source_rows: Sequence[dict[str, Any]],
+    mode: str,
+    fixed_edges: Sequence[int],
+    output_dir: Path,
+    occurrence_count_source: str,
+    input_summary: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Aggregate and write one band mode from already evaluated pattern rows."""
+    rows = [dict(row) for row in source_rows]
+    frequency_bands = frequency_bands_for_mode(mode, fixed_edges)
+    assign_frequency_bands(rows, mode, fixed_edges)
     overall_by_band = summaries_by_frequency_band(rows, frequency_bands)
     by_method_band = summaries_by_method_and_frequency_band(rows, frequency_bands)
     weighted_summary = occurrence_weighted_summaries(rows)
     methods = sorted({str(row["method"]) for row in rows})
     runs_evaluated = sorted({int(row.get("run") or 1) for row in rows})
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    write_csv_rows(args.output_dir / "evaluation8_frequency_band_details.csv", detail_output_rows(rows), DETAIL_FIELDNAMES)
-    write_csv_rows(args.output_dir / "evaluation8_by_frequency_band.csv", overall_by_band, SUMMARY_FIELDNAMES)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    write_csv_rows(output_dir / "evaluation8_frequency_band_details.csv", detail_output_rows(rows), DETAIL_FIELDNAMES)
+    write_csv_rows(output_dir / "evaluation8_by_frequency_band.csv", overall_by_band, SUMMARY_FIELDNAMES)
     output_files = [
         "evaluation8_frequency_band_details.csv",
         "evaluation8_by_frequency_band.csv",
     ]
     if args.analysis_scope in COMPARISON_SCOPES:
         write_csv_rows(
-            args.output_dir / "evaluation8_by_frequency_band_by_method.csv",
+            output_dir / "evaluation8_by_frequency_band_by_method.csv",
             by_method_band,
             METHOD_SUMMARY_FIELDNAMES,
         )
         output_files.append("evaluation8_by_frequency_band_by_method.csv")
     write_csv_rows(
-        args.output_dir / "evaluation8_occurrence_weighted_summary.csv",
+        output_dir / "evaluation8_occurrence_weighted_summary.csv",
         weighted_summary,
         OCCURRENCE_WEIGHTED_FIELDNAMES,
     )
     output_files.extend(["evaluation8_occurrence_weighted_summary.csv", "evaluation8_summary.json"])
     if (
         args.analysis_scope == "proposed_154days"
-        and args.frequency_band_mode == "fixed"
+        and mode == "fixed"
         and getattr(args, "write_distribution_plots", True)
     ):
-        output_files.extend(write_fixed_range_plots(args.output_dir, overall_by_band, frequency_bands, rows))
+        output_files.extend(write_fixed_range_plots(output_dir, overall_by_band, frequency_bands, rows))
 
     summary = {
         "evaluation_type": "frequency_stratified_adl_consistency",
         "frequency_band_mode": (
             "tertile_by_num_occurrences"
-            if args.frequency_band_mode == "tertile"
+            if mode == "tertile"
             else "fixed_ranges_by_num_occurrences"
         ),
-        "fixed_frequency_bin_edges": list(fixed_edges) if args.frequency_band_mode == "fixed" else None,
+        "fixed_frequency_bin_edges": list(fixed_edges) if mode == "fixed" else None,
         "frequency_bands": list(frequency_bands),
         "analysis_scope": args.analysis_scope,
         "n_states": getattr(args, "n_states", None),
@@ -732,7 +728,7 @@ def main() -> None:
         "evaluation6_details": str(args.evaluation6_details) if args.evaluation6_details else None,
         "input_summary": input_summary,
         "num_occurrences_source": occurrence_count_source,
-        "output_dir": str(args.output_dir),
+        "output_dir": str(output_dir),
         "runs_evaluated": runs_evaluated,
         "num_methods": len(methods),
         "methods": methods,
@@ -742,20 +738,50 @@ def main() -> None:
     }
     if args.analysis_scope in COMPARISON_SCOPES:
         summary["by_method_frequency_band"] = by_method_band
-    (args.output_dir / "evaluation8_summary.json").write_text(
+    (output_dir / "evaluation8_summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-
-    print(f"Evaluation 8 outputs saved to: {args.output_dir}")
     rows_to_print = by_method_band if args.analysis_scope in COMPARISON_SCOPES else overall_by_band
-    for row in rows_to_print:
-        method = row.get("method", "proposed")
-        print(
-            f"{method} {row['frequency_band']}: runs={row['num_runs']}, patterns={row['num_patterns']}, "
-            f"precision={row['mean_multilabel_precision']:.6f}, "
-            f"recall={row['mean_multilabel_recall']:.6f}, f1={row['mean_multilabel_f1']:.6f}"
+    return summary, rows_to_print
+
+
+def main() -> None:
+    args = parse_args()
+    if args.output_dir is None:
+        args.output_dir = default_output_dir(args.analysis_scope)
+    if args.analysis_scope in COMPARISON_SCOPES:
+        if args.evaluation6_details is None:
+            raise ValueError("--evaluation6-details is required for a comparison analysis scope")
+        source_rows, occurrence_count_source = load_details(args.evaluation6_details, args)
+        input_summary = {"evaluation6_details": str(args.evaluation6_details)}
+    else:
+        source_rows, occurrence_count_source, input_summary = evaluate_proposed_154days(args)
+    fixed_edges = parse_fixed_frequency_bin_edges(
+        getattr(args, "fixed_frequency_bin_edges", ",".join(map(str, DEFAULT_FIXED_FREQUENCY_BIN_EDGES)))
+    )
+    modes = ("tertile", "fixed") if args.frequency_band_mode == "both" else (args.frequency_band_mode,)
+
+    for mode in modes:
+        output_dir = args.output_dir / mode if args.frequency_band_mode == "both" else args.output_dir
+        _, rows_to_print = write_mode_outputs(
+            args,
+            source_rows,
+            mode,
+            fixed_edges,
+            output_dir,
+            occurrence_count_source,
+            input_summary,
         )
+
+        print(f"Evaluation 8 ({mode}) outputs saved to: {output_dir}")
+        for row in rows_to_print:
+            method = row.get("method", "proposed")
+            print(
+                f"{method} {row['frequency_band']}: runs={row['num_runs']}, patterns={row['num_patterns']}, "
+                f"precision={row['mean_multilabel_precision']:.6f}, "
+                f"recall={row['mean_multilabel_recall']:.6f}, f1={row['mean_multilabel_f1']:.6f}"
+            )
 
 
 if __name__ == "__main__":

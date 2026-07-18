@@ -9,6 +9,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from app.streamlit_app import evaluation8_scope_config
+
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "evaluate_8_frequency_stratified_adl_consistency.py"
 SPEC = importlib.util.spec_from_file_location("evaluation8", SCRIPT_PATH)
@@ -41,6 +43,16 @@ class Evaluation8FrequencyStratifiedTests(unittest.TestCase):
             args = evaluation8.parse_args()
 
         self.assertEqual(args.analysis_scope, "comparison_14days")
+
+    def test_dashboard_scope_mapping_keeps_previous_30_day_comparison_out_of_proposed_branch(self) -> None:
+        self.assertEqual(
+            evaluation8_scope_config("30日: 提案手法 vs LLM単独ベースライン"),
+            ("comparison_30days", 30),
+        )
+        self.assertEqual(
+            evaluation8_scope_config("14日: 提案手法 vs LLM単独ベースライン"),
+            ("comparison_14days", 14),
+        )
 
     def test_tertiles_are_stable_and_near_equal(self) -> None:
         rows = [
@@ -211,6 +223,53 @@ class Evaluation8FrequencyStratifiedTests(unittest.TestCase):
             payload = json.loads((output_dir / "evaluation8_summary.json").read_text(encoding="utf-8"))
             self.assertEqual(payload["frequency_band_mode"], "fixed_ranges_by_num_occurrences")
             self.assertEqual(payload["frequency_bands"], ["0", "1-9", "10-99", "100+"])
+
+    def test_main_both_mode_evaluates_input_once_and_writes_two_subdirectories(self) -> None:
+        source_rows = [row("P1", 1, 0.1), row("P2", 10, 0.2), row("P3", 100, 0.3)]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "evaluation8"
+            original_parse_args = evaluation8.parse_args
+            original_evaluate = evaluation8.evaluate_proposed_154days
+            calls = 0
+
+            def fake_evaluate(args):
+                nonlocal calls
+                calls += 1
+                return [{**item, "run": 1} for item in source_rows], "test", {}
+
+            evaluation8.parse_args = lambda: type(
+                "Args", (),
+                {
+                    "analysis_scope": "proposed_154days",
+                    "evaluation6_details": None,
+                    "output_dir": output_dir,
+                    "frequency_band_mode": "both",
+                    "fixed_frequency_bin_edges": "0,1,10,100",
+                    "write_distribution_plots": False,
+                },
+            )()
+            evaluation8.evaluate_proposed_154days = fake_evaluate
+            try:
+                evaluation8.main()
+            finally:
+                evaluation8.parse_args = original_parse_args
+                evaluation8.evaluate_proposed_154days = original_evaluate
+
+            self.assertEqual(calls, 1)
+            tertile_summary = json.loads(
+                (output_dir / "tertile" / "evaluation8_summary.json").read_text(encoding="utf-8")
+            )
+            fixed_summary = json.loads(
+                (output_dir / "fixed" / "evaluation8_summary.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(tertile_summary["frequency_band_mode"], "tertile_by_num_occurrences")
+            self.assertEqual(fixed_summary["frequency_band_mode"], "fixed_ranges_by_num_occurrences")
+            self.assertFalse(
+                (output_dir / "tertile" / "evaluation8_by_frequency_band_by_method.csv").exists()
+            )
+            self.assertFalse(
+                (output_dir / "fixed" / "evaluation8_by_frequency_band_by_method.csv").exists()
+            )
 
     def test_proposed_154day_scope_evaluates_proposed_patterns_directly(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

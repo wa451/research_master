@@ -68,9 +68,9 @@
 ## 7.3 評価6: LLM ADL interpretation set match
 
 - 入力: `output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json`, `output/llm_direct_15_1_14days/1.json`, `output/6_adl_evaluation_14/state_series.csv`, `new_labeled_data/aruba.txt`
-- 出力: `results/6_adl_match/15_1_14days/evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_time_band_by_method.csv`, `evaluation6_comparison_summary.json`
-- 対応ファイル: `scripts/evaluate_6_compare_adl_interpretation_set.py`, `src/behavior_pattern_mining/evaluation/adl_interpretation_set.py`
-- 役割: LLMが `ADL系列ラベル` として付けた解釈ラベル集合と、パターン出現区間がCASAS ADL区間と重なって得られる正解ADL集合を、順序を無視したset評価で比較する。提案手法は `sequence × time_band` 単位へ展開し、対象時間帯の出現だけで評価する。提案手法とLLM単独ベースラインの比較では、両手法を14日版に揃える。`--runs` で複数回実行結果の平均を出せる。
+- 出力: `results/6_adl_match/15_1_14days/evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_llm_usage_comparison.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_time_band_by_method.csv`, `evaluation6_comparison_summary.json`
+- 対応ファイル: `scripts/evaluate_6_compare_adl_interpretation_set.py`, `src/behavior_pattern_mining/evaluation/adl_interpretation_set.py`, `src/behavior_pattern_mining/evaluation/llm_usage.py`
+- 役割: LLMが `ADL系列ラベル` として付けた解釈ラベル集合と、パターン出現区間がCASAS ADL区間と重なって得られる正解ADL集合を、順序を無視したset評価で比較する。提案手法は `sequence × time_band` 単位へ展開し、対象時間帯の出現だけで評価する。提案手法とLLM単独ベースラインの比較では、両手法を14日版に揃える。`--runs` で複数回実行結果の平均を出し、記録済みトークン数とAPI応答時間も1 run合計のrun間平均として比較する。
 
 ## 7.5 評価8: Frequency-stratified ADL consistency
 

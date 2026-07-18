@@ -42,6 +42,7 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 |---|---|
 | `results/6_adl_match/15_1_14days/evaluation6_method_comparison.csv` | 提案手法とLLM単独ベースラインの主比較表。`--runs` が2以上の場合はrun平均と標準偏差。 |
 | `results/6_adl_match/15_1_14days/evaluation6_method_comparison_by_run.csv` | runごとの手法別summary。5回平均の元データ。 |
+| `results/6_adl_match/15_1_14days/evaluation6_llm_usage_comparison.csv` | 手法ごとの1 run合計トークン数・API応答時間をrun間で平均した比較表。`--runs 5` では5回平均と標準偏差を出す。 |
 | `results/6_adl_match/15_1_14days/evaluation6_pattern_set_details_by_method.csv` | 手法別・パターン別詳細。`num_occurrences` は評価8の頻度帯分析に使う、評価レコードごとの代表状態系列上の出現回数。 |
 | `results/6_adl_match/15_1_14days/evaluation6_by_pred_label_by_method.csv` | 手法別・予測ラベル別集計。 |
 | `results/6_adl_match/15_1_14days/evaluation6_by_true_label_by_method.csv` | 手法別・正解ラベル別集計。 |
@@ -53,9 +54,10 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 | 順序 | ファイル | 読み方 |
 |---|---|---|
 | 1 | `evaluation6_method_comparison.csv` | summaryとして、手法ごとの平均 Exact Set Match, Jaccard, multilabel Precision / Recall / F1を見る。`--runs 5` の場合は5回平均と標準偏差を見る。 |
-| 2 | `evaluation6_method_comparison_by_run.csv` | runごとのばらつきを確認する。平均値だけでなく、特定runだけ大きく外れていないかを見る。 |
-| 3 | `evaluation6_pattern_set_details_by_method.csv` | detailsとして、`run`, `method`, `eval_pattern_id`, `group_pattern_id`, `time_band`, `pred_adl_labels`, `true_adl_labels`, `intersection_labels`, `union_labels` を見てズレの原因を確認する。 |
-| 4 | `evaluation6_comparison_summary.json` | 再現条件として、入力パス、run数、14日版で揃っているか、`min_overlap_ratio_for_true_label`, 許可ラベルを確認する。 |
+| 2 | `evaluation6_llm_usage_comparison.csv` | `num_runs_with_complete_metrics` が5であることを確認し、手法ごとの平均入力・応答・合計トークン数と平均API応答時間を比較する。 |
+| 3 | `evaluation6_method_comparison_by_run.csv` | runごとのばらつきを確認する。平均値だけでなく、特定runだけ大きく外れていないかを見る。 |
+| 4 | `evaluation6_pattern_set_details_by_method.csv` | detailsとして、`run`, `method`, `eval_pattern_id`, `group_pattern_id`, `time_band`, `pred_adl_labels`, `true_adl_labels`, `intersection_labels`, `union_labels` を見てズレの原因を確認する。 |
+| 5 | `evaluation6_comparison_summary.json` | 再現条件として、入力パス、run数、14日版で揃っているか、`min_overlap_ratio_for_true_label`, 許可ラベル、使用量集計元を確認する。 |
 
 時間帯別の傾向を見る場合は、`evaluation6_by_time_band*.csv` でMorning, Daytime, Night, Midnightごとの平均指標を見る。ラベル別の傾向を見る場合は、`evaluation6_by_pred_label*.csv` で付けすぎているラベル、`evaluation6_by_true_label*.csv` で拾えていない正解ラベルを見る。
 
@@ -272,6 +274,18 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 7. `category_overlap / total_overlap >= --min-overlap-ratio-for-true-label` のカテゴリを正解ADL集合に入れる。
 8. LLMの `ADL系列ラベル` を正規化し、予測ADL集合にする。
 9. 予測集合と正解集合をsetとして比較する。
+10. 提案手法は各runの時間帯別メトリクスを合計し、LLM単独ベースラインは各runのメトリクスを使って、run合計の平均と標準偏差を算出する。
+
+### LLM使用量・応答時間の比較
+
+`evaluation6_llm_usage_comparison.csv` は、入力形式の異なる2手法を「1 runの抽出全体」で比較する。
+
+- 提案手法: Morning / Daytime / Night / Midnight の記録済み成功API呼び出しをrun内で合計する。
+- LLM単独ベースライン: 直接ログを入力した記録済み成功API呼び出しをrun値とする。
+- `--runs 5` の場合: 上記のrun合計を5回分平均し、標準偏差も保存する。
+- `duration_sec` はGemini APIの応答待ち時間であり、前処理・プロンプト構築・ファイル保存を含む全工程時間ではない。
+- パース失敗などの失敗API呼び出しは既存メトリクスに含まれない。
+- 4時間帯のいずれか、または必要なメトリクス値が欠けたrunは0として補わず平均から除外し、`num_runs_with_complete_metrics` と `evaluation6_comparison_summary.json` の `missing_metrics` に記録する。
 
 ### 提案手法LLM JSONの統合形式
 

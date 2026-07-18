@@ -111,7 +111,7 @@ uv run streamlit run app/streamlit_app.py
    `scripts/run_direct_log_baseline.py --log-days 14 --extract-only` を実行します。
 
 5. 評価6の手法間比較を実行  
-   `scripts/evaluate_6_compare_adl_interpretation_set.py` を実行します。主な出力は `evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_*_by_method.csv`, `evaluation6_comparison_summary.json` です。
+   `scripts/evaluate_6_compare_adl_interpretation_set.py` を実行します。主な出力は `evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_llm_usage_comparison.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_*_by_method.csv`, `evaluation6_comparison_summary.json` です。
 
 アプリの標準条件は、評価7の選定結果に合わせて代表状態数 `K=15`、ハミング距離閾値 `0` です。中間出力には `output/6_adl_evaluation_15_0_14days/` を使い、Kやハミング距離を変えた場合も `output/6_adl_evaluation_{K}_{hamming}_{days}days/` を使います。
 
@@ -145,7 +145,7 @@ Streamlit画面では、`代表状態数 K` と `ハミング距離閾値` を�
 
 参照ドキュメント: `docs/evaluation_8_frequency_stratified_adl_consistency.md`
 
-評価8ではラジオボタンで「154日: 提案手法のみ」（既定）または「14日: 提案手法 vs LLM単独ベースライン」を選択して実行する。代表状態数K（既定15）、ハミング距離閾値（既定0）、runs（既定5）を変更できる。154日条件は提案手法JSONを指定run数、154日state series、ラベル付きCASASを入力にし、runごとに評価6と同じset一致処理と頻度三分位を実行してから帯別指標を平均する。出力先は条件別に `results/8_proposed/` と `results/8_vs_llm/` を使い、結果を混在させない。154日提案手法のみでは重複する `evaluation8_by_frequency_band_by_method.csv` を生成しない。frequency band modeは既定の`tertile`に加えて`fixed`を選べ、固定帯の下限（既定`0,1,10,100,1000,10000`）を指定できる。154日・提案手法のみの`fixed`では、帯別の平均パターン数分布とPrecision / Recall / F1図を保存するか選択でき、結果タブでPNGも表示できる。結果タブでは帯別CSVを選ぶと、帯ごとのPrecision / Recall / F1簡易表を表示する。
+評価8ではラジオボタンで「154日: 提案手法のみ」（既定）または「14日: 提案手法 vs LLM単独ベースライン」を選択して実行する。代表状態数K（既定15）、ハミング距離閾値（既定0）、runs（既定5）を変更できる。頻度帯方式は選択式ではなく、三分位と固定回数帯を一度のコマンドで両方実行する。入力評価は重複実行せず、同じ評価レコードから2方式を集計し、指定したoutput directoryの `tertile/` と `fixed/` に分けて保存する。固定帯の下限（既定`0,1,10,100,1000,10000`）は変更できる。154日・提案手法のみの`fixed/`には、帯別の平均パターン数分布とPrecision / Recall / F1図も保存できる。出力先は条件別に `results/8_proposed/` と `results/8_vs_llm/` を使い、結果を混在させない。154日提案手法のみでは重複する `evaluation8_by_frequency_band_by_method.csv` を生成しない。
 
 ## ログとコマンド履歴
 
