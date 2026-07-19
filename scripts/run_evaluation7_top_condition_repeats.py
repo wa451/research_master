@@ -31,7 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--total-runs",
         type=int,
-        default=3,
+        default=5,
         help="Total runs used in the final average, including screening run 1.",
     )
     parser.add_argument("--days", type=int, default=30)

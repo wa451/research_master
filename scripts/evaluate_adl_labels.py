@@ -11,12 +11,20 @@ ROOT_DIR_FOR_IMPORTS = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR_FOR_IMPORTS) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR_FOR_IMPORTS))
 
-from experiment_config import DATASET_NAME, DAYS, HAMMING_THRESHOLD, N_STATES, ROOT_DIR
+from experiment_config import (
+    DATASET_NAME,
+    DAYS,
+    HAMMING_THRESHOLD,
+    N_STATES,
+    ROOT_DIR,
+    SMOOTHING_WINDOW_SEC,
+)
 from src.behavior_pattern_mining.evaluation.adl import (
     ADL_CATEGORY_MAP,
     assign_patterns_to_adl,
     boundary_rows,
     build_predictions,
+    build_network_equivalent_state_series_from_labeled_casas,
     build_state_series_from_event_log,
     build_state_series_from_labeled_casas,
     compute_interval_hit_evaluation,
@@ -138,6 +146,39 @@ def parse_args() -> argparse.Namespace:
         help="Optional path to save rebuilt state intervals as CSV",
     )
     parser.add_argument(
+        "--state-series-preprocessing",
+        choices=["event-driven", "network-equivalent"],
+        default="event-driven",
+        help=(
+            "Preprocessing used when rebuilding state intervals. "
+            "network-equivalent applies 1-second Sample-and-Hold, delayed-OFF "
+            "smoothing, fixed representative-state mapping, and compression."
+        ),
+    )
+    parser.add_argument(
+        "--smoothing-window-sec",
+        type=int,
+        default=SMOOTHING_WINDOW_SEC,
+        help="Delayed-OFF rolling window used by network-equivalent preprocessing",
+    )
+    parser.add_argument(
+        "--state-series-days",
+        type=int,
+        default=None,
+        help=(
+            "Calendar days exported by network-equivalent preprocessing. "
+            "Omit to use the complete labeled-data date range."
+        ),
+    )
+    parser.add_argument(
+        "--state-series-only",
+        action="store_true",
+        help=(
+            "Build/write the state-series CSV and exit before pattern/ADL evaluation. "
+            "--write-state-series is required."
+        ),
+    )
+    parser.add_argument(
         "--merge-gap-minutes",
         type=float,
         default=5.0,
@@ -160,25 +201,41 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-
-    labels = parse_labeled_casas_intervals(
-        args.labeled_casas,
-        wake_window_minutes=args.wake_window_minutes,
-    )
-    patterns = load_patterns(args.patterns)
+    if args.state_series_only and args.write_state_series is None:
+        raise ValueError("--state-series-only requires --write-state-series")
 
     if args.state_series is not None:
         state_intervals = load_state_series_csv(args.state_series)
         state_series_source = str(args.state_series)
     elif args.event_log is None:
-        state_intervals = build_state_series_from_labeled_casas(
-            labeled_casas_path=args.labeled_casas,
-            state_table_path=args.state_table,
-            hamming_threshold=args.hamming_threshold,
-            sensor_map_path=args.sensor_map if args.sensor_map.exists() else None,
-        )
-        state_series_source = f"{args.labeled_casas} + {args.state_table}"
+        if args.state_series_preprocessing == "network-equivalent":
+            state_intervals = build_network_equivalent_state_series_from_labeled_casas(
+                labeled_casas_path=args.labeled_casas,
+                state_table_path=args.state_table,
+                hamming_threshold=args.hamming_threshold,
+                smoothing_window_sec=args.smoothing_window_sec,
+                sensor_map_path=args.sensor_map if args.sensor_map.exists() else None,
+                duration_days=args.state_series_days,
+            )
+            state_series_source = (
+                f"{args.labeled_casas} + {args.state_table} "
+                f"(network-equivalent, smoothing={args.smoothing_window_sec}s, "
+                f"days={args.state_series_days or 'all'})"
+            )
+        else:
+            state_intervals = build_state_series_from_labeled_casas(
+                labeled_casas_path=args.labeled_casas,
+                state_table_path=args.state_table,
+                hamming_threshold=args.hamming_threshold,
+                sensor_map_path=args.sensor_map if args.sensor_map.exists() else None,
+            )
+            state_series_source = f"{args.labeled_casas} + {args.state_table}"
     else:
+        if args.state_series_preprocessing == "network-equivalent":
+            raise ValueError(
+                "--state-series-preprocessing network-equivalent currently requires "
+                "--labeled-casas and cannot be combined with --event-log."
+            )
         state_intervals = build_state_series_from_event_log(
             event_log_path=args.event_log,
             state_table_path=args.state_table,
@@ -188,6 +245,18 @@ def main() -> None:
 
     if args.write_state_series is not None:
         write_state_series_csv(state_intervals, args.write_state_series)
+    if args.state_series_only:
+        print(
+            f"State-series only: wrote {len(state_intervals)} compressed intervals "
+            f"to {args.write_state_series}"
+        )
+        return
+
+    labels = parse_labeled_casas_intervals(
+        args.labeled_casas,
+        wake_window_minutes=args.wake_window_minutes,
+    )
+    patterns = load_patterns(args.patterns)
 
     split_time = parse_timestamp(args.split_date) if args.split_date else split_time_from_ratio(labels, args.train_ratio)
 
@@ -243,6 +312,13 @@ def main() -> None:
     summary = {
         "labeled_casas_path": str(args.labeled_casas),
         "state_series_source": state_series_source,
+        "state_series_preprocessing": args.state_series_preprocessing,
+        "smoothing_window_sec": (
+            args.smoothing_window_sec
+            if args.state_series_preprocessing == "network-equivalent"
+            else None
+        ),
+        "state_series_days": args.state_series_days,
         "patterns_path": str(args.patterns),
         "state_table_path": str(args.state_table),
         "event_log_path": str(args.event_log) if args.event_log else None,

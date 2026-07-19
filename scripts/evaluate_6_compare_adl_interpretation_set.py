@@ -52,7 +52,19 @@ DETAIL_FIELDNAMES = [
     "pattern_name",
     "pattern_id",
     "num_occurrences",
+    "num_matching_occurrences_before_time_band_filter",
+    "num_time_band_assigned_occurrences",
+    "num_boundary_crossing_occurrences",
+    "num_boundary_crossing_occurrences_excluded",
+    "occurrence_status",
+    "truth_status",
+    "prediction_status",
+    "is_metric_evaluable",
+    "is_end_to_end_evaluable",
+    "raw_pred_adl_labels",
     "pred_adl_labels",
+    "unknown_pred_adl_labels",
+    "unknown_pred_label_count",
     "true_adl_labels",
     "intersection_labels",
     "union_labels",
@@ -61,8 +73,64 @@ DETAIL_FIELDNAMES = [
     "multilabel_precision",
     "multilabel_recall",
     "multilabel_f1",
+    "conditional_exact_set_match",
+    "conditional_jaccard",
+    "conditional_multilabel_precision",
+    "conditional_multilabel_recall",
+    "conditional_multilabel_f1",
+    "end_to_end_exact_set_match",
+    "end_to_end_jaccard",
+    "end_to_end_multilabel_precision",
+    "end_to_end_multilabel_recall",
+    "end_to_end_multilabel_f1",
     "total_overlap_seconds",
     "true_label_overlap_detail",
+]
+
+STATUS_SUMMARY_FIELDNAMES = [
+    "num_conditional_evaluable_patterns",
+    "num_end_to_end_evaluable_patterns",
+    "num_occurrence_matched",
+    "num_no_occurrence",
+    "num_truth_defined",
+    "num_no_adl_overlap",
+    "num_prediction_valid",
+    "num_prediction_missing",
+    "num_prediction_unknown",
+    "unknown_pred_label_count",
+    "occurrence_coverage",
+    "truth_coverage",
+    "no_occurrence_rate",
+    "no_adl_overlap_rate",
+    "missing_prediction_rate",
+    "unknown_label_rate",
+    "num_time_band_assigned_occurrences",
+    "num_boundary_crossing_occurrences",
+    "num_boundary_crossing_occurrences_excluded",
+    "boundary_crossing_occurrence_rate",
+]
+
+EXPLICIT_METRIC_SUMMARY_FIELDNAMES = [
+    f"{scope}_mean_{metric}"
+    for scope in ("conditional", "end_to_end")
+    for metric in (
+        "exact_set_match",
+        "jaccard",
+        "multilabel_precision",
+        "multilabel_recall",
+        "multilabel_f1",
+    )
+]
+
+AGGREGATE_SUMMARY_FIELDNAMES = [
+    "num_patterns",
+    *STATUS_SUMMARY_FIELDNAMES,
+    "mean_exact_set_match",
+    "mean_jaccard",
+    "mean_multilabel_precision",
+    "mean_multilabel_recall",
+    "mean_multilabel_f1",
+    *EXPLICIT_METRIC_SUMMARY_FIELDNAMES,
 ]
 
 SUMMARY_FIELDNAMES = [
@@ -75,6 +143,8 @@ SUMMARY_FIELDNAMES = [
     "mean_multilabel_precision",
     "mean_multilabel_recall",
     "mean_multilabel_f1",
+    *STATUS_SUMMARY_FIELDNAMES,
+    *EXPLICIT_METRIC_SUMMARY_FIELDNAMES,
 ]
 
 MEAN_SUMMARY_FIELDNAMES = [
@@ -92,6 +162,26 @@ MEAN_SUMMARY_FIELDNAMES = [
     "std_multilabel_recall",
     "mean_multilabel_f1",
     "std_multilabel_f1",
+    *[
+        field
+        for name in STATUS_SUMMARY_FIELDNAMES
+        for field in (
+            f"avg_{name}" if name.startswith("num_") or name.endswith("_count") else f"mean_{name}",
+            f"std_{name}",
+        )
+    ],
+    *[
+        field
+        for scope in ("conditional", "end_to_end")
+        for metric in (
+            "exact_set_match",
+            "jaccard",
+            "multilabel_precision",
+            "multilabel_recall",
+            "multilabel_f1",
+        )
+        for field in (f"{scope}_mean_{metric}", f"{scope}_std_{metric}")
+    ],
 ]
 
 
@@ -218,19 +308,19 @@ def parse_args() -> argparse.Namespace:
         "--no-overlap-label",
         choices=["Other", "Ambiguous"],
         default="Ambiguous",
-        help="True label used when a pattern has no ADL overlap",
+        help="Deprecated compatibility option; no-overlap is now a truth status",
     )
     parser.add_argument(
         "--missing-pred-label",
         choices=["Other", "Ambiguous"],
         default="Ambiguous",
-        help="Predicted label used when a pattern has no ADL系列ラベル",
+        help="Deprecated compatibility option; missing prediction is now a status",
     )
     parser.add_argument(
         "--unknown-pred-label",
         choices=["Other", "Ambiguous"],
         default="Other",
-        help="Predicted label used when an LLM label cannot be normalized",
+        help="Deprecated compatibility option; unknown prediction is now a status",
     )
     parser.add_argument(
         "--wake-window-minutes",
@@ -344,21 +434,6 @@ def occurrence_intervals_from_matches(matches) -> list[PatternOccurrenceInterval
     ]
 
 
-def count_relevant_occurrences(
-    patterns: list[InterpretationPattern],
-    occurrences: list[PatternOccurrenceInterval],
-) -> int:
-    pattern_by_id = {pattern.pattern_id: pattern for pattern in patterns}
-    count = 0
-    for occurrence in occurrences:
-        pattern = pattern_by_id.get(occurrence.pattern_id)
-        if pattern is None:
-            continue
-        if pattern.time_band == "All" or time_band_for_timestamp(occurrence.start_time) == pattern.time_band:
-            count += 1
-    return count
-
-
 def evaluate_method(
     method: str,
     patterns_path: Path,
@@ -391,7 +466,10 @@ def evaluate_method(
     detail_rows = [{"method": method, **row} for row in detail_rows]
     summary_metrics = {
         "method": method,
-        "num_pattern_occurrences": count_relevant_occurrences(patterns, occurrences),
+        "num_pattern_occurrences": sum(
+            int(row.get("num_occurrences") or 0)
+            for row in detail_rows
+        ),
         **summary_metrics,
     }
     return detail_rows, summary_metrics
@@ -420,29 +498,40 @@ def summarize_runs(summary_rows: list[dict]) -> list[dict]:
 
     averaged_rows: list[dict] = []
     for method, rows in sorted(grouped.items()):
-        exact = [float(row["mean_exact_set_match"]) for row in rows]
-        jaccard = [float(row["mean_jaccard"]) for row in rows]
-        precision = [float(row["mean_multilabel_precision"]) for row in rows]
-        recall = [float(row["mean_multilabel_recall"]) for row in rows]
-        f1 = [float(row["mean_multilabel_f1"]) for row in rows]
-        averaged_rows.append(
-            {
-                "method": method,
-                "num_runs": len(rows),
-                "avg_num_patterns": mean([float(row["num_patterns"]) for row in rows]),
-                "avg_num_pattern_occurrences": mean([float(row["num_pattern_occurrences"]) for row in rows]),
-                "mean_exact_set_match": mean(exact),
-                "std_exact_set_match": std(exact),
-                "mean_jaccard": mean(jaccard),
-                "std_jaccard": std(jaccard),
-                "mean_multilabel_precision": mean(precision),
-                "std_multilabel_precision": std(precision),
-                "mean_multilabel_recall": mean(recall),
-                "std_multilabel_recall": std(recall),
-                "mean_multilabel_f1": mean(f1),
-                "std_multilabel_f1": std(f1),
-            }
-        )
+        averaged: dict[str, float | int | str] = {
+            "method": method,
+            "num_runs": len(rows),
+            "avg_num_patterns": mean([float(row["num_patterns"]) for row in rows]),
+            "avg_num_pattern_occurrences": mean(
+                [float(row["num_pattern_occurrences"]) for row in rows]
+            ),
+        }
+        for metric in (
+            "exact_set_match",
+            "jaccard",
+            "multilabel_precision",
+            "multilabel_recall",
+            "multilabel_f1",
+        ):
+            values = [float(row[f"mean_{metric}"]) for row in rows]
+            averaged[f"mean_{metric}"] = mean(values)
+            averaged[f"std_{metric}"] = std(values)
+            for scope in ("conditional", "end_to_end"):
+                scoped_values = [
+                    float(row[f"{scope}_mean_{metric}"])
+                    for row in rows
+                ]
+                averaged[f"{scope}_mean_{metric}"] = mean(scoped_values)
+                averaged[f"{scope}_std_{metric}"] = std(scoped_values)
+
+        for name in STATUS_SUMMARY_FIELDNAMES:
+            values = [float(row[name]) for row in rows]
+            if name.startswith("num_") or name.endswith("_count"):
+                averaged[f"avg_{name}"] = mean(values)
+            else:
+                averaged[f"mean_{name}"] = mean(values)
+            averaged[f"std_{name}"] = std(values)
+        averaged_rows.append(averaged)
     return averaged_rows
 
 
@@ -629,26 +718,17 @@ def main() -> None:
     write_csv_rows(
         args.output_dir / "evaluation6_by_pred_label_by_method.csv",
         pred_label_rows,
-        ["method", "pred_label", "num_patterns", "mean_jaccard", "mean_multilabel_precision", "mean_multilabel_recall", "mean_multilabel_f1"],
+        ["method", "pred_label", *AGGREGATE_SUMMARY_FIELDNAMES],
     )
     write_csv_rows(
         args.output_dir / "evaluation6_by_true_label_by_method.csv",
         true_label_rows,
-        ["method", "true_label", "num_patterns", "mean_jaccard", "mean_multilabel_precision", "mean_multilabel_recall", "mean_multilabel_f1"],
+        ["method", "true_label", *AGGREGATE_SUMMARY_FIELDNAMES],
     )
     write_csv_rows(
         args.output_dir / "evaluation6_by_time_band_by_method.csv",
         time_band_rows,
-        [
-            "method",
-            "time_band",
-            "num_patterns",
-            "mean_exact_set_match",
-            "mean_jaccard",
-            "mean_multilabel_precision",
-            "mean_multilabel_recall",
-            "mean_multilabel_f1",
-        ],
+        ["method", "time_band", *AGGREGATE_SUMMARY_FIELDNAMES],
     )
 
     summary_payload = {
@@ -668,14 +748,30 @@ def main() -> None:
         "adl_intervals": adl_source,
         "allowed_labels": ALLOWED_LABELS,
         "min_overlap_ratio_for_true_label": args.min_overlap_ratio_for_true_label,
-        "no_overlap_label": args.no_overlap_label,
-        "missing_pred_label": args.missing_pred_label,
-        "unknown_pred_label": args.unknown_pred_label,
+        "deprecated_compatibility_options_ignored": {
+            "no_overlap_label": args.no_overlap_label,
+            "missing_pred_label": args.missing_pred_label,
+            "unknown_pred_label": args.unknown_pred_label,
+        },
         "match_mode": args.match_mode,
         "max_skip_duration_minutes": args.max_skip_duration_minutes,
         "evaluation_type": "set_only_method_comparison",
         "order_sensitive": False,
         "time_band_aware": True,
+        "time_band_occurrence_policy": (
+            "sequence_x_time_band records require the full half-open occurrence "
+            "[start,end) to remain in the requested time band"
+        ),
+        "conditional_metric_denominator": (
+            "occurrence_status=matched and truth_status=defined; prediction "
+            "missing/unknown remain in denominator with zero score"
+        ),
+        "end_to_end_metric_denominator": (
+            "all records except matched records with truth_status=no_adl_overlap; "
+            "no_occurrence and prediction missing/unknown remain with zero score"
+        ),
+        "no_adl_overlap_end_to_end_policy": "excluded_truth_undefined",
+        "legacy_mean_metric_alias": "end_to_end",
         "methods": {row["method"]: row for row in summary_rows},
         "method_runs": run_summary_rows,
         "by_time_band": time_band_rows,
@@ -707,6 +803,13 @@ def main() -> None:
             f"mean_jaccard={row['mean_jaccard']:.6f}, "
             f"mean_f1={row['mean_multilabel_f1']:.6f}"
         )
+        if float(row.get("avg_num_prediction_unknown") or 0) > 0:
+            print(
+                f"[WARN] {row['method']}: average unknown-label records per run="
+                f"{float(row['avg_num_prediction_unknown']):.3f}, "
+                f"unknown label rate={float(row['mean_unknown_label_rate']):.6f}",
+                file=sys.stderr,
+            )
     for row in llm_usage_summary_rows:
         print(
             f"{row['method']} usage: "

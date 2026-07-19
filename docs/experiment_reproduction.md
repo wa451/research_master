@@ -12,6 +12,7 @@
 | 評価4 | ラベル付きCASASデータによる単一手法ADL評価 | `docs/evaluation_4_labeled_casas_adl.md` |
 | 評価5 | ADLラベルを用いたパターン単位評価 | `docs/evaluation_5_adl_correspondence.md` |
 | 評価6 | LLM解釈ラベルとADL重なりラベルのSet一致評価 | `docs/evaluation_6_adl_interpretation_set.md` |
+| 評価7 | 代表状態数K・ハミング距離の二段階感度評価 | `docs/evaluation_7_parameter_sensitivity_adl_interpretation.md` |
 | 評価8 | 頻度帯別ADL整合性評価 | `docs/evaluation_8_frequency_stratified_adl_consistency.md` |
 
 ## 最短の実行順序
@@ -46,22 +47,27 @@ uv run python scripts/evaluate_adl_labels.py \
   --hit-tolerance-minutes 10
 ```
 
-評価5のUseful non-redundant / Fragmentation / Contextless useless評価まで行う場合は、代表状態系列CSVを作成してから次を実行する。
+評価5のUseful non-redundant / Fragmentation / Contextless useless評価まで行う場合は、抽出時と同じ前処理で全220日の代表状態系列CSVを作成してから次を実行する。既存の修正前結果は上書きしない。
 
 ```bash
 uv run python scripts/evaluate_adl_labels.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --state-table state/aruba_15_1_154days.txt \
+  --state-table state/aruba_15_0_154days.txt \
   --sensor-map configs/aruba_sensor_map.json \
-  --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --write-state-series results/4_adl_detect/state_series.csv
+  --hamming-threshold 0 \
+  --state-series-preprocessing network-equivalent \
+  --smoothing-window-sec 5 \
+  --state-series-days 220 \
+  --write-state-series output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv \
+  --state-series-only
 
 uv run python scripts/evaluate_adl_correspondence.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --state-series results/4_adl_detect/state_series.csv \
-  --patterns-frequency output/aruba_15_1_154days/state_sequence_counts_15_1_154days.json \
-  --patterns-proposed output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/5_pattern_quality \
+  --state-series output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv \
+  --state-definition state/aruba_15_0_154days.txt \
+  --patterns-frequency output/aruba_15_0_154days/state_sequence_counts_15_0_154days.json \
+  --patterns-proposed output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json \
+  --output-dir results/5_pattern_quality_low_information_gt_0_5 \
   --train-ratio 0.7 \
   --grounded-hit-threshold 0.3 \
   --grounded-purity-threshold 0.3 \
@@ -76,6 +82,8 @@ uv run python scripts/evaluate_adl_correspondence.py \
   --fp-max-len 4 \
   --fp-max-median-duration-seconds 1800 \
   --fp-max-p90-duration-seconds 3600 \
+  --baseline-cache-dir output/5_adl_correspondence_baselines_fixed \
+  --use-baseline-cache \
   --other-state-labels その他 Other Other_ADL unknown \
   --exclude-other-adl-from-any \
   --min-overlap-seconds 1
@@ -89,28 +97,31 @@ uv run python scripts/evaluate_adl_correspondence.py \
 uv run python scripts/run_build_network_from_labeled_casas.py \
   --labeled-casas new_labeled_data/aruba.txt \
   --sensor-map configs/aruba_sensor_map.json \
-  --days 14
+  --days 14 \
+  --hamming-threshold 0
 
-uv run python scripts/run_llm_extraction.py --days 14
+uv run python scripts/run_llm_extraction.py --days 14 --hamming-threshold 0
 
 uv run python scripts/evaluate_adl_labels.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --state-table state/aruba_15_1_14days.txt \
+  --state-table state/aruba_15_0_14days.txt \
   --sensor-map configs/aruba_sensor_map.json \
-  --patterns output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json \
-  --output-dir output/6_adl_evaluation_14 \
-  --write-state-series output/6_adl_evaluation_14/state_series.csv
+  --patterns output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
+  --output-dir output/6_adl_evaluation_15_0_14days \
+  --write-state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
+  --hamming-threshold 0
 
 uv run python scripts/run_direct_log_baseline.py \
   --log-days 14 \
+  --hamming-threshold 0 \
   --extract-only
 
 uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
-  --patterns-proposed output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json \
-  --patterns-direct output/llm_direct_15_1_14days/1.json \
-  --state-series output/6_adl_evaluation_14/state_series.csv \
+  --patterns-proposed output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
+  --patterns-direct output/llm_direct_15_0_14days/1.json \
+  --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/6_adl_match \
+  --output-dir results/6_adl_match/15_0_14days \
   --min-overlap-ratio-for-true-label 0.10
 ```
 
@@ -119,20 +130,26 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 ```bash
 uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
   --analysis-scope comparison_14days \
-  --evaluation6-details results/6_adl_match/15_1_14days/evaluation6_pattern_set_details_by_method.csv \
-  --output-dir results/8_vs_llm \
-  --frequency-band-mode tertile
+  --evaluation6-details results/6_adl_match/15_0_14days/evaluation6_pattern_set_details_by_method.csv \
+  --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
+  --output-dir results/8_vs_llm_own_id_fixed \
+  --frequency-band-mode both
 ```
 
 ```bash
 uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
   --analysis-scope proposed_154days \
-  --patterns-proposed output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --state-series output/5_adl_evaluation/state_series.csv \
+  --patterns-proposed output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json \
+  --patterns-proposed-template 'output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_{run}.json' \
+  --state-series output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv \
   --labeled-casas new_labeled_data/aruba.txt \
+  --n-states 15 \
+  --hamming-threshold 0 \
+  --days 154 \
   --runs 5 \
-  --output-dir results/8_proposed \
-  --frequency-band-mode tertile
+  --output-dir results/8_proposed_own_id_fixed \
+  --frequency-band-mode both \
+  --fixed-frequency-bin-edges 0,1,10,100,1000,10000
 ```
 
 以下は全体の共通設定と補足です。
@@ -154,13 +171,17 @@ uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
 - ON値: `ON`, `OPEN`, `PRESENT`, `1`, `1`
 - OFF値: `OFF`, `CLOSE`, `ABSENT`, `0`, `0`
 
-## 代表状態とマッピング
+## 論文採用条件の代表状態とマッピング
 
 - 代表状態数 K: 15
 - 抽出方法: 圧縮済み状態ベクトルの出現頻度上位K件
-- ハミング距離閾値: 1
-- マッピング条件: 代表状態に完全一致する場合はその状態。完全一致しない場合、最近傍代表状態とのハミング距離が1以下ならその代表状態、超える場合は「その他」。
-- 出力: `state/aruba_15_1_154days.txt`
+- ハミング距離閾値: 0
+- マッピング条件: 代表状態に完全一致する場合だけその状態。完全一致しない場合は「その他」。
+- 出力: `state/aruba_15_0_154days.txt`
+
+`configs/default.yaml` の互換用既定値は現在も `hamming_threshold=1`
+である。論文値を再現するコマンドでは、この既定に依存せず必ず
+`--hamming-threshold 0` と条件別パスを明示する。
 
 ## 時間帯分割
 
@@ -176,7 +197,7 @@ uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
 - 自己連続遷移: 圧縮して除外
 - 遷移確率: 各from状態の遷移回数で正規化
 - 可視化閾値: 0.1
-- LLM/ベースライン用JSON: `picture/aruba_15_1_154days/state_transition_*.json`
+- LLM/ベースライン用JSON: `picture/aruba_15_0_154days/state_transition_*.json`
 
 ## LLMに入力するJSON形式
 
@@ -203,7 +224,7 @@ uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
 
 - モード別ネットワーク入力: `src/behavior_pattern_mining/llm/pattern_extractor.py` の `PROMPT_TEMPLATE`
 - 外部化コピー: `prompts/pattern_extraction_prompt.md`
-- 直接ログ入力: `src/behavior_pattern_mining/llm/direct_log_extractor.py` の `PROMPT_TEMPLATE`
+- 前処理済み代表状態系列の直接入力: `src/behavior_pattern_mining/llm/direct_log_extractor.py` の `PROMPT_TEMPLATE`
 - 外部化コピー: `prompts/direct_log_pattern_extraction_prompt.md`
 - モデル: `gemini-2.5-pro`
 - Temperature: `0.2`
@@ -301,13 +322,26 @@ uv run python scripts/evaluate_adl_labels.py \
   --min-duration-config configs/adl_min_duration.json \
   --hit-tolerance-minutes 10
 
+# 評価5・8で共用する、抽出前処理と等価な全220日の代表状態系列
+uv run python scripts/evaluate_adl_labels.py \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --state-table state/aruba_15_0_154days.txt \
+  --sensor-map configs/aruba_sensor_map.json \
+  --hamming-threshold 0 \
+  --state-series-preprocessing network-equivalent \
+  --smoothing-window-sec 5 \
+  --state-series-days 220 \
+  --write-state-series output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv \
+  --state-series-only
+
 # 7. 評価5: Useful non-redundant / Fragmentation / Contextless useless評価
 uv run python scripts/evaluate_adl_correspondence.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --state-series results/4_adl_detect/state_series.csv \
-  --patterns-frequency output/aruba_15_1_154days/state_sequence_counts_15_1_154days.json \
-  --patterns-proposed output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/5_pattern_quality \
+  --state-series output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv \
+  --state-definition state/aruba_15_0_154days.txt \
+  --patterns-frequency output/aruba_15_0_154days/state_sequence_counts_15_0_154days.json \
+  --patterns-proposed output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json \
+  --output-dir results/5_pattern_quality_low_information_gt_0_5 \
   --runs 5 \
   --train-ratio 0.7 \
   --grounded-hit-threshold 0.3 \
@@ -323,6 +357,8 @@ uv run python scripts/evaluate_adl_correspondence.py \
   --fp-max-len 4 \
   --fp-max-median-duration-seconds 1800 \
   --fp-max-p90-duration-seconds 3600 \
+  --baseline-cache-dir output/5_adl_correspondence_baselines_fixed \
+  --use-baseline-cache \
   --other-state-labels その他 Other Other_ADL unknown \
   --exclude-other-adl-from-any \
   --min-overlap-seconds 1
@@ -331,28 +367,31 @@ uv run python scripts/evaluate_adl_correspondence.py \
 uv run python scripts/run_build_network_from_labeled_casas.py \
   --labeled-casas new_labeled_data/aruba.txt \
   --sensor-map configs/aruba_sensor_map.json \
-  --days 14
+  --days 14 \
+  --hamming-threshold 0
 
-uv run python scripts/run_llm_extraction.py --days 14
+uv run python scripts/run_llm_extraction.py --days 14 --hamming-threshold 0
 
 uv run python scripts/evaluate_adl_labels.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --state-table state/aruba_15_1_14days.txt \
+  --state-table state/aruba_15_0_14days.txt \
   --sensor-map configs/aruba_sensor_map.json \
-  --patterns output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json \
-  --output-dir output/6_adl_evaluation_14 \
-  --write-state-series output/6_adl_evaluation_14/state_series.csv
+  --patterns output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
+  --output-dir output/6_adl_evaluation_15_0_14days \
+  --write-state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
+  --hamming-threshold 0
 
 uv run python scripts/run_direct_log_baseline.py \
   --log-days 14 \
+  --hamming-threshold 0 \
   --extract-only
 
 uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
-  --patterns-proposed output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json \
-  --patterns-direct output/llm_direct_15_1_14days/1.json \
-  --state-series output/6_adl_evaluation_14/state_series.csv \
+  --patterns-proposed output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
+  --patterns-direct output/llm_direct_15_0_14days/1.json \
+  --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/6_adl_match \
+  --output-dir results/6_adl_match/15_0_14days \
   --min-overlap-ratio-for-true-label 0.10
 ```
 

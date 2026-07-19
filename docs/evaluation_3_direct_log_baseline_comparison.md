@@ -8,9 +8,9 @@
 
 | RQ | 内容 |
 |---|---|
-| RQ3-1 | 状態遷移ネットワークをLLM入力にすることで、直接ログ入力より良い系列抽出ができるか。 |
+| RQ3-1 | 状態遷移ネットワークをLLM入力にすることで、前処理済み代表状態系列の直接入力より良い系列抽出ができるか。 |
 | RQ3-2 | 提案手法とLLM単独ベースラインでPrecision / Recall / F1はどう変わるか。 |
-| RQ3-3 | 直接ログ入力では、長いログや局所的な揺らぎにより不安定な系列が増えるか。 |
+| RQ3-3 | 前処理済み代表状態系列の直接入力では、長い系列により不安定な出力が増えるか。 |
 
 ## 評価指標
 
@@ -18,7 +18,7 @@
 |---|---|
 | 遷移確率ベースラインに対するPrecision / Recall / F1 | 遷移確率に基づく系列との一致度。 |
 | 頻度ベースラインに対するPrecision / Recall / F1 | 頻出状態系列との一致度。 |
-| 出力パターン数 | 直接ログ入力で過剰・過少抽出になっていないか。 |
+| 出力パターン数 | 前処理済み代表状態系列の直接入力で過剰・過少抽出になっていないか。 |
 | run間のばらつき | 同じ条件で複数runを行う場合の安定性。 |
 | Groundedness | 必要に応じて、系列が状態遷移グラフ上に根拠を持つかを見る。 |
 
@@ -32,7 +32,7 @@
 | 状態表 | `state/aruba_15_1_154days.txt` | LLM単独ベースラインでも代表状態化に使う。 |
 | ラベル付きCASAS | `new_labeled_data/aruba.txt` | センサーイベント抽出元。activity `begin/end` はLLM入力に渡さない。 |
 | センサーマップ | `configs/aruba_sensor_map.json` | `M003` などを部屋名・場所名へ変換する。 |
-| 直接ログプロンプト | `prompts/direct_log_pattern_extraction_prompt.md` | LLM単独ベースライン用プロンプト。 |
+| 代表状態系列直接入力プロンプト | `prompts/direct_log_pattern_extraction_prompt.md` | LLM単独ベースライン用プロンプト。 |
 | APIキー | `.env` | `GEMINI_API_KEY` を設定する。 |
 
 ### 出力
@@ -49,7 +49,7 @@
 | 順序 | ファイル | 読み方 |
 |---|---|---|
 | 1 | `output/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx`, `output/llm_direct_154/evaluate_direct_log_metrics_154days.xlsx` | summaryとして、提案手法とLLM単独ベースラインの平均Precision / Recall / F1を並べて見る。 |
-| 2 | `output/llm_direct_154/{run}.json`, `output/llm_direct_154/evaluate_direct_log_report.txt` | detailsとして、直接ログベースラインの系列内容、抽出数、長すぎる系列や不自然な系列を確認する。 |
+| 2 | `output/llm_direct_154/{run}.json`, `output/llm_direct_154/evaluate_direct_log_report.txt` | detailsとして、LLM単独ベースラインの系列内容、抽出数、長すぎる系列や不自然な系列を確認する。 |
 | 3 | `configs/default.yaml`, `prompts/direct_log_pattern_extraction_prompt.md`, `docs/paper_parameters.md` | 再現条件として、run数、モデル、入力日数、プロンプトを確認する。 |
 
 ## 実行手順
@@ -99,7 +99,7 @@ uv run python scripts/run_groundedness.py
 2. LLM単独ベースラインは `new_labeled_data/aruba.txt` からセンサーイベントだけを抽出する。
 3. activity `begin/end` ラベルはLLM入力から除外する。
 4. `configs/aruba_sensor_map.json` でセンサーIDを場所名へ変換する。
-5. `scripts/run_direct_log_baseline.py` が直接ログ入力でLLM抽出と評価を行う。
+5. `scripts/run_direct_log_baseline.py` が、同じ前処理と代表状態写像を適用した系列をネットワーク化せずLLMへ直接入力して抽出・評価する。
 6. 評価指標は提案手法と同じベースライン系列に対するPrecision / Recall / F1を使う。
 
 ## パラメータ
@@ -111,13 +111,13 @@ uv run python scripts/run_groundedness.py
 | 分析期間 | `154`日 |
 | LLM run数 | `configs/default.yaml` の `llm.runs_default` に依存する。 |
 | LLMモデル | `gemini-2.5-pro` |
-| 直接ログ出力先 | `output/llm_direct_{DAYS}/` |
+| LLM単独出力先 | `output/llm_direct_{DAYS}/` |
 
-`llm.runs_default` が `1` の場合、直接ログベースラインは1回実行になる。提案手法と同じく5回で比較する場合は、設定値を変更し、変更内容を記録する。
+`llm.runs_default` が `1` の場合、LLM単独ベースラインは1回実行になる。提案手法と同じく5回で比較する場合は、設定値を変更し、変更内容を記録する。
 
 ## 注意点
 
 - 比較時は同じ `K`, ハミング距離、分析期間を使う。
 - `llm.runs_default` を変更した場合、他のLLM実行にも影響する可能性がある。
-- 直接ログベースラインの出力先は `output/llm_direct_{DAYS}/` で、提案手法の出力先とは異なる。
-- `src/behavior_pattern_mining/evaluation/groundedness_check.py` の既定入力が直接ログ出力向けになっている場合があるため、Groundedness確認時は入力パスを確認する。
+- LLM単独ベースラインの出力先は `output/llm_direct_{DAYS}/` で、提案手法の出力先とは異なる。
+- `src/behavior_pattern_mining/evaluation/groundedness_check.py` の既定入力がLLM単独出力向けになっている場合があるため、Groundedness確認時は入力パスを確認する。

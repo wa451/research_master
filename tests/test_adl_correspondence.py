@@ -8,7 +8,12 @@ from datetime import datetime
 from pathlib import Path
 
 from scripts.evaluate_adl_correspondence import aggregate_run_summaries, load_pattern_cache, write_pattern_cache
-from src.behavior_pattern_mining.evaluation.adl import ADLInterval, PredictionInterval, StateInterval
+from src.behavior_pattern_mining.evaluation.adl import (
+    ADLInterval,
+    PredictionInterval,
+    StateInterval,
+    build_network_equivalent_state_series_from_labeled_casas,
+)
 from src.behavior_pattern_mining.evaluation.adl_correspondence import (
     detect_alternating_loop,
     detect_other_state_round_trip,
@@ -25,11 +30,17 @@ from src.behavior_pattern_mining.evaluation.adl_correspondence import (
     evaluate_pattern_groundedness,
     evaluate_methods,
     find_occurrences_by_method,
+    is_low_information_sequence,
+    load_state_low_information_map,
     load_method_patterns,
+    MethodOccurrence,
     MethodPattern,
+    occurrence_containment_rate,
+    occurrence_is_within_time_band,
     parse_sequence,
     postprocess_predictions_by_method,
     train_pattern_adl_assignments,
+    validate_state_attribute_coverage,
     write_pattern_groundedness_outputs,
 )
 
@@ -44,6 +55,144 @@ class ADLCorrespondenceTests(unittest.TestCase):
         self.assertEqual(parse_sequence("状態1,状態5,状態7"), ("状態1", "状態5", "状態7"))
         self.assertEqual(parse_sequence('["状態1", "状態5"]'), ("状態1", "状態5"))
         self.assertEqual(parse_sequence(["状態1", "状態5"]), ("状態1", "状態5"))
+
+    def test_state_definition_resolves_empty_active_sensors_as_low_information(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_definition = Path(tmpdir) / "states.tsv"
+            state_definition.write_text(
+                "状態\tKitchen\tBedroom\n"
+                "状態1\t0\t0\n"
+                "状態2\t1\t0\n"
+                "その他\t-\t-\n",
+                encoding="utf-8",
+            )
+            state_map = load_state_low_information_map(
+                state_definition_path=state_definition,
+                other_state_labels={"その他"},
+            )
+
+        self.assertTrue(state_map["状態1"])
+        self.assertFalse(state_map["状態2"])
+        self.assertTrue(state_map["その他"])
+        validate_state_attribute_coverage(
+            ["状態1", "状態2", "その他"],
+            state_map,
+            {"その他"},
+        )
+        with self.assertRaisesRegex(ValueError, "状態3"):
+            validate_state_attribute_coverage(["状態3"], state_map, {"その他"})
+
+    def test_state_network_resolves_active_sensors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            network = Path(tmpdir) / "network.json"
+            network.write_text(
+                json.dumps(
+                    {
+                        "nodes": [
+                            {"state_id": "状態1", "active_sensors": []},
+                            {"state_id": "状態2", "active_sensors": ["Kitchen"]},
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            state_map = load_state_low_information_map(
+                state_network_json_path=network,
+            )
+
+        self.assertEqual(state_map, {"状態1": True, "状態2": False})
+
+    def test_low_information_threshold_is_strictly_greater_than_half(self) -> None:
+        at_boundary, boundary_ratio = is_low_information_sequence(
+            ("状態1", "状態2"),
+            other_state_labels=set(),
+            low_information_threshold=0.5,
+            state_low_information_map={"状態1": True, "状態2": False},
+        )
+        above_boundary, above_ratio = is_low_information_sequence(
+            ("状態1", "状態2", "状態3"),
+            other_state_labels=set(),
+            low_information_threshold=0.5,
+            state_low_information_map={
+                "状態1": True,
+                "状態2": True,
+                "状態3": False,
+            },
+        )
+
+        self.assertEqual(boundary_ratio, 0.5)
+        self.assertFalse(at_boundary)
+        self.assertGreater(above_ratio, 0.5)
+        self.assertTrue(above_boundary)
+
+    def test_network_equivalent_state_series_applies_one_second_sampling_and_delayed_off(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            labeled = tmp / "labeled.txt"
+            labeled.write_text(
+                "2020-01-01 00:00:01.200000 M001 ON\n"
+                "2020-01-01 00:00:03.000000 M001 OFF\n"
+                "2020-01-01 00:00:10.000000 M001 ON\n"
+                "2020-01-01 00:00:11.000000 M001 OFF\n",
+                encoding="utf-8",
+            )
+            state_definition = tmp / "states.tsv"
+            state_definition.write_text(
+                "状態\tKitchen\n"
+                "状態1\t0\n"
+                "状態2\t1\n"
+                "その他\t-\n",
+                encoding="utf-8",
+            )
+            sensor_map = tmp / "sensor_map.json"
+            sensor_map.write_text(
+                json.dumps({"M001": "Kitchen"}),
+                encoding="utf-8",
+            )
+
+            intervals = build_network_equivalent_state_series_from_labeled_casas(
+                labeled_casas_path=labeled,
+                state_table_path=state_definition,
+                hamming_threshold=0,
+                smoothing_window_sec=5,
+                sensor_map_path=sensor_map,
+                duration_days=1,
+            )
+
+        self.assertEqual(
+            [
+                (item.start_time, item.end_time, item.state_id)
+                for item in intervals[:5]
+            ],
+            [
+                (
+                    ts("2020-01-01 00:00:00"),
+                    ts("2020-01-01 00:00:02"),
+                    "状態1",
+                ),
+                (
+                    ts("2020-01-01 00:00:02"),
+                    ts("2020-01-01 00:00:07"),
+                    "状態2",
+                ),
+                (
+                    ts("2020-01-01 00:00:07"),
+                    ts("2020-01-01 00:00:10"),
+                    "状態1",
+                ),
+                (
+                    ts("2020-01-01 00:00:10"),
+                    ts("2020-01-01 00:00:15"),
+                    "状態2",
+                ),
+                (
+                    ts("2020-01-01 00:00:15"),
+                    ts("2020-01-02 00:00:00"),
+                    "状態1",
+                ),
+            ],
+        )
 
     def test_load_method_patterns_from_json_and_csv(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -117,6 +266,52 @@ class ADLCorrespondenceTests(unittest.TestCase):
         self.assertAlmostEqual(sleep_row["recall"], 1.0)
         self.assertAlmostEqual(sleep_row["f1"], 2 / 3)
         self.assertAlmostEqual(comparison["Sleep_F1"], 2 / 3)
+
+    def test_proposed_occurrence_search_respects_time_band(self) -> None:
+        patterns = [
+            MethodPattern(
+                method="proposed",
+                pattern_id="P001_Morning",
+                pattern_name="morning",
+                sequence=("状態1", "状態2"),
+                time_band="Morning",
+            )
+        ]
+        states = [
+            StateInterval(ts("2020-01-01 06:00:00"), ts("2020-01-01 06:01:00"), "状態1"),
+            StateInterval(ts("2020-01-01 06:01:00"), ts("2020-01-01 06:02:00"), "状態2"),
+            StateInterval(ts("2020-01-01 18:00:00"), ts("2020-01-01 18:01:00"), "状態1"),
+            StateInterval(ts("2020-01-01 18:01:00"), ts("2020-01-01 18:02:00"), "状態2"),
+        ]
+
+        occurrences = find_occurrences_by_method(
+            {"proposed": patterns},
+            states,
+            "exact",
+            2.0,
+        )
+
+        self.assertEqual(len(occurrences["proposed"]), 1)
+        self.assertEqual(
+            occurrences["proposed"][0].start_time,
+            ts("2020-01-01 06:00:00"),
+        )
+
+    def test_time_band_half_open_interval_excludes_boundary_crossing(self) -> None:
+        self.assertTrue(
+            occurrence_is_within_time_band(
+                ts("2020-01-01 09:59:00"),
+                ts("2020-01-01 10:00:00"),
+                "Morning",
+            )
+        )
+        self.assertFalse(
+            occurrence_is_within_time_band(
+                ts("2020-01-01 09:59:00"),
+                ts("2020-01-01 10:00:01"),
+                "Morning",
+            )
+        )
 
     def test_method_postprocess_merges_filters_and_computes_hits(self) -> None:
         labels = [
@@ -387,7 +582,11 @@ class ADLCorrespondenceTests(unittest.TestCase):
         train_occurrences = find_occurrences_by_method(patterns_by_method, train_states, "exact", 2.0)
         test_occurrences = find_occurrences_by_method(patterns_by_method, test_states, "exact", 2.0)
         assignments = train_pattern_adl_assignments(patterns_by_method, train_occurrences, train_labels)
-        fragmentation = compute_fragmentation_by_method(patterns_by_method, test_occurrences, 0.7)
+        fragmentation, fragmentation_summary = compute_fragmentation_by_method(
+            patterns_by_method,
+            test_occurrences,
+            0.7,
+        )
         detail_rows, summary_rows, _ = evaluate_pattern_groundedness(
             patterns_by_method=patterns_by_method,
             train_assignments=assignments,
@@ -403,18 +602,112 @@ class ADLCorrespondenceTests(unittest.TestCase):
 
         by_pattern = {row["pattern_id"]: row for row in detail_rows}
         self.assertTrue(fragmentation["frequency"]["F001"]["is_fragmented"])
+        self.assertEqual(
+            fragmentation_summary["frequency"]["num_comparable_fragment_pairs"],
+            1,
+        )
         self.assertEqual(by_pattern["F001"]["is_fragmented"], 1)
         self.assertEqual(by_pattern["F001"]["is_useful_non_redundant"], 0)
         self.assertEqual(by_pattern["F002"]["is_useful_non_redundant"], 1)
         self.assertEqual(by_pattern["F003"]["is_low_information"], 1)
         self.assertEqual(by_pattern["F003"]["is_contextless_useless"], 1)
         summary = summary_rows[0]
-        self.assertEqual(set(summary), {"method", "useful_non_redundant_pattern_rate", "fragmentation_rate", "contextless_useless_rate"})
+        self.assertEqual(summary["output_record_count"], 3)
+        self.assertEqual(summary["unique_sequence_count"], 3)
+        self.assertEqual(summary["num_evaluable_patterns"], 3)
+        self.assertEqual(summary["num_comparable_fragment_pairs"], 1)
+        self.assertEqual(summary["fragmentation_status"], "evaluated")
         self.assertAlmostEqual(summary["fragmentation_rate"], 1 / 3)
         self.assertAlmostEqual(summary["useful_non_redundant_pattern_rate"], 1 / 3)
         self.assertAlmostEqual(summary["contextless_useless_rate"], 1 / 3)
 
-    def test_pattern_groundedness_and_useless_a_are_pattern_level(self) -> None:
+    def test_fragmentation_uses_same_time_band_and_deduplicates_pairs(self) -> None:
+        patterns = [
+            MethodPattern(
+                "proposed",
+                "P_child_Morning",
+                "child",
+                ("状態1", "状態2"),
+                time_band="Morning",
+            ),
+            MethodPattern(
+                "proposed",
+                "P_parent_Morning",
+                "parent morning",
+                ("状態1", "状態2", "状態3"),
+                time_band="Morning",
+            ),
+            MethodPattern(
+                "proposed",
+                "P_parent_Night",
+                "parent night",
+                ("状態1", "状態2", "状態3"),
+                time_band="Night",
+            ),
+        ]
+        states = [
+            StateInterval(ts("2020-01-01 06:00:00"), ts("2020-01-01 06:01:00"), "状態1"),
+            StateInterval(ts("2020-01-01 06:01:00"), ts("2020-01-01 06:02:00"), "状態2"),
+            StateInterval(ts("2020-01-01 06:02:00"), ts("2020-01-01 06:03:00"), "状態3"),
+            StateInterval(ts("2020-01-01 18:00:00"), ts("2020-01-01 18:01:00"), "状態1"),
+            StateInterval(ts("2020-01-01 18:01:00"), ts("2020-01-01 18:02:00"), "状態2"),
+            StateInterval(ts("2020-01-01 18:02:00"), ts("2020-01-01 18:03:00"), "状態3"),
+        ]
+        patterns_by_method = {"proposed": patterns}
+        occurrences = find_occurrences_by_method(
+            patterns_by_method,
+            states,
+            "exact",
+            2.0,
+        )
+
+        fragmentation, summary = compute_fragmentation_by_method(
+            patterns_by_method,
+            occurrences,
+            0.7,
+        )
+
+        child = fragmentation["proposed"]["P_child_Morning"]
+        self.assertTrue(child["is_fragmented"])
+        self.assertEqual(
+            child["comparable_fragment_parent_ids"],
+            ["P_parent_Morning"],
+        )
+        self.assertEqual(summary["proposed"]["num_comparable_fragment_pairs"], 1)
+        self.assertEqual(summary["proposed"]["num_comparable_fragment_children"], 1)
+
+    def test_occurrence_containment_sweep_handles_overlapping_parents(self) -> None:
+        def occurrence(
+            occurrence_id: str,
+            start: str,
+            end: str,
+        ) -> MethodOccurrence:
+            return MethodOccurrence(
+                method="proposed",
+                pattern_id="P",
+                pattern_name="p",
+                sequence=("状態1", "状態2"),
+                occurrence_id=occurrence_id,
+                start_time=ts(start),
+                end_time=ts(end),
+            )
+
+        children = [
+            occurrence("C1", "2020-01-01 00:01:00", "2020-01-01 00:02:00"),
+            occurrence("C2", "2020-01-01 00:07:00", "2020-01-01 00:08:00"),
+            occurrence("C3", "2020-01-01 00:11:00", "2020-01-01 00:12:00"),
+        ]
+        parents = [
+            occurrence("P1", "2020-01-01 00:00:00", "2020-01-01 00:10:00"),
+            occurrence("P2", "2020-01-01 00:05:00", "2020-01-01 00:06:00"),
+        ]
+
+        self.assertAlmostEqual(
+            occurrence_containment_rate(children, parents),
+            2 / 3,
+        )
+
+    def test_fragmentation_rate_is_zero_when_no_comparable_pairs(self) -> None:
         patterns, _ = load_method_patterns_from_payload(
             [
                 {"sequence": ["状態1", "状態2"], "count": 10},
@@ -468,10 +761,73 @@ class ADLCorrespondenceTests(unittest.TestCase):
         self.assertEqual(by_pattern["F003"]["evaluation_status"], "no_train_support")
 
         summary = summary_rows[0]
-        self.assertEqual(set(summary), {"method", "useful_non_redundant_pattern_rate", "fragmentation_rate", "contextless_useless_rate"})
         self.assertAlmostEqual(summary["useful_non_redundant_pattern_rate"], 0.5)
-        self.assertAlmostEqual(summary["fragmentation_rate"], 0.0)
+        self.assertEqual(summary["fragmentation_rate"], 0.0)
+        self.assertEqual(summary["fragmentation_status"], "evaluated")
+        self.assertEqual(summary["num_comparable_fragment_pairs"], 0)
+        self.assertEqual(summary["num_comparable_fragment_children"], 0)
         self.assertAlmostEqual(summary["contextless_useless_rate"], 0.5)
+
+    def test_useful_flag_uses_state_attribute_low_information_result(self) -> None:
+        patterns = [
+            MethodPattern(
+                "proposed",
+                "P001",
+                "pattern",
+                ("状態1", "状態2"),
+            )
+        ]
+        patterns_by_method = {"proposed": patterns}
+        train_states = [
+            StateInterval(ts("2020-01-01 00:00:00"), ts("2020-01-01 00:01:00"), "状態1"),
+            StateInterval(ts("2020-01-01 00:01:00"), ts("2020-01-01 00:02:00"), "状態2"),
+        ]
+        test_states = [
+            StateInterval(ts("2020-01-02 00:00:00"), ts("2020-01-02 00:01:00"), "状態1"),
+            StateInterval(ts("2020-01-02 00:01:00"), ts("2020-01-02 00:02:00"), "状態2"),
+        ]
+        train_labels = [
+            ADLInterval(ts("2020-01-01 00:00:00"), ts("2020-01-01 00:02:00"), "Relax", "Relax")
+        ]
+        test_labels = [
+            ADLInterval(ts("2020-01-02 00:00:00"), ts("2020-01-02 00:02:00"), "Relax", "Relax")
+        ]
+        train_occurrences = find_occurrences_by_method(
+            patterns_by_method,
+            train_states,
+            "exact",
+            2.0,
+        )
+        test_occurrences = find_occurrences_by_method(
+            patterns_by_method,
+            test_states,
+            "exact",
+            2.0,
+        )
+        assignments = train_pattern_adl_assignments(
+            patterns_by_method,
+            train_occurrences,
+            train_labels,
+        )
+
+        detail_rows, summary_rows, _ = evaluate_pattern_groundedness(
+            patterns_by_method=patterns_by_method,
+            train_assignments=assignments,
+            test_occurrences_by_method=test_occurrences,
+            test_labels=test_labels,
+            min_overlap_seconds=1,
+            grounded_hit_threshold=0.3,
+            grounded_purity_threshold=0.3,
+            useless_hit_threshold=0.1,
+            useless_purity_threshold=0.1,
+            state_low_information_map={"状態1": True, "状態2": True},
+        )
+
+        self.assertEqual(detail_rows[0]["is_adl_grounded"], 1)
+        self.assertEqual(detail_rows[0]["is_low_information"], 1)
+        self.assertEqual(detail_rows[0]["is_contextless_useless"], 1)
+        self.assertEqual(detail_rows[0]["is_useful_non_redundant"], 0)
+        self.assertEqual(summary_rows[0]["fragmentation_rate"], 0.0)
 
     def test_evaluation5_multi_label_assigned_set_and_other_adl_exclusion(self) -> None:
         patterns, _ = load_method_patterns_from_payload(
@@ -616,6 +972,9 @@ class ADLCorrespondenceTests(unittest.TestCase):
                 [
                     "method",
                     "num_runs",
+                    "fragmentation_status",
+                    "fragmentation_rate_num_valid_runs",
+                    "fragmentation_rate_num_na_runs",
                     "useful_non_redundant_pattern_rate",
                     "useful_non_redundant_pattern_rate_std",
                     "fragmentation_rate",
@@ -636,6 +995,32 @@ class ADLCorrespondenceTests(unittest.TestCase):
                     "contextless_useless_rate",
                 ],
             )
+
+    def test_multi_run_fragmentation_aggregation_treats_legacy_na_as_zero(self) -> None:
+        rows = [
+            {
+                "run": 1,
+                "method": "proposed",
+                "useful_non_redundant_pattern_rate": 0.8,
+                "fragmentation_rate": None,
+                "contextless_useless_rate": 0.2,
+            },
+            {
+                "run": 2,
+                "method": "proposed",
+                "useful_non_redundant_pattern_rate": 0.6,
+                "fragmentation_rate": 0.25,
+                "contextless_useless_rate": 0.3,
+            },
+        ]
+
+        summary_rows, _ = aggregate_run_summaries(rows)
+        summary = summary_rows[0]
+
+        self.assertEqual(summary["fragmentation_status"], "evaluated")
+        self.assertEqual(summary["fragmentation_rate_num_valid_runs"], 2)
+        self.assertEqual(summary["fragmentation_rate_num_na_runs"], 0)
+        self.assertEqual(summary["fragmentation_rate"], 0.125)
 
 
 def load_method_patterns_from_payload(payload: list[dict], method: str):

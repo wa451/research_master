@@ -46,8 +46,10 @@ from src.behavior_pattern_mining.evaluation.adl_correspondence import (
     find_occurrences_by_method,
     label_counts,
     load_method_patterns,
+    load_state_low_information_map,
     parse_sequence,
     train_pattern_adl_assignments,
+    validate_state_attribute_coverage,
     write_pattern_groundedness_outputs,
 )
 
@@ -77,11 +79,11 @@ PATTERN_CACHE_COLUMNS = [
 
 
 def default_output_dir() -> Path:
-    return ROOT_DIR / "results" / "5_pattern_quality"
+    return ROOT_DIR / "results" / "5_pattern_quality_fixed"
 
 
 def default_baseline_cache_dir() -> Path:
-    return ROOT_DIR / "output" / "5_adl_correspondence_baselines"
+    return ROOT_DIR / "output" / "5_adl_correspondence_baselines_fixed"
 
 
 def default_paths() -> dict[str, Path]:
@@ -113,6 +115,23 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="CSV with start_time,end_time,state_id or timestamp,state_id",
     )
+    state_attribute_group = parser.add_mutually_exclusive_group(required=True)
+    state_attribute_group.add_argument(
+        "--state-definition",
+        type=Path,
+        help=(
+            "Representative-state TSV used to resolve state IDs and active sensors "
+            "for low-information checks"
+        ),
+    )
+    state_attribute_group.add_argument(
+        "--state-network-json",
+        type=Path,
+        help=(
+            "State-transition network JSON with nodes[].state_id and "
+            "nodes[].active_sensors, used instead of --state-definition"
+        ),
+    )
     parser.add_argument("--patterns-frequency", type=Path, default=paths["frequency"])
     parser.add_argument("--patterns-rule-light", type=Path, default=paths["rule_light"])
     parser.add_argument("--patterns-rule-medium", type=Path, default=paths["rule_medium"])
@@ -124,7 +143,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Optional proposed pattern path template for multi-run evaluation. "
-            "Use {run}, e.g. output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_{run}.json"
+            "Use {run}, e.g. output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_{run}.json"
         ),
     )
     parser.add_argument(
@@ -487,9 +506,21 @@ def load_or_build_transition_baseline(
 
 
 def aggregate_run_summaries(summary_rows_by_run: list[dict]) -> tuple[list[dict], dict[str, dict]]:
+    count_names = [
+        "output_record_count",
+        "unique_sequence_count",
+        "num_evaluable_patterns",
+        "num_excluded_patterns",
+        "num_adl_grounded",
+        "num_low_information",
+        "num_contextless_useless",
+        "num_fragmented",
+        "num_useful_non_redundant",
+        "num_comparable_fragment_pairs",
+        "num_comparable_fragment_children",
+    ]
     metric_names = [
         "useful_non_redundant_pattern_rate",
-        "fragmentation_rate",
         "contextless_useless_rate",
     ]
     rows_by_method: dict[str, list[dict]] = {}
@@ -505,15 +536,68 @@ def aggregate_run_summaries(summary_rows_by_run: list[dict]) -> tuple[list[dict]
     for method, rows in rows_by_method.items():
         if not has_multiple_runs:
             summary = {
-                "method": method,
-                **{metric: rows[0].get(metric, 0.0) for metric in metric_names},
+                key: value
+                for key, value in rows[0].items()
+                if key != "run"
             }
+            if summary.get("fragmentation_rate") in (None, ""):
+                summary["fragmentation_rate"] = 0.0
+            summary["fragmentation_status"] = "evaluated"
+            summary["fragmentation_rate_num_valid_runs"] = 1
+            summary["fragmentation_rate_num_na_runs"] = 0
         else:
             summary = {"method": method, "num_runs": len(rows)}
+            for count_name in count_names:
+                values = [
+                    float(row[count_name])
+                    for row in rows
+                    if row.get(count_name) not in (None, "")
+                ]
+                if values:
+                    summary[count_name] = statistics.mean(values)
             for metric in metric_names:
                 values = [float(row.get(metric, 0.0)) for row in rows]
                 summary[metric] = statistics.mean(values) if values else 0.0
                 summary[f"{metric}_std"] = statistics.stdev(values) if len(values) > 1 else 0.0
+            fragmentation_values = [
+                float(row.get("fragmentation_rate") or 0.0)
+                for row in rows
+            ]
+            summary["fragmentation_rate"] = statistics.mean(fragmentation_values)
+            summary["fragmentation_rate_std"] = (
+                statistics.stdev(fragmentation_values)
+                if len(fragmentation_values) > 1
+                else 0.0
+            )
+            summary["fragmentation_rate_num_valid_runs"] = len(fragmentation_values)
+            summary["fragmentation_rate_num_na_runs"] = 0
+            summary["fragmentation_status"] = "evaluated"
+
+            length_counts_by_run: list[dict[str, float]] = []
+            for row in rows:
+                raw_distribution = row.get("sequence_length_distribution_json")
+                if not raw_distribution:
+                    continue
+                parsed = json.loads(str(raw_distribution))
+                length_counts_by_run.append(
+                    {str(key): float(value) for key, value in parsed.items()}
+                )
+            if length_counts_by_run:
+                all_lengths = sorted(
+                    {length for counts in length_counts_by_run for length in counts},
+                    key=int,
+                )
+                mean_distribution = {
+                    length: statistics.mean(
+                        counts.get(length, 0.0) for counts in length_counts_by_run
+                    )
+                    for length in all_lengths
+                }
+                summary["sequence_length_distribution_json"] = json.dumps(
+                    mean_distribution,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
         summary_rows.append(summary)
         summary_by_method[method] = summary
 
@@ -531,6 +615,7 @@ def evaluate_one_run(
     train_labels,
     test_labels,
     train_period,
+    state_low_information_map: dict[str, bool],
 ) -> dict:
     patterns_by_method = {}
     skipped_methods = []
@@ -623,6 +708,17 @@ def evaluate_one_run(
     if not patterns_by_method:
         raise RuntimeError(f"No valid pattern files were loaded for run={run}.")
 
+    validate_state_attribute_coverage(
+        [
+            state_id
+            for patterns in patterns_by_method.values()
+            for pattern in patterns
+            for state_id in pattern.sequence
+        ],
+        state_low_information_map,
+        other_state_labels=set(args.other_state_labels),
+    )
+
     train_occurrences_by_method = find_occurrences_by_method(
         patterns_by_method=patterns_by_method,
         state_intervals=train_state_intervals,
@@ -663,6 +759,7 @@ def evaluate_one_run(
         other_state_labels=set(args.other_state_labels),
         fragmentation_containment_threshold=args.fragmentation_containment_threshold,
         low_information_threshold=args.low_information_threshold,
+        state_low_information_map=state_low_information_map,
     )
     detail_rows = [{"run": run, **row} for row in detail_rows]
     summary_rows = [{"run": run, **row} for row in summary_rows]
@@ -696,6 +793,16 @@ def main() -> None:
     )
     labels = expand_adl_intervals_for_evaluation5(raw_labels)
     state_intervals = load_state_series_csv(args.state_series)
+    state_low_information_map = load_state_low_information_map(
+        state_definition_path=args.state_definition,
+        state_network_json_path=args.state_network_json,
+        other_state_labels=set(args.other_state_labels),
+    )
+    validate_state_attribute_coverage(
+        [interval.state_id for interval in state_intervals],
+        state_low_information_map,
+        other_state_labels=set(args.other_state_labels),
+    )
     train_period, test_period = compute_time_split_periods(
         labels=labels,
         state_intervals=state_intervals,
@@ -751,6 +858,7 @@ def main() -> None:
             train_labels=train_labels,
             test_labels=test_labels,
             train_period=train_period,
+            state_low_information_map=state_low_information_map,
         )
         run_results.append(run_result)
         output_detail_rows = run_result["detail_rows"]
@@ -781,6 +889,21 @@ def main() -> None:
         "rq": "Can the proposed method extract useful non-redundant ADL-grounded patterns and reduce fragmented subsequences?",
         "labeled_casas_path": str(args.labeled_casas),
         "state_series_path": str(args.state_series),
+        "state_attributes": {
+            "source_type": (
+                "state_definition"
+                if args.state_definition is not None
+                else "state_network_json"
+            ),
+            "path": str(args.state_definition or args.state_network_json),
+            "num_resolved_states": len(state_low_information_map),
+            "low_information_state_ids": sorted(
+                state_id
+                for state_id, is_low_information in state_low_information_map.items()
+                if is_low_information
+            ),
+            "unresolved_state_policy": "error",
+        },
         "pattern_paths": {method: str(path) for method, path in method_paths.items()},
         "pattern_paths_by_run": pattern_paths_by_run,
         "methods": list(patterns_by_method),
@@ -843,7 +966,10 @@ def main() -> None:
                 "useful non-redundant patterns / evaluable patterns. A pattern is useful non-redundant "
                 "when it is ADL-grounded and neither contextless useless nor fragmented."
             ),
-            "fragmentation_rate": "num fragmented patterns / num_evaluable_patterns",
+            "fragmentation_rate": (
+                "num fragmented patterns / num_evaluable_patterns, including zero "
+                "when no comparable child-parent pair exists"
+            ),
             "contextless_useless_rate": "num contextless useless patterns / num_evaluable_patterns",
         },
         "contextless_useless_definition": {
@@ -853,7 +979,7 @@ def main() -> None:
                 "contains A -> B -> A -> B",
             ],
             "low_information": (
-                "ratio of Other/unknown/その他/no-active-sensors states in sequence >= "
+                "ratio of Other/unknown/その他/no-active-sensors states in sequence > "
                 f"{args.low_information_threshold:g}"
             ),
             "adl_unsupported": (
@@ -866,7 +992,20 @@ def main() -> None:
             "occurrence_containment": (
                 "number of p occurrences contained in q occurrence intervals / number of p occurrences"
             ),
-            "time_band_policy": "fragmentation is checked within the same method and same time_band when time_band is present",
+            "time_band_policy": (
+                "sequence x time_band records are occurrence-matched and fragmentation-checked "
+                "within the same time band; both occurrence start and end-epsilon must belong "
+                "to the requested band"
+            ),
+            "comparable_pair": (
+                "unique ordered child-parent pattern-ID pair in the same method/run/time_band "
+                "where child is a proper contiguous subsequence of parent"
+            ),
+            "zero_pair_policy": (
+                "fragmentation_rate is zero because num_fragmented is zero and the denominator "
+                "remains num_evaluable_patterns; comparable pair and child counts remain "
+                "diagnostic and zero pairs must not be interpreted as demonstrated suppression"
+            ),
         },
         "multi_label_adl_mapping": True,
         "assigned_adl_set_definition": {

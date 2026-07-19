@@ -129,8 +129,11 @@ def discover_result_dirs() -> list[Path]:
     candidates = [
         PROJECT_ROOT / "results" / "4_adl_detect",
         PROJECT_ROOT / "results" / "5_pattern_quality",
+        PROJECT_ROOT / "results" / "5_pattern_quality_fixed",
         PROJECT_ROOT / "results" / "6_adl_match",
         PROJECT_ROOT / "results" / "7_param_search",
+        PROJECT_ROOT / "results" / "8_vs_llm_own_id_fixed",
+        PROJECT_ROOT / "results" / "8_proposed_own_id_fixed",
         PROJECT_ROOT / "output" / "6_adl_evaluation_14",
         PROJECT_ROOT / "output" / "6_adl_evaluation_15_1_14days",
         PROJECT_ROOT / "output" / "6_adl_evaluation_30",

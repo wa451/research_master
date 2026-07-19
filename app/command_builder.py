@@ -247,11 +247,6 @@ def build_evaluation5_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     runs = settings.get("runs", 1)
     labeled = as_path(settings["labeled_casas"])
     state_series = as_path(settings["state_series"])
-    intermediate_output_dir = as_path(
-        settings.get("eval5_intermediate_output_dir")
-        or settings.get("eval4_output_dir")
-        or "output/5_adl_evaluation"
-    )
     state_table = as_path(settings["state_table"])
     sensor_map = as_path(settings["sensor_map"])
     proposed = as_path(settings["patterns_proposed"])
@@ -281,13 +276,21 @@ def build_evaluation5_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_arg(prep_cmd, "--labeled-casas", labeled)
     add_arg(prep_cmd, "--state-table", state_table)
     add_arg(prep_cmd, "--sensor-map", sensor_map)
-    add_arg(prep_cmd, "--patterns", proposed)
-    add_arg(prep_cmd, "--output-dir", intermediate_output_dir)
     add_arg(prep_cmd, "--write-state-series", state_series)
+    add_arg(prep_cmd, "--hamming-threshold", hamming)
+    add_arg(prep_cmd, "--state-series-preprocessing", "network-equivalent")
+    add_arg(
+        prep_cmd,
+        "--smoothing-window-sec",
+        settings.get("smoothing_window_sec", SMOOTHING_WINDOW_SEC),
+    )
+    add_arg(prep_cmd, "--state-series-days", settings.get("state_series_days", 220))
+    prep_cmd.append("--state-series-only")
 
     eval_cmd = script_cmd(runner, "scripts/evaluate_adl_correspondence.py")
     add_arg(eval_cmd, "--labeled-casas", labeled)
     add_arg(eval_cmd, "--state-series", state_series)
+    add_arg(eval_cmd, "--state-definition", state_table)
     pattern_flags = {
         "--patterns-frequency": as_path(settings["patterns_frequency"]),
         "--patterns-rule-light": as_path(settings["patterns_rule_light"]),
@@ -346,7 +349,7 @@ def build_evaluation5_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_flag(eval_cmd, "--include-no-test-support-in-denominator", settings["include_no_test_support_in_denominator"])
     add_flag(eval_cmd, "--no-auto-generate-baselines", settings["no_auto_generate_baselines"])
 
-    required_eval_inputs = [labeled, state_series, proposed]
+    required_eval_inputs = [labeled, state_series, state_table, proposed]
     if runs > 1 and not settings.get("skip_missing_runs", False):
         for run in range(2, runs + 1):
             required_eval_inputs.append(
@@ -387,9 +390,12 @@ def build_evaluation5_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
         EvaluationStep(
             "eval5_prepare_state_series",
             "3. 評価5用 state_series を作成",
-            "評価5専用の中間output-dirへ代表状態系列CSVを作成します。既にある場合は一括実行ではスキップされます。",
+            (
+                "抽出側と同じ1秒化・遅延OFF平滑化・固定代表状態写像・連続圧縮で、"
+                "評価5専用の全期間state_series CSVだけを作成します。"
+            ),
             prep_cmd,
-            [p for p in [labeled, state_table, sensor_map, proposed] if p is not None],
+            [p for p in [labeled, state_table, sensor_map] if p is not None],
             [state_series],
         ),
         EvaluationStep(
@@ -464,9 +470,6 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_arg(compare_cmd, "--labeled-casas", labeled)
     add_arg(compare_cmd, "--output-dir", output_dir)
     add_arg(compare_cmd, "--min-overlap-ratio-for-true-label", settings["min_overlap_ratio_for_true_label"])
-    add_arg(compare_cmd, "--no-overlap-label", settings["no_overlap_label"])
-    add_arg(compare_cmd, "--missing-pred-label", settings["missing_pred_label"])
-    add_arg(compare_cmd, "--unknown-pred-label", settings["unknown_pred_label"])
     add_arg(compare_cmd, "--wake-window-minutes", settings["wake_window_minutes"])
     add_arg(compare_cmd, "--match-mode", settings["match_mode"])
     add_arg(compare_cmd, "--max-skip-duration-minutes", settings["max_skip_duration_minutes"])
@@ -512,7 +515,7 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
         EvaluationStep(
             "eval6_direct_baseline",
             "4. LLM単独ベースラインを生成",
-            "直接ログ入力の LLM JSON を指定run数分生成します。APIキーを使う重い処理です。",
+            "同期間の前処理済み代表状態系列を直接LLMへ入力するベースラインJSONを指定run数分生成します。APIキーを使う重い処理です。",
             direct_cmd,
             [p for p in [labeled, state_table] if p is not None],
             expected_direct,
@@ -560,10 +563,12 @@ def build_evaluation8_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
 
     if analysis_scope in {"comparison_14days", "comparison_30days"}:
         details = as_path(settings["evaluation6_details"])
+        state_series = as_path(settings.get("state_series"))
         if details is None:
             raise ValueError("Comparison analysis requires an Evaluation 6 details path.")
         add_arg(command, "--evaluation6-details", details)
-        required_inputs = [details]
+        add_arg(command, "--state-series", state_series)
+        required_inputs = [details, *([state_series] if state_series is not None else [])]
         description = f"{days}日条件の評価6手法比較詳細CSVを、三分位と固定回数帯の両方で後段集計します。"
         mode_output_dirs = [output_dir / "tertile", output_dir / "fixed"] if frequency_band_mode == "both" else [output_dir]
         expected_outputs = []
@@ -573,6 +578,7 @@ def build_evaluation8_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                     mode_output_dir / "evaluation8_frequency_band_details.csv",
                     mode_output_dir / "evaluation8_by_frequency_band.csv",
                     mode_output_dir / "evaluation8_by_frequency_band_by_method.csv",
+                    mode_output_dir / "evaluation8_by_frequency_band_by_run.csv",
                     mode_output_dir / "evaluation8_occurrence_weighted_summary.csv",
                     mode_output_dir / "evaluation8_summary.json",
                 ]
@@ -591,9 +597,6 @@ def build_evaluation8_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
         add_arg(command, "--labeled-casas", labeled_casas)
         add_arg(command, "--adl-intervals", adl_intervals)
         add_arg(command, "--min-overlap-ratio-for-true-label", settings["min_overlap_ratio_for_true_label"])
-        add_arg(command, "--no-overlap-label", settings["no_overlap_label"])
-        add_arg(command, "--missing-pred-label", settings["missing_pred_label"])
-        add_arg(command, "--unknown-pred-label", settings["unknown_pred_label"])
         add_arg(command, "--wake-window-minutes", settings["wake_window_minutes"])
         add_arg(command, "--match-mode", settings["match_mode"])
         add_arg(command, "--max-skip-duration-minutes", settings["max_skip_duration_minutes"])
@@ -625,6 +628,7 @@ def build_evaluation8_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                 [
                     mode_output_dir / "evaluation8_frequency_band_details.csv",
                     mode_output_dir / "evaluation8_by_frequency_band.csv",
+                    mode_output_dir / "evaluation8_by_frequency_band_by_run.csv",
                     mode_output_dir / "evaluation8_occurrence_weighted_summary.csv",
                     mode_output_dir / "evaluation8_summary.json",
                 ]
@@ -657,7 +661,7 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     runs = settings["runs"]
     staged_search = settings.get("staged_search", False)
     top_n = int(settings.get("top_n", 10))
-    total_runs = int(settings.get("total_runs", settings.get("repeat_runs", 3)))
+    total_runs = int(settings.get("total_runs", settings.get("repeat_runs", 5)))
     patterns_template = None if staged_search else settings.get("patterns_template")
     n_states_list = settings["n_states_list"]
     hamming_thresholds = settings["hamming_thresholds"]
@@ -699,9 +703,6 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
         add_arg(command, "--labeled-casas", labeled)
         add_arg(command, "--output-dir", destination)
         add_arg(command, "--min-overlap-ratio-for-true-label", settings["min_overlap_ratio_for_true_label"])
-        add_arg(command, "--no-overlap-label", settings["no_overlap_label"])
-        add_arg(command, "--missing-pred-label", settings["missing_pred_label"])
-        add_arg(command, "--unknown-pred-label", settings["unknown_pred_label"])
         add_arg(command, "--wake-window-minutes", settings["wake_window_minutes"])
         add_arg(command, "--match-mode", settings["match_mode"])
         add_arg(command, "--max-skip-duration-minutes", settings["max_skip_duration_minutes"])

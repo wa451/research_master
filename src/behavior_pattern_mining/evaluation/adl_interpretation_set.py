@@ -6,8 +6,10 @@ import ast
 import csv
 import json
 import statistics
+import warnings
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -15,7 +17,6 @@ from src.behavior_pattern_mining.evaluation.adl import (
     ADLInterval,
     adl_category_set_for_label,
     interval_overlap_seconds,
-    lookup_adl_category_set,
     parse_timestamp,
     sequence_text,
 )
@@ -28,60 +29,28 @@ ALLOWED_LABELS = [
     "Relax",
     "Outing",
     "Hygiene",
+    "Toileting",
     "Housework",
+    "Work",
     "Other",
-    "Noise",
-    "Ambiguous",
 ]
 
 ALLOWED_LABEL_SET = set(ALLOWED_LABELS)
 
 LABEL_ALIASES = {
     "sleep": "Sleep",
-    "sleeping": "Sleep",
-    "bed": "Sleep",
     "wake-up": "Wake-up",
     "wakeup": "Wake-up",
     "wake_up": "Wake-up",
     "wake up": "Wake-up",
-    "morning routine": "Wake-up",
     "meal": "Meal",
-    "meal preparation": "Meal",
-    "meal_preparation": "Meal",
-    "cooking": "Meal",
-    "eating": "Meal",
-    "wash dishes": "Meal",
-    "wash_dishes": "Meal",
     "relax": "Relax",
-    "rest": "Relax",
-    "resting": "Relax",
-    "leisure": "Relax",
     "outing": "Outing",
-    "leave home": "Outing",
-    "leave_home": "Outing",
-    "enter home": "Outing",
-    "enter_home": "Outing",
-    "outside": "Outing",
     "hygiene": "Hygiene",
-    "bathroom": "Hygiene",
-    "toilet": "Hygiene",
-    "toileting": "Hygiene",
-    "personal hygiene": "Hygiene",
-    "personal_hygiene": "Hygiene",
-    "bath": "Hygiene",
-    "bathing": "Hygiene",
+    "toileting": "Toileting",
     "housework": "Housework",
-    "cleaning": "Housework",
-    "housekeeping": "Housework",
-    "laundry": "Housework",
+    "work": "Work",
     "other": "Other",
-    "other_adl": "Other",
-    "noise": "Noise",
-    "noisy": "Noise",
-    "ambiguous": "Ambiguous",
-    "unclear": "Ambiguous",
-    "unknown": "Ambiguous",
-    "unmapped": "Ambiguous",
 }
 
 
@@ -93,6 +62,9 @@ class InterpretationPattern:
     pred_adl_labels: tuple[str, ...]
     group_pattern_id: str = ""
     time_band: str = "All"
+    raw_pred_adl_labels: tuple[str, ...] = ()
+    unknown_pred_adl_labels: tuple[str, ...] = ()
+    prediction_status: str = "valid"
 
 
 @dataclass(frozen=True)
@@ -105,10 +77,23 @@ class PatternOccurrenceInterval:
     time_band: str = "All"
 
 
-def normalize_adl_label(value: Any, unknown_label: str = "Other") -> str:
+@dataclass(frozen=True)
+class PredictionLabelNormalization:
+    raw_labels: tuple[str, ...]
+    normalized_labels: tuple[str, ...]
+    unknown_labels: tuple[str, ...]
+    status: str
+
+
+def normalize_adl_label(value: Any, unknown_label: str | None = None) -> str | None:
+    """Return one canonical evaluation label, or ``None`` when it is unknown.
+
+    ``unknown_label`` remains in the signature for source compatibility with
+    older callers, but unknown values are never coerced to ``Other``.
+    """
     text = str(value).strip()
     if not text:
-        return unknown_label
+        return None
     if text in ALLOWED_LABEL_SET:
         return text
 
@@ -127,24 +112,22 @@ def normalize_adl_label(value: Any, unknown_label: str = "Other") -> str:
     canonical = LABEL_ALIASES.get(compact_key)
     if canonical:
         return canonical
-    return unknown_label
+    return None
 
 
-def normalize_adl_label_set_value(value: Any, unknown_label: str = "Other") -> tuple[str, ...]:
-    """Normalize one raw label-like value to one or more evaluation-6 labels."""
+def normalize_adl_label_set_value(
+    value: Any,
+    unknown_label: str | None = None,
+) -> tuple[str, ...]:
+    """Normalize one LLM prediction only within the allowed 10-label vocabulary."""
     text = str(value).strip()
     if not text:
-        return (unknown_label,)
+        return ()
     if text in ALLOWED_LABEL_SET:
         return (text,)
 
-    if lookup_adl_category_set(text):
-        return tuple(
-            label for label in adl_category_set_for_label(text)
-            if label in ALLOWED_LABEL_SET
-        ) or (unknown_label,)
-
-    return (normalize_adl_label(text, unknown_label=unknown_label),)
+    normalized = normalize_adl_label(text)
+    return (normalized,) if normalized else ()
 
 
 def parse_label_values(raw_value: Any) -> list[Any]:
@@ -176,22 +159,48 @@ def parse_label_values(raw_value: Any) -> list[Any]:
 
 def normalize_label_set(
     raw_value: Any,
-    missing_label: str = "Ambiguous",
-    unknown_label: str = "Other",
+    missing_label: str | None = None,
+    unknown_label: str | None = None,
 ) -> tuple[str, ...]:
+    """Compatibility wrapper returning only recognized ADL labels."""
+    return normalize_prediction_labels(raw_value).normalized_labels
+
+
+def normalize_prediction_labels(raw_value: Any) -> PredictionLabelNormalization:
     values = parse_label_values(raw_value)
     if not values:
-        return (missing_label,)
+        return PredictionLabelNormalization((), (), (), "missing")
 
-    normalized = []
-    seen = set()
+    raw_labels: list[str] = []
+    normalized: list[str] = []
+    unknown: list[str] = []
+    seen_normalized: set[str] = set()
+    seen_unknown: set[str] = set()
     for value in values:
-        for label in normalize_adl_label_set_value(value, unknown_label=unknown_label):
-            if label in seen:
+        raw_label = str(value).strip()
+        if not raw_label:
+            continue
+        raw_labels.append(raw_label)
+        labels = normalize_adl_label_set_value(value)
+        if not labels:
+            if raw_label not in seen_unknown:
+                seen_unknown.add(raw_label)
+                unknown.append(raw_label)
+            continue
+        for label in labels:
+            if label in seen_normalized:
                 continue
-            seen.add(label)
+            seen_normalized.add(label)
             normalized.append(label)
-    return tuple(sorted(normalized)) if normalized else (missing_label,)
+    if not raw_labels:
+        return PredictionLabelNormalization((), (), (), "missing")
+    status = "unknown" if unknown else "valid"
+    return PredictionLabelNormalization(
+        tuple(raw_labels),
+        tuple(sorted(normalized)),
+        tuple(unknown),
+        status,
+    )
 
 
 def parse_sequence(value: Any) -> tuple[str, ...]:
@@ -260,21 +269,22 @@ def _flat_interpretation_pattern(
         or item.get("name")
         or resolved_pattern_id
     )
-    adl_labels = normalize_label_set(
+    label_normalization = normalize_prediction_labels(
         item.get("ADL系列ラベル")
         or item.get("adl_sequence_labels")
         or item.get("adl_labels")
-        or item.get("ADLラベル"),
-        missing_label=missing_label,
-        unknown_label=unknown_label,
+        or item.get("ADLラベル")
     )
     return InterpretationPattern(
         pattern_id=resolved_pattern_id,
         group_pattern_id=resolved_group_pattern_id,
         pattern_name=pattern_name,
         sequence=sequence,
-        pred_adl_labels=adl_labels,
+        pred_adl_labels=label_normalization.normalized_labels,
         time_band=time_band,
+        raw_pred_adl_labels=label_normalization.raw_labels,
+        unknown_pred_adl_labels=label_normalization.unknown_labels,
+        prediction_status=label_normalization.status,
     )
 
 
@@ -336,6 +346,23 @@ def load_interpretation_patterns(
         )
         if pattern is not None:
             patterns.append(pattern)
+    unknown_labels = sorted(
+        {
+            label
+            for pattern in patterns
+            for label in pattern.unknown_pred_adl_labels
+        }
+    )
+    if unknown_labels:
+        unknown_record_count = sum(
+            pattern.prediction_status == "unknown"
+            for pattern in patterns
+        )
+        warnings.warn(
+            f"{path}: {unknown_record_count} pattern record(s) contain unknown "
+            f"ADL label(s): {', '.join(unknown_labels)}",
+            stacklevel=2,
+        )
     return patterns
 
 
@@ -378,15 +405,104 @@ def load_adl_intervals_csv(path: Path) -> list[ADLInterval]:
         category = row.get("adl_category") or row.get("category") or row.get("raw_label")
         if not start_text or not end_text or not category:
             continue
+        normalized_category = normalize_adl_label(category)
         intervals.append(
             ADLInterval(
                 start_time=parse_timestamp(start_text),
                 end_time=parse_timestamp(end_text),
                 raw_label=row.get("raw_label") or category,
-                adl_category=normalize_adl_label(category, unknown_label="Other"),
+                adl_category=normalized_category or "Other",
             )
         )
     return intervals
+
+
+def occurrence_is_within_time_band(
+    start_time: Any,
+    end_time: Any,
+    time_band: str,
+) -> bool:
+    """Return whether half-open ``[start_time, end_time)`` stays in one band."""
+    normalized_band = str(time_band or "All").strip() or "All"
+    if normalized_band == "All":
+        return True
+    if end_time <= start_time:
+        return False
+    return (
+        time_band_for_timestamp(start_time) == normalized_band
+        and time_band_for_timestamp(end_time - timedelta(microseconds=1))
+        == normalized_band
+    )
+
+
+def occurrence_audit_for_pattern(
+    pattern: InterpretationPattern,
+    occurrences: Sequence[PatternOccurrenceInterval],
+) -> dict[str, Any]:
+    """Return accepted occurrences and time-band-boundary audit counts."""
+    group_pattern_id = pattern.group_pattern_id or pattern.pattern_id
+    id_matches = [
+        occurrence
+        for occurrence in occurrences
+        if occurrence.pattern_id in {pattern.pattern_id, group_pattern_id}
+    ]
+    # Some legacy occurrence CSVs do not preserve the evaluation pattern ID.
+    # Use sequence fallback only when no own/group-ID occurrence exists; mixing
+    # both sources duplicates a physical occurrence when the same sequence is
+    # expanded into multiple time-band evaluation records.
+    if id_matches:
+        matched_occurrences = id_matches
+    else:
+        matched_occurrences = [
+            occurrence
+            for occurrence in occurrences
+            if bool(occurrence.sequence) and occurrence.sequence == pattern.sequence
+        ]
+
+    if pattern.time_band == "All":
+        assigned_candidates = matched_occurrences
+        boundary_crossing = [
+            occurrence
+            for occurrence in assigned_candidates
+            if time_band_for_timestamp(occurrence.start_time)
+            != time_band_for_timestamp(
+                occurrence.end_time - timedelta(microseconds=1)
+            )
+        ]
+        accepted = assigned_candidates
+        excluded_crossing: list[PatternOccurrenceInterval] = []
+    else:
+        assigned_candidates = [
+            occurrence
+            for occurrence in matched_occurrences
+            if time_band_for_timestamp(occurrence.start_time) == pattern.time_band
+        ]
+        boundary_crossing = [
+            occurrence
+            for occurrence in assigned_candidates
+            if not occurrence_is_within_time_band(
+                occurrence.start_time,
+                occurrence.end_time,
+                pattern.time_band,
+            )
+        ]
+        crossing_ids = {id(occurrence) for occurrence in boundary_crossing}
+        accepted = [
+            occurrence
+            for occurrence in assigned_candidates
+            if id(occurrence) not in crossing_ids
+        ]
+        excluded_crossing = boundary_crossing
+
+    return {
+        "occurrences": accepted,
+        "num_matching_occurrences_before_time_band_filter": len(
+            matched_occurrences
+        ),
+        "num_time_band_assigned_occurrences": len(assigned_candidates),
+        "num_boundary_crossing_occurrences": len(boundary_crossing),
+        "num_boundary_crossing_occurrences_excluded": len(excluded_crossing),
+    }
 
 
 def overlap_by_pattern_and_label(
@@ -396,15 +512,9 @@ def overlap_by_pattern_and_label(
 ) -> dict[str, dict[str, float]]:
     occurrences_by_pattern: dict[str, list[PatternOccurrenceInterval]] = defaultdict(list)
     for pattern in patterns:
-        group_pattern_id = pattern.group_pattern_id or pattern.pattern_id
-        for occurrence in occurrences:
-            id_matches = occurrence.pattern_id in {pattern.pattern_id, group_pattern_id}
-            sequence_matches = bool(occurrence.sequence) and occurrence.sequence == pattern.sequence
-            if not (id_matches or sequence_matches):
-                continue
-            if pattern.time_band != "All" and time_band_for_timestamp(occurrence.start_time) != pattern.time_band:
-                continue
-            occurrences_by_pattern[pattern.pattern_id].append(occurrence)
+        occurrences_by_pattern[pattern.pattern_id].extend(
+            occurrence_audit_for_pattern(pattern, occurrences)["occurrences"]
+        )
 
     labels = sorted(adl_intervals, key=lambda item: item.start_time)
     overlaps: dict[str, dict[str, float]] = {}
@@ -425,7 +535,7 @@ def overlap_by_pattern_and_label(
                 )
                 if overlap > 0:
                     for category in adl_category_set_for_label(label.raw_label, label.adl_category):
-                        normalized_category = normalize_adl_label(category, unknown_label="Other")
+                        normalized_category = normalize_adl_label(category)
                         if normalized_category in ALLOWED_LABEL_SET:
                             label_seconds[normalized_category] += overlap
         overlaps[pattern.pattern_id] = dict(sorted(label_seconds.items()))
@@ -442,34 +552,25 @@ def relevant_occurrences_for_pattern(
     Thus an identical sequence in another time band is deliberately excluded
     from both overlap calculation and ``num_occurrences``.
     """
-    group_pattern_id = pattern.group_pattern_id or pattern.pattern_id
-    relevant = []
-    for occurrence in occurrences:
-        id_matches = occurrence.pattern_id in {pattern.pattern_id, group_pattern_id}
-        sequence_matches = bool(occurrence.sequence) and occurrence.sequence == pattern.sequence
-        if not (id_matches or sequence_matches):
-            continue
-        if pattern.time_band != "All" and time_band_for_timestamp(occurrence.start_time) != pattern.time_band:
-            continue
-        relevant.append(occurrence)
-    return relevant
+    return list(occurrence_audit_for_pattern(pattern, occurrences)["occurrences"])
 
 
 def true_label_set_from_overlap(
     overlap_seconds_by_label: dict[str, float],
     min_overlap_ratio: float,
-    no_overlap_label: str = "Ambiguous",
+    no_overlap_label: str | None = None,
 ) -> tuple[tuple[str, ...], float]:
+    """Build a truth set; an empty tuple means no ADL overlap was available."""
     total = sum(overlap_seconds_by_label.values())
     if total <= 0:
-        return (no_overlap_label,), 0.0
+        return (), 0.0
 
     labels = [
         label
         for label, seconds in sorted(overlap_seconds_by_label.items())
         if seconds / total >= min_overlap_ratio
     ]
-    return tuple(labels) if labels else (no_overlap_label,), total
+    return tuple(labels), total
 
 
 def set_metrics(pred_labels: Sequence[str], true_labels: Sequence[str]) -> dict[str, float | int | tuple[str, ...]]:
@@ -491,23 +592,92 @@ def set_metrics(pred_labels: Sequence[str], true_labels: Sequence[str]) -> dict[
     }
 
 
+def zero_metrics(true_labels: Sequence[str] = ()) -> dict[str, float | int | tuple[str, ...]]:
+    return {
+        "intersection_labels": (),
+        "union_labels": tuple(sorted(set(true_labels))),
+        "exact_set_match": 0,
+        "jaccard": 0.0,
+        "multilabel_precision": 0.0,
+        "multilabel_recall": 0.0,
+        "multilabel_f1": 0.0,
+    }
+
+
+def _prefixed_metrics(prefix: str, metrics: dict[str, Any] | None) -> dict[str, Any]:
+    return {
+        f"{prefix}_exact_set_match": (
+            metrics["exact_set_match"] if metrics is not None else None
+        ),
+        f"{prefix}_jaccard": metrics["jaccard"] if metrics is not None else None,
+        f"{prefix}_multilabel_precision": (
+            metrics["multilabel_precision"] if metrics is not None else None
+        ),
+        f"{prefix}_multilabel_recall": (
+            metrics["multilabel_recall"] if metrics is not None else None
+        ),
+        f"{prefix}_multilabel_f1": (
+            metrics["multilabel_f1"] if metrics is not None else None
+        ),
+    }
+
+
 def evaluate_interpretation_sets(
     patterns: Sequence[InterpretationPattern],
     occurrences: Sequence[PatternOccurrenceInterval],
     adl_intervals: Sequence[ADLInterval],
     min_overlap_ratio_for_true_label: float,
-    no_overlap_label: str = "Ambiguous",
+    no_overlap_label: str | None = None,
 ) -> tuple[list[dict], dict]:
     overlaps = overlap_by_pattern_and_label(patterns, occurrences, adl_intervals)
     detail_rows = []
     for pattern in patterns:
+        occurrence_audit = occurrence_audit_for_pattern(pattern, occurrences)
+        relevant_occurrences = occurrence_audit["occurrences"]
+        num_occurrences = len(relevant_occurrences)
+        occurrence_status = "matched" if num_occurrences else "no_occurrence"
         overlap_detail = overlaps.get(pattern.pattern_id, {})
         true_labels, total_overlap = true_label_set_from_overlap(
             overlap_detail,
             min_overlap_ratio=min_overlap_ratio_for_true_label,
-            no_overlap_label=no_overlap_label,
         )
-        metrics = set_metrics(pattern.pred_adl_labels, true_labels)
+        truth_status = (
+            "defined"
+            if occurrence_status == "matched" and total_overlap > 0
+            else "no_adl_overlap"
+        )
+        is_metric_evaluable = (
+            occurrence_status == "matched" and truth_status == "defined"
+        )
+        is_end_to_end_evaluable = not (
+            occurrence_status == "matched"
+            and truth_status == "no_adl_overlap"
+        )
+
+        if occurrence_status == "no_occurrence":
+            conditional_metrics = None
+            end_to_end_metrics = zero_metrics()
+        elif truth_status == "no_adl_overlap":
+            conditional_metrics = None
+            end_to_end_metrics = None
+        elif pattern.prediction_status in {"missing", "unknown"}:
+            conditional_metrics = zero_metrics(true_labels)
+            end_to_end_metrics = zero_metrics(true_labels)
+        else:
+            conditional_metrics = set_metrics(pattern.pred_adl_labels, true_labels)
+            end_to_end_metrics = dict(conditional_metrics)
+
+        display_metrics = end_to_end_metrics
+        intersection_labels = (
+            display_metrics["intersection_labels"]
+            if display_metrics is not None
+            else ()
+        )
+        union_labels = (
+            display_metrics["union_labels"]
+            if display_metrics is not None
+            else ()
+        )
         detail_rows.append(
             {
                 "pattern_id": pattern.pattern_id,
@@ -516,16 +686,60 @@ def evaluate_interpretation_sets(
                 "time_band": pattern.time_band,
                 "pattern_name": pattern.pattern_name,
                 "sequence": sequence_text(pattern.sequence),
-                "num_occurrences": len(relevant_occurrences_for_pattern(pattern, occurrences)),
+                "num_occurrences": num_occurrences,
+                "num_matching_occurrences_before_time_band_filter": occurrence_audit[
+                    "num_matching_occurrences_before_time_band_filter"
+                ],
+                "num_time_band_assigned_occurrences": occurrence_audit[
+                    "num_time_band_assigned_occurrences"
+                ],
+                "num_boundary_crossing_occurrences": occurrence_audit[
+                    "num_boundary_crossing_occurrences"
+                ],
+                "num_boundary_crossing_occurrences_excluded": occurrence_audit[
+                    "num_boundary_crossing_occurrences_excluded"
+                ],
+                "occurrence_status": occurrence_status,
+                "truth_status": truth_status,
+                "prediction_status": pattern.prediction_status,
+                "is_metric_evaluable": int(is_metric_evaluable),
+                "is_end_to_end_evaluable": int(is_end_to_end_evaluable),
+                "raw_pred_adl_labels": labels_text(pattern.raw_pred_adl_labels),
                 "pred_adl_labels": labels_text(pattern.pred_adl_labels),
+                "unknown_pred_adl_labels": labels_text(
+                    pattern.unknown_pred_adl_labels
+                ),
+                "unknown_pred_label_count": len(pattern.unknown_pred_adl_labels),
                 "true_adl_labels": labels_text(true_labels),
-                "intersection_labels": labels_text(metrics["intersection_labels"]),
-                "union_labels": labels_text(metrics["union_labels"]),
-                "exact_set_match": metrics["exact_set_match"],
-                "jaccard": metrics["jaccard"],
-                "multilabel_precision": metrics["multilabel_precision"],
-                "multilabel_recall": metrics["multilabel_recall"],
-                "multilabel_f1": metrics["multilabel_f1"],
+                "intersection_labels": labels_text(intersection_labels),
+                "union_labels": labels_text(union_labels),
+                "exact_set_match": (
+                    display_metrics["exact_set_match"]
+                    if display_metrics is not None
+                    else None
+                ),
+                "jaccard": (
+                    display_metrics["jaccard"]
+                    if display_metrics is not None
+                    else None
+                ),
+                "multilabel_precision": (
+                    display_metrics["multilabel_precision"]
+                    if display_metrics is not None
+                    else None
+                ),
+                "multilabel_recall": (
+                    display_metrics["multilabel_recall"]
+                    if display_metrics is not None
+                    else None
+                ),
+                "multilabel_f1": (
+                    display_metrics["multilabel_f1"]
+                    if display_metrics is not None
+                    else None
+                ),
+                **_prefixed_metrics("conditional", conditional_metrics),
+                **_prefixed_metrics("end_to_end", end_to_end_metrics),
                 "total_overlap_seconds": total_overlap,
                 "true_label_overlap_detail": json.dumps(overlap_detail, ensure_ascii=False, sort_keys=True),
             }
@@ -541,15 +755,111 @@ def mean(values: Sequence[float]) -> float:
     return statistics.fmean(values) if values else 0.0
 
 
+def _rate(numerator: int, denominator: int) -> float:
+    return numerator / denominator if denominator else 0.0
+
+
+def _metric_mean(rows: Sequence[dict], prefix: str, metric: str) -> float:
+    column = f"{prefix}_{metric}"
+    return mean(
+        [
+            float(row[column])
+            for row in rows
+            if row.get(column) not in {None, ""}
+        ]
+    )
+
+
 def summary_from_details(detail_rows: Sequence[dict]) -> dict:
-    return {
-        "num_patterns": len(detail_rows),
-        "mean_exact_set_match": mean([float(row["exact_set_match"]) for row in detail_rows]),
-        "mean_jaccard": mean([float(row["jaccard"]) for row in detail_rows]),
-        "mean_multilabel_precision": mean([float(row["multilabel_precision"]) for row in detail_rows]),
-        "mean_multilabel_recall": mean([float(row["multilabel_recall"]) for row in detail_rows]),
-        "mean_multilabel_f1": mean([float(row["multilabel_f1"]) for row in detail_rows]),
+    num_patterns = len(detail_rows)
+    num_matched = sum(row.get("occurrence_status") == "matched" for row in detail_rows)
+    num_no_occurrence = num_patterns - num_matched
+    num_truth_defined = sum(row.get("truth_status") == "defined" for row in detail_rows)
+    num_no_adl_overlap = sum(
+        row.get("occurrence_status") == "matched"
+        and row.get("truth_status") == "no_adl_overlap"
+        for row in detail_rows
+    )
+    num_prediction_valid = sum(
+        row.get("prediction_status") == "valid" for row in detail_rows
+    )
+    num_prediction_missing = sum(
+        row.get("prediction_status") == "missing" for row in detail_rows
+    )
+    num_prediction_unknown = sum(
+        row.get("prediction_status") == "unknown" for row in detail_rows
+    )
+    num_conditional = sum(
+        bool(int(row.get("is_metric_evaluable") or 0))
+        for row in detail_rows
+    )
+    num_end_to_end = sum(
+        bool(int(row.get("is_end_to_end_evaluable") or 0))
+        for row in detail_rows
+    )
+    num_assigned_occurrences = sum(
+        int(row.get("num_time_band_assigned_occurrences") or 0)
+        for row in detail_rows
+    )
+    num_boundary_crossing = sum(
+        int(row.get("num_boundary_crossing_occurrences") or 0)
+        for row in detail_rows
+    )
+    num_boundary_excluded = sum(
+        int(row.get("num_boundary_crossing_occurrences_excluded") or 0)
+        for row in detail_rows
+    )
+
+    summary: dict[str, Any] = {
+        "num_patterns": num_patterns,
+        "num_conditional_evaluable_patterns": num_conditional,
+        "num_end_to_end_evaluable_patterns": num_end_to_end,
+        "num_occurrence_matched": num_matched,
+        "num_no_occurrence": num_no_occurrence,
+        "num_truth_defined": num_truth_defined,
+        "num_no_adl_overlap": num_no_adl_overlap,
+        "num_prediction_valid": num_prediction_valid,
+        "num_prediction_missing": num_prediction_missing,
+        "num_prediction_unknown": num_prediction_unknown,
+        "unknown_pred_label_count": sum(
+            int(row.get("unknown_pred_label_count") or 0)
+            for row in detail_rows
+        ),
+        "occurrence_coverage": _rate(num_matched, num_patterns),
+        "truth_coverage": _rate(num_truth_defined, num_matched),
+        "no_occurrence_rate": _rate(num_no_occurrence, num_patterns),
+        "no_adl_overlap_rate": _rate(num_no_adl_overlap, num_matched),
+        "missing_prediction_rate": _rate(num_prediction_missing, num_patterns),
+        "unknown_label_rate": _rate(num_prediction_unknown, num_patterns),
+        "num_time_band_assigned_occurrences": num_assigned_occurrences,
+        "num_boundary_crossing_occurrences": num_boundary_crossing,
+        "num_boundary_crossing_occurrences_excluded": num_boundary_excluded,
+        "boundary_crossing_occurrence_rate": _rate(
+            num_boundary_crossing,
+            num_assigned_occurrences,
+        ),
     }
+    metric_names = (
+        "exact_set_match",
+        "jaccard",
+        "multilabel_precision",
+        "multilabel_recall",
+        "multilabel_f1",
+    )
+    for metric in metric_names:
+        summary[f"conditional_mean_{metric}"] = _metric_mean(
+            detail_rows,
+            "conditional",
+            metric,
+        )
+        summary[f"end_to_end_mean_{metric}"] = _metric_mean(
+            detail_rows,
+            "end_to_end",
+            metric,
+        )
+        # Backward-compatible aliases continue to denote end-to-end metrics.
+        summary[f"mean_{metric}"] = summary[f"end_to_end_mean_{metric}"]
+    return summary
 
 
 def aggregate_by_time_band(detail_rows: Sequence[dict]) -> list[dict]:
@@ -557,15 +867,7 @@ def aggregate_by_time_band(detail_rows: Sequence[dict]) -> list[dict]:
     for row in detail_rows:
         grouped[str(row.get("time_band") or "All")].append(row)
     return [
-        {
-            "time_band": time_band,
-            "num_patterns": len(rows),
-            "mean_exact_set_match": mean([float(row["exact_set_match"]) for row in rows]),
-            "mean_jaccard": mean([float(row["jaccard"]) for row in rows]),
-            "mean_multilabel_precision": mean([float(row["multilabel_precision"]) for row in rows]),
-            "mean_multilabel_recall": mean([float(row["multilabel_recall"]) for row in rows]),
-            "mean_multilabel_f1": mean([float(row["multilabel_f1"]) for row in rows]),
-        }
+        {"time_band": time_band, **summary_from_details(rows)}
         for time_band, rows in sorted(grouped.items())
     ]
 
@@ -579,11 +881,7 @@ def aggregate_by_label(detail_rows: Sequence[dict], label_column: str, output_la
     return [
         {
             output_label_column: label,
-            "num_patterns": len(rows),
-            "mean_jaccard": mean([float(row["jaccard"]) for row in rows]),
-            "mean_multilabel_precision": mean([float(row["multilabel_precision"]) for row in rows]),
-            "mean_multilabel_recall": mean([float(row["multilabel_recall"]) for row in rows]),
-            "mean_multilabel_f1": mean([float(row["multilabel_f1"]) for row in rows]),
+            **summary_from_details(rows),
         }
         for label, rows in sorted(grouped.items())
     ]

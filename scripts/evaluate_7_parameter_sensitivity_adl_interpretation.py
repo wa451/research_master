@@ -16,7 +16,10 @@ if str(ROOT_DIR_FOR_IMPORTS) not in sys.path:
 
 from experiment_config import DATASET_NAME, ROOT_DIR
 from scripts.evaluate_6_compare_adl_interpretation_set import (
+    AGGREGATE_SUMMARY_FIELDNAMES,
     DETAIL_FIELDNAMES as EVAL6_DETAIL_FIELDNAMES,
+    EXPLICIT_METRIC_SUMMARY_FIELDNAMES,
+    STATUS_SUMMARY_FIELDNAMES,
     evaluate_method,
     load_truth_intervals,
     path_for_run,
@@ -64,6 +67,8 @@ RUN_SUMMARY_FIELDNAMES = [
     "mean_multilabel_precision",
     "mean_multilabel_recall",
     "mean_multilabel_f1",
+    *STATUS_SUMMARY_FIELDNAMES,
+    *EXPLICIT_METRIC_SUMMARY_FIELDNAMES,
 ]
 
 CONDITION_SUMMARY_FIELDNAMES = [
@@ -87,6 +92,26 @@ CONDITION_SUMMARY_FIELDNAMES = [
     "std_multilabel_recall",
     "mean_multilabel_f1",
     "std_multilabel_f1",
+    *[
+        field
+        for name in STATUS_SUMMARY_FIELDNAMES
+        for field in (
+            f"avg_{name}" if name.startswith("num_") or name.endswith("_count") else f"mean_{name}",
+            f"std_{name}",
+        )
+    ],
+    *[
+        field
+        for scope in ("conditional", "end_to_end")
+        for metric in (
+            "exact_set_match",
+            "jaccard",
+            "multilabel_precision",
+            "multilabel_recall",
+            "multilabel_f1",
+        )
+        for field in (f"{scope}_mean_{metric}", f"{scope}_std_{metric}")
+    ],
     "selection_metric",
     "selection_metric_value",
 ]
@@ -98,11 +123,7 @@ LABEL_FIELDNAMES = [
     "days",
     "method",
     "label",
-    "num_patterns",
-    "mean_jaccard",
-    "mean_multilabel_precision",
-    "mean_multilabel_recall",
-    "mean_multilabel_f1",
+    *AGGREGATE_SUMMARY_FIELDNAMES,
 ]
 
 TIME_BAND_FIELDNAMES = [
@@ -112,13 +133,8 @@ TIME_BAND_FIELDNAMES = [
     "days",
     "method",
     "time_band",
-    "num_patterns",
     "mean_accuracy",
-    "mean_exact_set_match",
-    "mean_jaccard",
-    "mean_multilabel_precision",
-    "mean_multilabel_recall",
-    "mean_multilabel_f1",
+    *AGGREGATE_SUMMARY_FIELDNAMES,
 ]
 
 SELECTION_METRICS = {
@@ -219,9 +235,24 @@ def parse_args() -> argparse.Namespace:
         default=ROOT_DIR / "results" / "7_param_search",
     )
     parser.add_argument("--min-overlap-ratio-for-true-label", type=float, default=0.10)
-    parser.add_argument("--no-overlap-label", choices=["Other", "Ambiguous"], default="Ambiguous")
-    parser.add_argument("--missing-pred-label", choices=["Other", "Ambiguous"], default="Ambiguous")
-    parser.add_argument("--unknown-pred-label", choices=["Other", "Ambiguous"], default="Other")
+    parser.add_argument(
+        "--no-overlap-label",
+        choices=["Other", "Ambiguous"],
+        default="Ambiguous",
+        help="Deprecated compatibility option; no-overlap is now a truth status.",
+    )
+    parser.add_argument(
+        "--missing-pred-label",
+        choices=["Other", "Ambiguous"],
+        default="Ambiguous",
+        help="Deprecated compatibility option; missing prediction is now a status.",
+    )
+    parser.add_argument(
+        "--unknown-pred-label",
+        choices=["Other", "Ambiguous"],
+        default="Other",
+        help="Deprecated compatibility option; unknown prediction is now a status.",
+    )
     parser.add_argument("--wake-window-minutes", type=float, default=30.0)
     parser.add_argument("--match-mode", choices=["exact", "skip-other"], default="exact")
     parser.add_argument("--max-skip-duration-minutes", type=float, default=1.0)
@@ -355,6 +386,27 @@ def condition_summary_from_runs(
             "std_multilabel_f1": std(f1),
             "selection_metric": selection_metric,
         }
+        for name in STATUS_SUMMARY_FIELDNAMES:
+            values = [float(run_row[name]) for run_row in rows]
+            if name.startswith("num_") or name.endswith("_count"):
+                row[f"avg_{name}"] = mean(values)
+            else:
+                row[f"mean_{name}"] = mean(values)
+            row[f"std_{name}"] = std(values)
+        for scope in ("conditional", "end_to_end"):
+            for metric in (
+                "exact_set_match",
+                "jaccard",
+                "multilabel_precision",
+                "multilabel_recall",
+                "multilabel_f1",
+            ):
+                values = [
+                    float(run_row[f"{scope}_mean_{metric}"])
+                    for run_row in rows
+                ]
+                row[f"{scope}_mean_{metric}"] = mean(values)
+                row[f"{scope}_std_{metric}"] = std(values)
         row["selection_metric_value"] = row[selection_metric]
         summary_rows.append(row)
 
@@ -420,11 +472,11 @@ def condition_label_rows(detail_rows: list[dict], label_column: str, label_name:
                     "days": days,
                     "method": method,
                     "label": aggregate[label_name],
-                    "num_patterns": aggregate["num_patterns"],
-                    "mean_jaccard": aggregate["mean_jaccard"],
-                    "mean_multilabel_precision": aggregate["mean_multilabel_precision"],
-                    "mean_multilabel_recall": aggregate["mean_multilabel_recall"],
-                    "mean_multilabel_f1": aggregate["mean_multilabel_f1"],
+                    **{
+                        key: value
+                        for key, value in aggregate.items()
+                        if key != label_name
+                    },
                 }
             )
     return output_rows
@@ -453,13 +505,12 @@ def condition_time_band_rows(detail_rows: list[dict]) -> list[dict]:
                     "days": days,
                     "method": method,
                     "time_band": aggregate["time_band"],
-                    "num_patterns": aggregate["num_patterns"],
                     "mean_accuracy": aggregate["mean_exact_set_match"],
-                    "mean_exact_set_match": aggregate["mean_exact_set_match"],
-                    "mean_jaccard": aggregate["mean_jaccard"],
-                    "mean_multilabel_precision": aggregate["mean_multilabel_precision"],
-                    "mean_multilabel_recall": aggregate["mean_multilabel_recall"],
-                    "mean_multilabel_f1": aggregate["mean_multilabel_f1"],
+                    **{
+                        key: value
+                        for key, value in aggregate.items()
+                        if key != "time_band"
+                    },
                 }
             )
     return output_rows
@@ -704,11 +755,27 @@ def write_outputs(args: argparse.Namespace, result: dict[str, Any]) -> None:
         "output_dir": str(args.output_dir),
         "allowed_labels": ALLOWED_LABELS,
         "min_overlap_ratio_for_true_label": args.min_overlap_ratio_for_true_label,
-        "no_overlap_label": args.no_overlap_label,
-        "missing_pred_label": args.missing_pred_label,
-        "unknown_pred_label": args.unknown_pred_label,
+        "deprecated_compatibility_options_ignored": {
+            "no_overlap_label": args.no_overlap_label,
+            "missing_pred_label": args.missing_pred_label,
+            "unknown_pred_label": args.unknown_pred_label,
+        },
         "match_mode": args.match_mode,
         "max_skip_duration_minutes": args.max_skip_duration_minutes,
+        "time_band_occurrence_policy": (
+            "sequence_x_time_band records require the full half-open occurrence "
+            "[start,end) to remain in the requested time band"
+        ),
+        "conditional_metric_denominator": (
+            "occurrence_status=matched and truth_status=defined; prediction "
+            "missing/unknown remain with zero score"
+        ),
+        "end_to_end_metric_denominator": (
+            "all records except matched records with truth_status=no_adl_overlap; "
+            "no_occurrence and prediction missing/unknown remain with zero score"
+        ),
+        "no_adl_overlap_end_to_end_policy": "excluded_truth_undefined",
+        "legacy_mean_metric_alias": "end_to_end",
         "selection_metric": args.selection_metric,
         "best_condition": result["best_condition"],
         "conditions": result["condition_summary_rows"],

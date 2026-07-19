@@ -2,7 +2,7 @@
 
 ## 評価の要約
 
-代表状態数 `K` とハミング距離閾値を変更し、代表状態への割り当て、状態遷移ネットワーク、ベースライン系列、LLM抽出結果、評価指標がどう変化するかを確認する。標準条件 `K=15`, `hamming_threshold=1` の妥当性を説明するための評価である。
+代表状態数 `K` とハミング距離閾値を変更し、代表状態への割り当て、状態遷移ネットワーク、ベースライン系列、LLM抽出結果、評価指標がどう変化するかを確認する。この文書は互換用設定と旧指標に基づく評価1を記録する。現在の論文で用いる28条件・上位10条件合計5試行の感度評価と採用値 `K=15`, `hamming_threshold=0` は、`docs/evaluation_7_parameter_sensitivity_adl_interpretation.md` を正式手順とする。
 
 ## RQ
 
@@ -10,7 +10,7 @@
 |---|---|
 | RQ1-1 | `K` を変えると、代表状態と状態遷移ネットワークの解釈しやすさはどう変わるか。 |
 | RQ1-2 | ハミング距離閾値を変えると、`その他` 状態や状態の混ざり方はどう変わるか。 |
-| RQ1-3 | 標準条件 `K=15`, `hamming_threshold=1` は、系列抽出・評価指標の観点で極端な条件になっていないか。 |
+| RQ1-3 | 互換用設定 `K=15`, `hamming_threshold=1` は、旧系列抽出・評価指標の観点で極端な条件になっていないか。 |
 
 ## 評価指標
 
@@ -104,7 +104,8 @@ uv run python scripts/run_all.py
 | `K` の比較 | `K=3`, `10`, `15`, `20`, `30` |
 | ハミング距離の比較 | `hamming_threshold=0`, `1`, `2`, `3` |
 | 固定する値 | `K` 比較ではハミング距離を `1` に固定。ハミング距離比較では `K=15` に固定。 |
-| 標準条件 | `K=15`, `hamming_threshold=1`, `DAYS=154` |
+| 互換用config既定 | `K=15`, `hamming_threshold=1`, `DAYS=154` |
+| 現論文の採用条件 | `K=15`, `hamming_threshold=0`（評価7で選定） |
 
 ## 処理手順の内部仕様
 
@@ -121,7 +122,7 @@ uv run python scripts/run_all.py
 | データセット | `data/aruba.csv` | `configs/default.yaml` |
 | 分析期間 | `154`日 | `configs/default.yaml` |
 | 代表状態数 `K` | `15` | `configs/default.yaml` |
-| ハミング距離閾値 | `1` | `configs/default.yaml` |
+| ハミング距離閾値 | `1`（互換用config既定） | `configs/default.yaml` |
 | サンプリング間隔 | `1`秒 | `configs/default.yaml` |
 | 遅延OFF窓幅 | `5`秒 | `configs/default.yaml` |
 | 時間帯分割 | Morning / Daytime / Night / Midnight | `configs/default.yaml` |

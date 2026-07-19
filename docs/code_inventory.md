@@ -14,13 +14,15 @@
 | 頻度ベースライン | `src/behavior_pattern_mining/baselines/frequency.py` | `scripts/run_baselines.py` |
 | 提案手法LLM抽出 | `src/behavior_pattern_mining/llm/pattern_extractor.py` | `scripts/run_llm_extraction.py` |
 | LLM複数回実行評価 | `src/behavior_pattern_mining/pipelines/llm_eval_batch.py` | `scripts/run_llm_eval_batch.py` |
-| direct log baseline | `src/behavior_pattern_mining/llm/direct_log_extractor.py`, `src/behavior_pattern_mining/evaluation/direct_log.py` | `scripts/run_direct_log_baseline.py` |
+| LLM単独ベースライン（前処理済み代表状態系列の直接入力） | `src/behavior_pattern_mining/llm/direct_log_extractor.py`, `src/behavior_pattern_mining/evaluation/direct_log.py` | `scripts/run_direct_log_baseline.py` |
 | Precision/Recall/F1評価 | `src/behavior_pattern_mining/evaluation/compare_patterns.py`, `src/behavior_pattern_mining/evaluation/metrics.py` | `scripts/run_evaluation.py` |
 | Groundedness | `src/behavior_pattern_mining/evaluation/groundedness.py`, `src/behavior_pattern_mining/evaluation/groundedness_check.py` | `scripts/run_groundedness.py` |
 | 条件ベース評価 | `src/behavior_pattern_mining/evaluation/condition_metrics.py` | `scripts/evaluate_condition_metrics.py` |
 | ADL評価 | `src/behavior_pattern_mining/evaluation/adl.py` | `scripts/evaluate_adl_labels.py` |
 | 評価5: パターン単位ADL-grounded/Useless評価 | `src/behavior_pattern_mining/evaluation/adl_correspondence.py` | `scripts/evaluate_adl_correspondence.py` |
 | 評価6: ADL解釈ラベルset比較評価 | `src/behavior_pattern_mining/evaluation/adl_interpretation_set.py` | `scripts/evaluate_6_compare_adl_interpretation_set.py` |
+| 評価7: K・ハミング距離の二段階感度評価 | `src/behavior_pattern_mining/evaluation/evaluation7_staged.py` | `scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py`, `scripts/run_evaluation7_top_condition_repeats.py` |
+| 評価8: 頻度帯別ADL整合性評価 | `src/behavior_pattern_mining/evaluation/adl_interpretation_set.py` | `scripts/evaluate_8_frequency_stratified_adl_consistency.py` |
 
 ## フォルダの役割
 
@@ -78,10 +80,11 @@ uv run python scripts/evaluate_adl_labels.py \
 ```bash
 uv run python scripts/evaluate_adl_correspondence.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --state-series results/4_adl_detect/state_series.csv \
-  --patterns-frequency output/aruba_15_1_154days/state_sequence_counts_15_1_154days.json \
-  --patterns-proposed output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/5_pattern_quality \
+  --state-series output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv \
+  --state-definition state/aruba_15_0_154days.txt \
+  --patterns-frequency output/aruba_15_0_154days/state_sequence_counts_15_0_154days.json \
+  --patterns-proposed output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json \
+  --output-dir results/5_pattern_quality_low_information_gt_0_5 \
   --train-ratio 0.7 \
   --grounded-hit-threshold 0.3 \
   --grounded-purity-threshold 0.3 \
@@ -107,28 +110,31 @@ uv run python scripts/evaluate_adl_correspondence.py \
 uv run python scripts/run_build_network_from_labeled_casas.py \
   --labeled-casas new_labeled_data/aruba.txt \
   --sensor-map configs/aruba_sensor_map.json \
-  --days 14
+  --days 14 \
+  --hamming-threshold 0
 
-uv run python scripts/run_llm_extraction.py --days 14
+uv run python scripts/run_llm_extraction.py --days 14 --hamming-threshold 0
 
 uv run python scripts/evaluate_adl_labels.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --state-table state/aruba_15_1_14days.txt \
+  --state-table state/aruba_15_0_14days.txt \
   --sensor-map configs/aruba_sensor_map.json \
-  --patterns output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json \
-  --output-dir output/6_adl_evaluation_14 \
-  --write-state-series output/6_adl_evaluation_14/state_series.csv
+  --patterns output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
+  --output-dir output/6_adl_evaluation_15_0_14days \
+  --write-state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
+  --hamming-threshold 0
 
 uv run python scripts/run_direct_log_baseline.py \
   --log-days 14 \
+  --hamming-threshold 0 \
   --extract-only
 
 uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
-  --patterns-proposed output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json \
-  --patterns-direct output/llm_direct_15_1_14days/1.json \
-  --state-series output/6_adl_evaluation_14/state_series.csv \
+  --patterns-proposed output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
+  --patterns-direct output/llm_direct_15_0_14days/1.json \
+  --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/6_adl_match \
+  --output-dir results/6_adl_match/15_0_14days \
   --min-overlap-ratio-for-true-label 0.10
 ```
 

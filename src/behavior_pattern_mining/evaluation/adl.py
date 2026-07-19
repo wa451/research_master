@@ -30,7 +30,7 @@ ADL_CATEGORY_MAP = {
     "Bathroom": "Wake-up",
     "Personal_Hygiene": "Wake-up",
     "Bathing": "Wake-up",
-    "Toileting": "Wake-up",
+    "Toileting": "Toileting",
     "Meal_Preparation": "Meal",
     "Eating": "Meal",
     "Wash_Dishes": "Meal",
@@ -43,12 +43,12 @@ ADL_CATEGORY_MAP = {
 
 ADL_CATEGORY_SET_MAP = {
     "Sleeping": ("Sleep",),
-    # Bed_to_Toilet is a wake-up marker in this project, but it also has a hygiene aspect.
-    "Bed_to_Toilet": ("Wake-up", "Hygiene"),
-    "Bathroom": ("Hygiene",),
-    "Personal_Hygiene": ("Hygiene",),
+    # Bed_to_Toilet is both a wake-up marker and an explicit toileting activity.
+    "Bed_to_Toilet": ("Wake-up", "Toileting"),
+    "Bathroom": ("Wake-up", "Hygiene"),
+    "Personal_Hygiene": ("Wake-up", "Hygiene"),
     "Bathing": ("Hygiene",),
-    "Toileting": ("Hygiene",),
+    "Toileting": ("Toileting",),
     # Meal_Preparation can become Wake-up through apply_wake_up_rule when it occurs right after sleep.
     "Meal_Preparation": ("Meal",),
     "Eating": ("Meal",),
@@ -460,6 +460,186 @@ def load_sensor_id_map(path: Path | None) -> dict[str, str]:
     if not isinstance(payload, dict):
         raise ValueError(f"Sensor map must be a JSON object: {path}")
     return {str(key).strip(): str(value).strip() for key, value in payload.items()}
+
+
+def _ceil_to_second(timestamp: datetime) -> datetime:
+    rounded = timestamp.replace(microsecond=0)
+    if timestamp.microsecond:
+        rounded += timedelta(seconds=1)
+    return rounded
+
+
+def build_network_equivalent_state_series_from_labeled_casas(
+    labeled_casas_path: Path,
+    state_table_path: Path,
+    hamming_threshold: int,
+    smoothing_window_sec: int = 5,
+    sensor_map_path: Path | None = None,
+    duration_days: int | None = None,
+) -> list[StateInterval]:
+    """Build the compressed state series used by the transition-network pipeline.
+
+    This is a change-point implementation of the network builder's 1-second
+    Sample-and-Hold plus ``rolling(window).max()`` delayed-OFF preprocessing.
+    It avoids materializing one row per second, which is prohibitively large
+    for the full 220-day Evaluation 5 period. Representative states are loaded
+    from ``state_table_path`` and are never re-extracted from evaluation data.
+    """
+    if smoothing_window_sec < 0:
+        raise ValueError("smoothing_window_sec must be non-negative")
+    if duration_days is not None and duration_days < 1:
+        raise ValueError("duration_days must be >= 1")
+
+    sensor_id_map = load_sensor_id_map(sensor_map_path)
+    sensor_columns, state_mapping = load_state_mapping(state_table_path)
+    sensor_set = set(sensor_columns)
+    events: list[tuple[datetime, int, str, int]] = []
+    unexpected_sensors: set[str] = set()
+
+    with labeled_casas_path.open("r", encoding="utf-8") as handle:
+        for line_number, raw_line in enumerate(handle, start=1):
+            parts = raw_line.strip().split()
+            if len(parts) < 4:
+                continue
+            value = parts[3].strip().upper()
+            if value in {"ON", "OPEN", "PRESENT", "1", "TRUE"}:
+                binary_value = 1
+            elif value in {"OFF", "CLOSE", "ABSENT", "0", "FALSE"}:
+                binary_value = 0
+            else:
+                continue
+
+            sensor = sensor_id_map.get(parts[2].strip(), parts[2].strip())
+            if sensor not in sensor_set:
+                unexpected_sensors.add(sensor)
+                continue
+            events.append(
+                (
+                    parse_timestamp(parts[0], parts[1]),
+                    line_number,
+                    sensor,
+                    binary_value,
+                )
+            )
+
+    if unexpected_sensors:
+        preview = ", ".join(sorted(unexpected_sensors)[:20])
+        raise ValueError(
+            "ON/OFF sensors are missing from the representative-state definition: "
+            f"{preview}"
+        )
+    if not events:
+        raise ValueError(
+            f"No mapped ON/OFF events were loaded from: {labeled_casas_path}"
+        )
+
+    events.sort(key=lambda item: (item[0], item[1]))
+    first_timestamp = events[0][0]
+    last_timestamp = events[-1][0]
+    period_start = datetime.combine(first_timestamp.date(), datetime.min.time())
+    if duration_days is None:
+        period_end = datetime.combine(
+            (last_timestamp + timedelta(days=1)).date(),
+            datetime.min.time(),
+        )
+    else:
+        period_end = period_start + timedelta(days=duration_days)
+
+    updates_by_time: dict[datetime, dict[str, int]] = defaultdict(dict)
+    for timestamp, _, sensor, binary_value in events:
+        sample_time = _ceil_to_second(timestamp)
+        if period_start <= sample_time < period_end:
+            # The network implementation processes every event up to the
+            # current sample; the last event for a sensor in one second wins.
+            updates_by_time[sample_time][sensor] = binary_value
+
+    smoothed_intervals_by_sensor: dict[str, list[tuple[datetime, datetime]]] = {
+        sensor: [] for sensor in sensor_columns
+    }
+    sorted_update_times = sorted(updates_by_time)
+    delayed_off_extension = timedelta(seconds=max(smoothing_window_sec - 1, 0))
+    for sensor in sensor_columns:
+        raw_state = 0
+        on_start: datetime | None = None
+        raw_on_intervals: list[tuple[datetime, datetime]] = []
+        for sample_time in sorted_update_times:
+            if sensor not in updates_by_time[sample_time]:
+                continue
+            next_state = updates_by_time[sample_time][sensor]
+            if next_state == raw_state:
+                continue
+            raw_state = next_state
+            if raw_state:
+                on_start = sample_time
+            elif on_start is not None:
+                raw_on_intervals.append(
+                    (on_start, min(sample_time + delayed_off_extension, period_end))
+                )
+                on_start = None
+        if raw_state and on_start is not None:
+            raw_on_intervals.append((on_start, period_end))
+
+        merged: list[tuple[datetime, datetime]] = []
+        for start_time, end_time in raw_on_intervals:
+            if end_time <= period_start or start_time >= period_end:
+                continue
+            start_time = max(start_time, period_start)
+            end_time = min(end_time, period_end)
+            if end_time <= start_time:
+                continue
+            if merged and start_time <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], end_time))
+            else:
+                merged.append((start_time, end_time))
+        smoothed_intervals_by_sensor[sensor] = merged
+
+    boundary_updates: dict[datetime, dict[str, int]] = defaultdict(dict)
+    for sensor, intervals in smoothed_intervals_by_sensor.items():
+        for start_time, end_time in intervals:
+            boundary_updates[start_time][sensor] = 1
+            if end_time < period_end:
+                boundary_updates[end_time][sensor] = 0
+
+    current_sensor_state = {sensor: 0 for sensor in sensor_columns}
+    output: list[StateInterval] = []
+
+    def mapped_state_id() -> str:
+        vector = tuple(current_sensor_state[sensor] for sensor in sensor_columns)
+        return map_vector_to_state(
+            vector,
+            state_mapping,
+            hamming_threshold=hamming_threshold,
+        )
+
+    def append_interval(start_time: datetime, end_time: datetime, state_id: str) -> None:
+        if end_time <= start_time:
+            return
+        if output and output[-1].state_id == state_id and output[-1].end_time == start_time:
+            previous = output[-1]
+            output[-1] = StateInterval(
+                start_time=previous.start_time,
+                end_time=end_time,
+                state_id=state_id,
+            )
+        else:
+            output.append(
+                StateInterval(
+                    start_time=start_time,
+                    end_time=end_time,
+                    state_id=state_id,
+                )
+            )
+
+    current_time = period_start
+    for boundary_time in sorted(boundary_updates):
+        if boundary_time > current_time:
+            append_interval(current_time, boundary_time, mapped_state_id())
+            current_time = boundary_time
+        for sensor, value in boundary_updates[boundary_time].items():
+            current_sensor_state[sensor] = value
+    if current_time < period_end:
+        append_interval(current_time, period_end, mapped_state_id())
+    return output
 
 
 def build_state_series_from_labeled_casas(

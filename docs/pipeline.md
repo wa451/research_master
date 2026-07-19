@@ -60,24 +60,24 @@
 
 ## 7.2 評価5: Useful non-redundant pattern / fragmentation evaluation
 
-- 入力: `new_labeled_data/aruba.txt`, `--state-series`, frequency/rule/proposed のパターンCSVまたはJSON
-- 出力: `results/5_pattern_quality/evaluation5_pattern_details.csv`, `evaluation5_summary_by_method.csv`, `evaluation5_summary.json`
+- 入力: `new_labeled_data/aruba.txt`, 抽出と同じ前処理で生成した `--state-series`, `--state-definition` または `--state-network-json`, frequency/rule/proposed のパターンCSVまたはJSON
+- 出力: `results/5_pattern_quality_low_information_gt_0_5/evaluation5_pattern_details.csv`, `evaluation5_summary_by_method.csv`, `evaluation5_summary_by_method_by_run.csv`, `evaluation5_summary.json`
 - 対応ファイル: `scripts/evaluate_adl_correspondence.py`, `src/behavior_pattern_mining/evaluation/adl.py`, `src/behavior_pattern_mining/evaluation/adl_correspondence.py`
-- 役割: train期間でpattern->ADL集合を決め、test期間で各出力パターンがADL-groundedか、生活文脈のない系列か、長い系列の断片かを評価する。比較対象はfrequency、rule-filtered frequency、FP-Growth系baseline、transition_probability baseline、提案手法。主指標は `useful_non_redundant_pattern_rate`, `fragmentation_rate`, `contextless_useless_rate` の3つ。`--runs` で提案手法の複数run平均も出せる。
+- 役割: train期間でpattern->ADL集合を決め、test期間で各出力パターンがADL-groundedか、生活文脈のない系列か、同じrun・時間帯にある長い系列の断片かを評価する。状態IDのactive sensorsを参照し、low-information状態の系列内割合が0.5を超える場合にlow-informationとする。Fragmentationは断片数/評価可能パターン数で、比較可能な短系列―長系列対が0件でも0として保存し、比較可能対数を診断情報として残す。比較対象はfrequency、rule-filtered frequency、FP-Growth系baseline、transition_probability baseline、提案手法。
 
 ## 7.3 評価6: LLM ADL interpretation set match
 
-- 入力: `output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json`, `output/llm_direct_15_1_14days/1.json`, `output/6_adl_evaluation_14/state_series.csv`, `new_labeled_data/aruba.txt`
-- 出力: `results/6_adl_match/15_1_14days/evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_llm_usage_comparison.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_time_band_by_method.csv`, `evaluation6_comparison_summary.json`
+- 入力: `output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json`, `output/llm_direct_15_0_14days/1.json`, `output/6_adl_evaluation_15_0_14days/state_series.csv`, `new_labeled_data/aruba.txt`
+- 出力: `results/6_adl_match/15_0_14days/evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_llm_usage_comparison.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_time_band_by_method.csv`, `evaluation6_comparison_summary.json`
 - 対応ファイル: `scripts/evaluate_6_compare_adl_interpretation_set.py`, `src/behavior_pattern_mining/evaluation/adl_interpretation_set.py`, `src/behavior_pattern_mining/evaluation/llm_usage.py`
-- 役割: LLMが `ADL系列ラベル` として付けた解釈ラベル集合と、パターン出現区間がCASAS ADL区間と重なって得られる正解ADL集合を、順序を無視したset評価で比較する。提案手法は `sequence × time_band` 単位へ展開し、対象時間帯の出現だけで評価する。提案手法とLLM単独ベースラインの比較では、両手法を14日版に揃える。`--runs` で複数回実行結果の平均を出し、記録済みトークン数とAPI応答時間も1 run合計のrun間平均として比較する。
+- 役割: LLMが一体的に生成したパターン名・ADL集合・根拠のうち、ADL集合とCASAS重複集合を順序なしで比較し、解釈の意味的正当性を定量的に代理評価する。提案手法は `sequence × time_band` 単位へ展開する。状態遷移ネットワーク入力と、同じ14日分の前処理済み代表状態系列を直接LLMへ入力する構成を比較し、記録が揃うrunではトークン数も比較する。
 
 ## 7.5 評価8: Frequency-stratified ADL consistency
 
-- 入力: 14日手法比較では評価6の `evaluation6_pattern_set_details_by_method.csv`、154日提案手法単独では提案手法JSON・154日state series・ADL正解データ。
-- 出力: `results/8_vs_llm/` と `results/8_proposed/` に保存する。後者は単一methodなので重複する `evaluation8_by_frequency_band_by_method.csv` を出力しない。
+- 入力: 14日手法比較では評価6の `evaluation6_pattern_set_details_by_method.csv` とstate series、154日提案手法単独では提案手法JSON・抽出時と同じ前処理で生成したstate series・ADL正解データ。
+- 出力: 修正版は `results/8_vs_llm_own_id_fixed/{tertile,fixed}/` と `results/8_proposed_own_id_fixed/{tertile,fixed}/` に保存する。run別帯集計と出現数監査を含む。
 - 対応ファイル: `scripts/evaluate_8_frequency_stratified_adl_consistency.py`。
-- 役割: 評価6のパターン単位set指標を、`num_occurrences` のmethod内三分位（Low / Middle / High）で後段集計する。time-band awareな提案手法レコードは `sequence × time_band` ごとの出現回数を使う。
+- 役割: pattern ID固有の出現を物理区間キーで一意化し、修正後の `num_occurrences` からmethod・runごとにLow / Middle / Highを再割当てして評価6のset指標を後段集計する。頻度加重の重み総和と一意出現数が一致することも検証する。
 
 ## 8. Visualization
 

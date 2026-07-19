@@ -70,7 +70,7 @@ class Evaluation7ParameterSensitivityTests(unittest.TestCase):
     def test_cli_writes_condition_summary_and_best_condition(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
-            for n_states, labels in [(10, ["Wake-up", "Hygiene"]), (20, ["Meal"])]:
+            for n_states, labels in [(10, ["Wake-up", "Toileting"]), (20, ["Meal"])]:
                 suffix = f"{n_states}_1_30days"
                 write_state_series(tmp / "output" / f"6_adl_evaluation_{suffix}" / "state_series.csv")
                 write_patterns(

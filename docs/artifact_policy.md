@@ -9,7 +9,7 @@
 | 入力データ | `data/aruba.csv`, OpenSHS本体 | 管理しない |
 | 秘密情報 | `.env`, APIキー | 管理しない |
 | 再現に必要な固定成果物 | 論文で使う代表状態表、採用したLLM出力、最終評価表、掲載図 | 必要最小限だけ管理する |
-| 評価結果 | `results/4_adl_detect/`, `results/5_pattern_quality/`, `results/6_adl_match/`, `results/7_param_search/`, `results/8_vs_llm/`, `results/8_proposed/` | 論文で使う値だけ残す |
+| 評価結果 | `results/4_adl_detect/`, `results/5_pattern_quality_low_information_gt_0_5/`, `results/6_adl_match/`, `results/7_param_search/`, `results/8_vs_llm_own_id_fixed/`, `results/8_proposed_own_id_fixed/` | 論文で使う値だけ残す。監査時は修正前ディレクトリも比較用に保持する |
 | 一時生成物 | LLM runごとの試行ファイル、再生成できる図、ログ、途中CSV | 原則管理しない |
 | 設定・プロンプト | `configs/*.yaml`, `prompts/*.md` | 管理する |
 
@@ -20,20 +20,26 @@
 ```text
 results/
 ├── 4_adl_detect/
-├── 5_pattern_quality/
+├── 5_pattern_quality/                  # 修正前（比較用）
+├── 5_pattern_quality_low_information_gt_0_5/ # 最新版
+├── 5_pattern_quality_fixed/            # 修正前比較用
 ├── 6_adl_match/
-│   ├── 15_1_14days/
-│   └── 30_1_14days/
+│   ├── 15_0_14days/
+│   └── 30_0_14days/
 ├── 7_param_search/
-├── 8_vs_llm/
-└── 8_proposed/
+├── 8_vs_llm/                           # 修正前（比較用）
+├── 8_vs_llm_own_id_fixed/
+├── 8_proposed/                         # 修正前（比較用）
+└── 8_proposed_own_id_fixed/
 
 output/
 ├── 5_rule_filter/
+├── 5_adl_evaluation_15_0_154days_fixed/
+├── 5_adl_correspondence_baselines_fixed/
 ├── 6_adl_evaluation_14/
-├── aruba_15_1_154days/
-├── aruba_15_1_14days/
-├── llm_direct_15_1_14days/
+├── aruba_15_0_154days/
+├── aruba_15_0_14days/
+├── llm_direct_15_0_14days/
 ├── tmp/
 └── logs/
 ```

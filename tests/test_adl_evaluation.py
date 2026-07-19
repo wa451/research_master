@@ -59,6 +59,51 @@ class ADLEvaluationTests(unittest.TestCase):
         self.assertEqual(occurrences[0].start_time, ts("2020-01-01 00:00:00"))
         self.assertEqual(occurrences[0].end_time, ts("2020-01-01 00:03:00"))
 
+    def test_exact_match_counts_overlapping_start_positions_separately(self) -> None:
+        states = [
+            StateInterval(
+                ts(f"2020-01-01 00:0{index}:00"),
+                ts(f"2020-01-01 00:0{index + 1}:00"),
+                state,
+            )
+            for index, state in enumerate(("A", "B", "A", "B", "A"))
+        ]
+        pattern = PatternRecord("P1", "overlap", ("A", "B", "A"))
+
+        occurrences = find_pattern_occurrences(
+            [pattern],
+            states,
+            match_mode="exact",
+        )
+
+        self.assertEqual(len(occurrences), 2)
+        self.assertEqual(
+            [item.start_time for item in occurrences],
+            [ts("2020-01-01 00:00:00"), ts("2020-01-01 00:02:00")],
+        )
+
+    def test_exact_match_rejects_intervening_state_and_does_not_skip(self) -> None:
+        states = [
+            StateInterval(ts("2020-01-01 00:00:00"), ts("2020-01-01 00:01:00"), "A"),
+            StateInterval(ts("2020-01-01 00:01:00"), ts("2020-01-01 00:02:00"), "X"),
+            StateInterval(ts("2020-01-01 00:02:00"), ts("2020-01-01 00:03:00"), "B"),
+            StateInterval(ts("2020-01-01 00:03:00"), ts("2020-01-01 00:04:00"), "C"),
+        ]
+        patterns = [
+            PatternRecord("insert", "insert", ("A", "B", "C")),
+            PatternRecord("substitute", "substitute", ("A", "Y", "B")),
+            PatternRecord("delete", "delete", ("A", "X", "B", "C", "D")),
+            PatternRecord("skip", "skip", ("A", "B")),
+        ]
+
+        occurrences = find_pattern_occurrences(
+            patterns,
+            states,
+            match_mode="exact",
+        )
+
+        self.assertEqual(occurrences, [])
+
     def test_state_series_can_be_built_from_labeled_casas(self) -> None:
         intervals = build_state_series_from_labeled_casas(
             labeled_casas_path=FIXTURES_DIR / "sample_labeled_casas.txt",

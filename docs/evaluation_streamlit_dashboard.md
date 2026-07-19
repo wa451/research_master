@@ -84,15 +84,15 @@ uv run streamlit run app/streamlit_app.py
 2. 提案手法LLM出力を生成  
    `scripts/run_llm_extraction.py` を実行し、評価5で使う proposed JSON を作成します。APIキーを使う重い処理です。
 
-3. 評価5用 `state_series.csv` を作成  
-   `scripts/evaluate_adl_labels.py --write-state-series` を使い、評価5専用の中間出力 `output/5_adl_evaluation_15_0_154days/state_series.csv` を作成します。K、ハミング距離、日数を変えた場合は、それらを含む別ディレクトリを使います。
+3. 評価5用 `state_series_220days.csv` を作成
+   `scripts/evaluate_adl_labels.py` を `--state-series-preprocessing network-equivalent --smoothing-window-sec 5 --state-series-days 220 --state-series-only` で実行し、抽出側と同じ1秒粒度化、遅延OFF平滑化、固定代表状態写像、同一状態圧縮を適用した評価5専用の中間出力 `output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv` を作成します。K、ハミング距離、代表状態の構築日数を変えた場合は、それらを含む別ディレクトリを使います。
 
 4. 評価5を実行  
-   `scripts/evaluate_adl_correspondence.py` を実行します。主な出力は `evaluation5_summary_by_method.csv`, `evaluation5_pattern_details.csv`, `evaluation5_summary.json` です。
+   抽出時と同じ1秒粒度化・遅延OFF・代表状態写像・同一状態圧縮で評価用state seriesを作成し、`scripts/evaluate_adl_correspondence.py` を実行します。low-information判定には代表状態定義を用います。主な出力は `evaluation5_summary_by_method.csv`, `evaluation5_summary_by_method_by_run.csv`, `evaluation5_pattern_details.csv`, `evaluation5_summary.json` で、比較可能pairがないrunもFragmentationは0として表示し、pair数を診断情報として併記します。
 
-変更可能な主な引数は、run数、train/test split、grounded/useless閾値、assigned ADL閾値、FP-Growth設定、transition_probability設定、baseline cache設定、fragmentation閾値、low-information閾値、Other状態・Other ADLの扱いです。評価5画面の `runs` は既定で5です。`runs=5` にすると、`run_llm_extraction.py --runs 5` で提案手法JSONを5回分作成し、評価本体も `--runs 5` で `evaluation5_summary_by_method.csv` に平均と標準偏差、`evaluation5_summary_by_method_by_run.csv` にrun別summaryを出力します。frequency / rule / FP-Growth / transition_probability はrun非依存のため最初の評価runだけで評価し、2回目以降は提案手法だけを評価します。FP-Growth / transition_probability の生成済みパターンは、既定で `output/5_adl_correspondence_baselines/` に保存して再利用します。複数run用テンプレート欄では、評価に使うrun別LLM JSONの存在確認も表示します。
+変更可能な主な引数は、run数、train/test split、grounded/useless閾値、assigned ADL閾値、FP-Growth設定、transition_probability設定、baseline cache設定、fragmentation閾値、low-information閾値、Other状態・Other ADLの扱いです。評価5画面の `runs` は既定で5です。`runs=5` にすると、`run_llm_extraction.py --runs 5` で提案手法JSONを5回分作成し、評価本体も `--runs 5` で `evaluation5_summary_by_method.csv` に平均と標準偏差、`evaluation5_summary_by_method_by_run.csv` にrun別summaryを出力します。frequency / rule / FP-Growth / transition_probability はrun非依存のため最初の評価runだけで評価し、2回目以降は提案手法だけを評価します。FP-Growth / transition_probability の生成済みパターンは、既定で `output/5_adl_correspondence_baselines_fixed/` に保存して再利用します。複数run用テンプレート欄では、評価に使うrun別LLM JSONの存在確認も表示します。
 
-結果タブでは `evaluation5_summary_by_method.csv` を選ぶと、`useful_non_redundant_pattern_rate`, `fragmentation_rate`, `contextless_useless_rate` を手法別に表示・グラフ化できます。`evaluation5_summary_by_method_by_run.csv` ではrunごとのばらつきを確認できます。`evaluation5_pattern_details.csv` では各パターンの `run`, `is_contextless_useless`, `is_fragmented`, `fragment_parent_ids`, `is_useful_non_redundant` を確認できます。
+結果タブでは `evaluation5_summary_by_method.csv` を選ぶと、`useful_non_redundant_pattern_rate`, `fragmentation_rate`, `contextless_useless_rate` を手法別に表示・グラフ化できます。`evaluation5_summary_by_method_by_run.csv` ではrunごとの対象数、比較可能pair数、比較可能な子パターン数、Fragmentationのばらつきを確認できます。`evaluation5_pattern_details.csv` では各パターンの `run`, `is_adl_grounded`, `is_low_information`, `is_contextless_useless`, `is_fragmented`, `comparable_fragment_parent_ids`, `fragment_parent_ids`, `is_useful_non_redundant` を確認できます。
 
 ## 評価6のステップ
 
@@ -105,13 +105,15 @@ uv run streamlit run app/streamlit_app.py
    `scripts/run_llm_extraction.py --days 14` を実行します。`--runs` で複数runを生成できます。
 
 3. 評価6用 `state_series.csv` を作成  
-   `scripts/evaluate_adl_labels.py` で比較用の状態系列を `output/6_adl_evaluation_15_0_14days/state_series.csv` へ保存します。
+   `scripts/evaluate_adl_labels.py` で、先頭14日から作成した代表状態定義を固定して全220日を写像した比較用の照合系列を `output/6_adl_evaluation_15_0_14days/state_series.csv` へ保存します。`14days` は抽出・LLM入力条件であり、照合期間は全220日です。
 
 4. LLM単独ベースラインを生成  
    `scripts/run_direct_log_baseline.py --log-days 14 --extract-only` を実行します。
 
 5. 評価6の手法間比較を実行  
    `scripts/evaluate_6_compare_adl_interpretation_set.py` を実行します。主な出力は `evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_llm_usage_comparison.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_*_by_method.csv`, `evaluation6_comparison_summary.json` です。
+
+評価6・7画面では旧sentinelラベルの選択欄を表示しない。`no_occurrence`, `no_adl_overlap`, `prediction missing`, `unknown` は評価ロジックで固定された別状態であり、conditional/end-to-end指標とcoverage/rateへ一貫して反映される。旧CLI引数は既存コマンドとの互換性のため受理されるが、アプリが新規生成するコマンドには付与しない。
 
 アプリの標準条件は、評価7の選定結果に合わせて代表状態数 `K=15`、ハミング距離閾値 `0` です。中間出力には `output/6_adl_evaluation_15_0_14days/` を使い、Kやハミング距離を変えた場合も `output/6_adl_evaluation_{K}_{hamming}_{days}days/` を使います。
 
@@ -131,21 +133,21 @@ uv run streamlit run app/streamlit_app.py
 4. 全条件をrun 1で評価
    `scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py` を実行し、上位条件を決めるための初回summaryを作成します。
 
-5. 上位10条件を合計3回まで実行
-   `scripts/run_evaluation7_top_condition_repeats.py` が初回summaryの上位10条件を選び、不足分のrun 2, 3だけを生成します。run JSONごとに存在確認し、生成済みrunはスキップしてそのまま利用します。全20ファイルが存在する場合は、このステップ自体が一括実行対象から外れます。
+5. 上位10条件を合計5回まで実行
+   `scripts/run_evaluation7_top_condition_repeats.py` が初回summaryの上位10条件を選び、不足分のrun 2--5だけを生成します。run JSONごとに存在確認し、生成済みrunはスキップしてそのまま利用します。全40ファイルが存在する場合は、このステップ自体が一括実行対象から外れます。
 
-6. 上位10条件の3回平均を評価
-   `--conditions-file` と `--run-ids 1 2 3` を使い、選抜に使ったrun 1も含めて平均と標準偏差を計算します。最終評価後、`evaluation7_top10_3runs_conditions.csv` も `evaluation7_condition_summary.csv` と同じ指標列・3回平均値へ更新します。
+6. 上位10条件の5回平均を評価
+   `--conditions-file` と `--run-ids 1 2 3 4 5` を使い、選抜に使ったrun 1も含めて平均と標準偏差を計算します。最終評価後、`evaluation7_top10_5runs_conditions.csv` も `evaluation7_condition_summary.csv` と同じ指標列・5回平均値へ更新します。
 
 主な出力は `evaluation7_condition_summary.csv`, `evaluation7_condition_summary_by_run.csv`, `evaluation7_pattern_set_details.csv`, `evaluation7_by_pred_label.csv`, `evaluation7_by_true_label.csv`, `evaluation7_by_time_band.csv`, `evaluation7_summary.json` です。
 
-Streamlit画面では、`代表状態数 K` と `ハミング距離閾値` をカンマ区切りまたは空白区切りで指定できます。「二段階実行」は既定でON、上位条件数は10、合計実行回数は3です。一括実行の「不足ファイル生成 + 評価本体」では、初回summaryが既に存在すれば初回生成・評価をスキップし、上位10条件の不足分run 2, 3と最終平均へ進みます。初回結果は `results/7_param_search/`、最終結果は `results/7_param_search/top10_3runs/` に分けて保存します。
+Streamlit画面では、`代表状態数 K` と `ハミング距離閾値` をカンマ区切りまたは空白区切りで指定できます。「二段階実行」は既定でON、上位条件数は10、合計実行回数は5です。一括実行の「不足ファイル生成 + 評価本体」では、初回summaryが既に存在すれば初回生成・評価をスキップし、上位10条件の不足分run 2--5と最終平均へ進みます。初回結果は `results/7_param_search/`、最終結果は `results/7_param_search/top10_5runs/` に分けて保存します。
 
 ## 評価8のステップ
 
 参照ドキュメント: `docs/evaluation_8_frequency_stratified_adl_consistency.md`
 
-評価8ではラジオボタンで「154日: 提案手法のみ」（既定）または「14日: 提案手法 vs LLM単独ベースライン」を選択して実行する。代表状態数K（既定15）、ハミング距離閾値（既定0）、runs（既定5）を変更できる。頻度帯方式は選択式ではなく、三分位と固定回数帯を一度のコマンドで両方実行する。入力評価は重複実行せず、同じ評価レコードから2方式を集計し、指定したoutput directoryの `tertile/` と `fixed/` に分けて保存する。固定帯の下限（既定`0,1,10,100,1000,10000`）は変更できる。154日・提案手法のみの`fixed/`には、帯別の平均パターン数分布とPrecision / Recall / F1図も保存できる。出力先は条件別に `results/8_proposed/` と `results/8_vs_llm/` を使い、結果を混在させない。154日提案手法のみでは重複する `evaluation8_by_frequency_band_by_method.csv` を生成しない。
+評価8ではラジオボタンで「154日: 提案手法のみ」（既定）または「14日: 提案手法 vs LLM単独ベースライン」を選択して実行する。代表状態数K（既定15）、ハミング距離閾値（既定0）、runs（既定5）を変更できる。頻度帯方式は選択式ではなく、三分位と固定回数帯を一度のコマンドで両方実行する。各pattern ID自身の出現だけを取得し、同じ物理区間を一意化した後の件数からrunごとに帯を再割当てする。比較scopeでも評価6詳細CSVの旧出現数をそのまま使わず、画面で指定した同条件のstate-series CSVからown-ID出現数を再構築する。入力評価は重複実行せず、同じ評価レコードから2方式を集計し、指定したoutput directoryの `tertile/` と `fixed/` に分けて保存する。固定帯の下限（既定`0,1,10,100,1000,10000`）は変更できる。154日・提案手法のみの`fixed/`には、帯別の平均パターン数分布とPrecision / Recall / F1図も保存できる。修正版の標準出力先は `results/8_proposed_own_id_fixed/` と `results/8_vs_llm_own_id_fixed/` で、run別CSV、修正前後件数、重複監査、重み総和検証を保存する。
 
 ## ログとコマンド履歴
 

@@ -107,7 +107,7 @@ RESULT_GUIDES: dict[str, list[dict[str, str]]] = {
     "評価7": [
         {
             "files": "evaluation7_condition_summary.csv",
-            "how_to_read": "条件ごとの主比較表を見る。rank=1がselection_metricに基づく最適条件で、既定ではmean_multilabel_f1最大の条件を選ぶ。",
+            "how_to_read": "条件ごとの主比較表を見る。rank=1がselection_metricに基づく最適条件で、既定のmean_multilabel_f1はend-to-end F1の後方互換列。",
         },
         {
             "files": "evaluation7_summary.json",
@@ -128,7 +128,7 @@ RESULT_GUIDES: dict[str, list[dict[str, str]]] = {
     ],
     "評価8": [
         {
-            "files": "evaluation8_by_frequency_band_by_method.csv, evaluation8_by_frequency_band.csv",
+            "files": "evaluation8_by_frequency_band_by_method.csv, evaluation8_by_frequency_band.csv, evaluation8_by_frequency_band_by_run.csv",
             "how_to_read": "三分位モードではLow / Middle / High、固定帯モードでは回数範囲ごとに、pattern単位のPrecision / Recall / F1とJaccardを比較する。高頻度でPrecisionが高いかは、同一method内の帯間で確認する。",
         },
         {
@@ -141,11 +141,11 @@ RESULT_GUIDES: dict[str, list[dict[str, str]]] = {
         },
         {
             "files": "evaluation8_frequency_band_details.csv",
-            "how_to_read": "各評価レコードのnum_occurrences、frequency_band、予測/正解ADLラベルを確認して、帯別結果の原因を追跡する。",
+            "how_to_read": "各評価レコードの修正前後の出現数、重複除去数、frequency_band、予測/正解ADLラベルを確認して、帯別結果の原因を追跡する。",
         },
         {
             "files": "evaluation8_summary.json",
-            "how_to_read": "analysis_scope、入力、頻度帯モードと固定帯境界（該当時）、手法別・全体集計を再現条件として確認する。",
+            "how_to_read": "analysis_scope、入力、有効期間、own-ID・重複除去方針、頻度帯境界を確認する。occurrence_weight_validation.all_passed=trueで、補正後の出現数と頻度加重の総和が一致することも確認する。",
         },
     ],
 }
@@ -195,6 +195,7 @@ RESULT_FILE_ORDER: dict[str, list[str]] = {
         "evaluation8_frequency_band_metrics.png",
         "evaluation8_by_frequency_band_by_method.csv",
         "evaluation8_by_frequency_band.csv",
+        "evaluation8_by_frequency_band_by_run.csv",
         "evaluation8_occurrence_weighted_summary.csv",
         "evaluation8_frequency_band_details.csv",
         "evaluation8_summary.json",
@@ -332,10 +333,13 @@ def render_eval5_settings(common: dict) -> dict:
         runs = st.number_input("runs", min_value=1, value=5, step=1)
 
     suffix = short_suffix(int(n_states), int(hamming), int(days))
-    default_eval5_intermediate = f"output/5_adl_evaluation_{suffix}"
+    default_eval5_intermediate = f"output/5_adl_evaluation_{suffix}_fixed"
     st.markdown("**入力パス**")
     labeled = st.text_input("ラベル付きCASAS", "new_labeled_data/aruba.txt")
-    state_series = st.text_input("state-series", f"{default_eval5_intermediate}/state_series.csv")
+    state_series = st.text_input(
+        "state-series",
+        f"{default_eval5_intermediate}/state_series_220days.csv",
+    )
     state_table = st.text_input("代表状態テーブル", rel_default(default_state_table("aruba", int(n_states), int(hamming), int(days))))
     sensor_map = st.text_input("センサーマップ", "configs/aruba_sensor_map.json")
     patterns_frequency = st.text_input("patterns-frequency", f"output/aruba_{suffix}/state_sequence_counts_{suffix}.json")
@@ -393,7 +397,10 @@ def render_eval5_settings(common: dict) -> dict:
     with st.expander("FP-Growth / baseline生成"):
         enable_fp = st.checkbox("enable-fp-growth-baseline", value=True)
         use_baseline_cache = st.checkbox("use-baseline-cache", value=True)
-        baseline_cache_dir = st.text_input("baseline-cache-dir", "output/5_adl_correspondence_baselines")
+        baseline_cache_dir = st.text_input(
+            "baseline-cache-dir",
+            "output/5_adl_correspondence_baselines_fixed",
+        )
         st.caption("FP-Growth / transition_probability の生成済みパターンを保存し、同じ条件では再利用します。")
         fp1, fp2, fp3 = st.columns(3)
         with fp1:
@@ -433,8 +440,7 @@ def render_eval5_settings(common: dict) -> dict:
             )
 
     st.markdown("**出力**")
-    output_dir = st.text_input("output-dir", "results/5_pattern_quality")
-    eval5_intermediate_output = st.text_input("中間output-dir（state_series作成用）", default_eval5_intermediate)
+    output_dir = st.text_input("output-dir", "results/5_pattern_quality_fixed")
 
     return {
         **common,
@@ -454,7 +460,6 @@ def render_eval5_settings(common: dict) -> dict:
         "patterns_proposed_template": patterns_proposed_template,
         "skip_missing_runs": skip_missing_runs,
         "output_dir": output_dir,
-        "eval5_intermediate_output_dir": eval5_intermediate_output,
         "wake_window_minutes": wake_window,
         "match_mode": match_mode,
         "max_skip_duration_minutes": max_skip,
@@ -506,11 +511,7 @@ def render_eval6_settings(common: dict) -> dict:
         runs = st.number_input("runs", min_value=1, value=1, step=1)
 
     suffix = short_suffix(int(n_states), int(hamming), int(days))
-    default_intermediate = (
-        "output/6_adl_evaluation_14"
-        if int(n_states) == 15 and int(hamming) == 1 and int(days) == 14
-        else f"output/6_adl_evaluation_{suffix}"
-    )
+    default_intermediate = f"output/6_adl_evaluation_{suffix}"
     st.markdown("**入力パス**")
     labeled = st.text_input("ラベル付きCASAS", "new_labeled_data/aruba.txt")
     sensor_map = st.text_input("センサーマップ", "configs/aruba_sensor_map.json")
@@ -525,18 +526,20 @@ def render_eval6_settings(common: dict) -> dict:
         direct_template = st.text_input("patterns-direct-template", "")
 
     st.markdown("**評価パラメータ**")
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     with col1:
         min_ratio = st.number_input("min-overlap-ratio-for-true-label", min_value=0.0, max_value=1.0, value=0.10)
         wake_window = st.number_input("wake-window-minutes", min_value=0.0, value=30.0)
         match_mode = st.selectbox("match-mode", ["exact", "skip-other"], index=0)
     with col2:
-        no_overlap = st.selectbox("no-overlap-label", ["Ambiguous", "Other"], index=0)
-        missing_pred = st.selectbox("missing-pred-label", ["Ambiguous", "Other"], index=0)
-        unknown_pred = st.selectbox("unknown-pred-label", ["Other", "Ambiguous"], index=0)
-    with col3:
         max_skip = st.number_input("max-skip-duration-minutes", min_value=0.0, value=1.0)
         skip_missing = st.checkbox("skip-missing-runs", value=False)
+        st.caption(
+            "出現なし・正解重なりなし・予測欠落・語彙外は別状態として固定処理します。"
+        )
+    no_overlap = "Ambiguous"
+    missing_pred = "Ambiguous"
+    unknown_pred = "Other"
 
     st.markdown("**出力**")
     intermediate_dir = st.text_input("中間output-dir", default_intermediate)
@@ -619,13 +622,13 @@ def render_eval7_settings(common: dict) -> dict:
     with col1:
         if staged_search:
             top_n = st.number_input("上位条件数", min_value=1, value=10, step=1)
-            total_runs = st.number_input("上位条件の合計実行回数", min_value=2, value=3, step=1)
+            total_runs = st.number_input("上位条件の合計実行回数", min_value=2, value=5, step=1)
             runs = 1
             st.caption("初回run 1を平均に含め、不足するrun 2以降だけを追加生成します。")
         else:
             runs = st.number_input("runs", min_value=1, value=1, step=1)
             top_n = 10
-            total_runs = 3
+            total_runs = 5
         min_ratio = st.number_input("min-overlap-ratio-for-true-label", min_value=0.0, max_value=1.0, value=0.10)
         selection_metric = st.selectbox(
             "selection-metric",
@@ -640,9 +643,12 @@ def render_eval7_settings(common: dict) -> dict:
             index=0,
         )
     with col2:
-        no_overlap = st.selectbox("no-overlap-label", ["Ambiguous", "Other"], index=0)
-        missing_pred = st.selectbox("missing-pred-label", ["Ambiguous", "Other"], index=0)
-        unknown_pred = st.selectbox("unknown-pred-label", ["Other", "Ambiguous"], index=0)
+        st.caption(
+            "出現なし・正解重なりなし・予測欠落・語彙外は評価6と同じ固定状態で処理します。"
+        )
+        no_overlap = "Ambiguous"
+        missing_pred = "Ambiguous"
+        unknown_pred = "Other"
     with col3:
         wake_window = st.number_input("wake-window-minutes", min_value=0.0, value=30.0)
         match_mode = st.selectbox("match-mode", ["exact", "skip-other"], index=0)
@@ -729,12 +735,15 @@ def render_eval8_settings(common: dict) -> dict:
             f"results/6_adl_match/{suffix}/evaluation6_pattern_set_details_by_method.csv",
         )
         patterns_proposed = ""
-        state_series = ""
+        state_series = st.text_input(
+            "state-series（評価8でown-ID出現数を再構築）",
+            f"output/6_adl_evaluation_{suffix}/state_series.csv",
+        )
         labeled_casas = ""
         adl_intervals = ""
         output_dir = st.text_input(
             "output directory",
-            "results/8_vs_llm",
+            "results/8_vs_llm_own_id_fixed",
         )
         st.caption("評価6詳細CSVには5 run分のレコードを含めてください。評価8ではrunごとの帯別指標を平均します。")
         patterns_proposed_template = ""
@@ -746,7 +755,7 @@ def render_eval8_settings(common: dict) -> dict:
             f"output/aruba_{suffix}/llm_sequences_modes_{suffix}_1.json",
         )
         state_series_default = (
-            f"output/5_adl_evaluation_{suffix}/state_series.csv"
+            "output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv"
             if (int(n_states), int(hamming)) == (DEFAULT_N_STATES, DEFAULT_HAMMING_THRESHOLD)
             else ""
         )
@@ -762,7 +771,7 @@ def render_eval8_settings(common: dict) -> dict:
         )
         output_dir = st.text_input(
             "output directory",
-            "results/8_proposed",
+            "results/8_proposed_own_id_fixed",
         )
     frequency_band_mode = "both"
     st.markdown("**頻度帯評価: 三分位 + 固定回数帯（同時実行）**")
@@ -1139,7 +1148,7 @@ def render_results(default_dirs: list[Path], current_evaluation: str | None = No
             )
 
     st.markdown("**複数run比較**")
-    comparison_files = [path for path in discover_result_files([PROJECT_ROOT / "results"]) if path.name in {"evaluation8_by_frequency_band_by_method.csv", "evaluation7_condition_summary.csv", "evaluation6_method_comparison.csv", "evaluation6_llm_usage_comparison.csv", "evaluation5_summary_by_method.csv", "evaluation5_summary_by_method_by_run.csv", "adl_interval_hit_metrics.csv"}]
+    comparison_files = [path for path in discover_result_files([PROJECT_ROOT / "results"]) if path.name in {"evaluation8_by_frequency_band_by_method.csv", "evaluation8_by_frequency_band_by_run.csv", "evaluation7_condition_summary.csv", "evaluation6_method_comparison.csv", "evaluation6_llm_usage_comparison.csv", "evaluation5_summary_by_method.csv", "evaluation5_summary_by_method_by_run.csv", "adl_interval_hit_metrics.csv"}]
     if comparison_files:
         chosen = st.multiselect("比較に使うCSV", [display_path(path) for path in comparison_files], default=[display_path(comparison_files[0])])
         frames = []

@@ -47,6 +47,21 @@ def staged_settings(output_dir: Path) -> dict:
 
 
 class Evaluation7StagedWorkflowTests(unittest.TestCase):
+    def test_repeat_runner_defaults_to_five_total_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            argv = [
+                "run_evaluation7_top_condition_repeats.py",
+                "--screening-summary",
+                str(root / "screening.csv"),
+                "--manifest",
+                str(root / "manifest.csv"),
+            ]
+            with patch.object(sys, "argv", argv):
+                args = repeat_runner.parse_args()
+
+        self.assertEqual(args.total_runs, 5)
+
     def test_top_condition_selection_uses_screening_rank(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             summary = Path(tmpdir) / "summary.csv"

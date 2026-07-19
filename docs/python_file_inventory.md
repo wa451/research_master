@@ -25,14 +25,14 @@
 | `scripts/run_llm_extraction.py` | 提案手法のLLMパターン抽出のみを実行する。`--days`, `--n-states`, `--hamming-threshold` で評価6用の条件別ネットワークを入力にでき、`--runs` で複数回分、`--run-ids` で特定runだけを生成できる。 |
 | `scripts/run_evaluation7_top_condition_repeats.py` | 評価7の初回summaryから上位N条件を選び、初回を含む合計run数まで不足分だけを生成して選抜条件manifestを保存する。 |
 | `scripts/run_llm_eval_batch.py` | 提案手法のLLM抽出とベースライン比較評価を複数回実行し、Excelへ集計する。 |
-| `scripts/run_direct_log_baseline.py` | ラベル付きCASAS txtからactivity labelを除いたセンサーイベントを使い、直接ログLLMベースラインを実行し、その出力を評価する。評価6では `--log-days 14 --extract-only` で14日分のみ抽出し、`--n-states`, `--hamming-threshold`, `--runs` で条件別・複数回分を生成できる。 |
+| `scripts/run_direct_log_baseline.py` | ラベル付きCASAS txtからactivity labelを除き、抽出側と同じ前処理・代表状態写像で得た系列をネットワーク化せず直接LLMへ入力するベースラインを実行・評価する。評価6では `--log-days 14 --extract-only` で14日分のみ抽出し、`--n-states`, `--hamming-threshold`, `--runs` で条件別・複数回分を生成できる。 |
 | `scripts/run_evaluation.py` | 既存のLLM出力JSONを、遷移確率ベースライン・頻度ベースラインと比較評価する。 |
 | `scripts/run_groundedness.py` | LLM出力系列が状態遷移グラフ上の根拠を持つかを評価する。 |
 | `scripts/evaluate_condition_metrics.py` | support, confidence, 時間間隔条件を用いた系列評価を実行する。 |
 | `scripts/evaluate_adl_labels.py` | ラベル付きCASASデータを使い、抽出パターンとADL区間の対応付け、ADLカテゴリ別Precision/Recall/F1、境界誤差を評価する。 |
-| `scripts/evaluate_adl_correspondence.py` | frequency, rule-filtered frequency, FP-Growth系baseline, transition_probability baseline, proposed method のパターンを共通形式に正規化し、評価5の3指標を手法別に比較する。`--runs` で提案手法の複数run平均も出せる。 |
-| `scripts/evaluate_6_compare_adl_interpretation_set.py` | 評価6について、14日版の提案手法とLLM単独ベースラインを同じ状態系列・同じADL正解区間で比較する。`--runs` で複数run平均も出力する。 |
-| `scripts/evaluate_8_frequency_stratified_adl_consistency.py` | 評価6詳細CSVを入力に、パターンの代表状態系列上の出現回数でLow / Middle / Highへ分け、ADL解釈ラベル整合性を後段集計する。 |
+| `scripts/evaluate_adl_correspondence.py` | frequency, rule-filtered frequency, FP-Growth系baseline, transition_probability baseline, proposed method のパターンを共通形式に正規化し、評価5の3指標を手法別に比較する。状態属性に基づくlow-information判定、time-band限定照合、同一run・時間帯内のfragmentation判定、比較可能pair数を出力し、`--runs` で複数runを集計する。pair=0でもfragmented/evaluableを0として出力する。 |
+| `scripts/evaluate_6_compare_adl_interpretation_set.py` | 評価6について、先頭14日を入力とする提案手法とLLM単独ベースラインを、14日条件の代表状態定義で写像した同じ全220日状態系列・ADL正解区間で比較する。`--runs` で複数run平均も出力する。 |
+| `scripts/evaluate_8_frequency_stratified_adl_consistency.py` | 評価6詳細CSVまたは提案手法JSONを入力に、pattern ID固有の物理出現を一意化し、修正後出現数からrunごとにLow / Middle / Highを再割当てしてADL解釈ラベル整合性を集計する。修正前後件数、run別値、頻度加重の重み監査も保存する。 |
 
 ## 3. src/behavior_pattern_mining/
 
@@ -83,7 +83,7 @@
 | `src/behavior_pattern_mining/evaluation/__init__.py` | 評価パッケージの初期化ファイル。 |
 | `src/behavior_pattern_mining/evaluation/metrics.py` | パターン読み込み、完全一致・部分一致判定、Precision/Recall/F1計算、評価レポート生成の共通処理。 |
 | `src/behavior_pattern_mining/evaluation/compare_patterns.py` | 提案手法LLM出力を、遷移確率ベースライン・頻度ベースラインと比較する評価モジュール。 |
-| `src/behavior_pattern_mining/evaluation/direct_log.py` | 直接ログLLMベースライン出力をベースラインと比較し、レポート・Excelを生成する。 |
+| `src/behavior_pattern_mining/evaluation/direct_log.py` | 前処理済み代表状態系列を直接入力するLLM単独ベースライン出力を比較し、レポート・Excelを生成する。 |
 | `src/behavior_pattern_mining/evaluation/groundedness.py` | Markov graphの読み込み、LLM系列のエッジ存在・確率閾値・系列長・自己ループ条件の判定を行う純粋ロジック。 |
 | `src/behavior_pattern_mining/evaluation/groundedness_check.py` | Groundedness評価を実行し、CSV出力する実行寄りモジュール。 |
 | `src/behavior_pattern_mining/evaluation/condition_metrics.py` | support, confidence, 最大時間間隔などの条件グリッドでLLM系列を評価するモジュール。 |
