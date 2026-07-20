@@ -65,7 +65,7 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 | 順序 | ファイル | 読み方 |
 |---|---|---|
 | 1 | `evaluation6_method_comparison.csv` | `conditional_mean_*` と `end_to_end_mean_*` を区別して見る。`--runs 5` の場合は5回平均と標準偏差、およびcoverage/rateの平均も確認する。 |
-| 2 | `evaluation6_llm_usage_comparison.csv` | `num_runs_with_complete_metrics` を確認し、両手法で完全な記録がある共通runを明示して入力・応答・合計トークン数を比較する。現保存結果では両手法の完全な使用量記録がそろう第1--4試行を比較対象とする。期間による入力規模の比較では、提案手法の各時間帯の入力を期間ごとに合計し、LLM単独の上限超過は実行ログに記録されたAPIエラーに基づいて判定する。 |
+| 2 | `evaluation6_llm_usage_comparison.csv` | `num_runs_with_complete_metrics` を確認し、両手法で完全な記録がある共通runを明示して入力・応答・合計トークン数を比較する。現保存結果では両手法とも第1--5試行の完全な使用量記録を用いる。期間による入力規模の比較では、提案手法の各時間帯の入力を期間ごとに合計し、LLM単独の上限超過は実行ログに記録されたAPIエラーに基づいて判定する。 |
 | 3 | `evaluation6_method_comparison_by_run.csv` | runごとのばらつきを確認する。平均値だけでなく、特定runだけ大きく外れていないかを見る。 |
 | 4 | `evaluation6_pattern_set_details_by_method.csv` | `occurrence_status`, `truth_status`, `prediction_status`, `is_metric_evaluable`, `is_end_to_end_evaluable`, `raw_pred_adl_labels`, `unknown_pred_adl_labels` と2種類の指標列を見てズレの原因を確認する。 |
 | 5 | `evaluation6_comparison_summary.json` | 再現条件として、入力パス、run数、14日版で揃っているか、`min_overlap_ratio_for_true_label`, 許可ラベル、使用量集計元を確認する。 |
@@ -166,10 +166,15 @@ Step 3とStep 6で5回分のパターン出力を作成したあとに実行す�
 uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
   --patterns-proposed output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
   --patterns-direct output/llm_direct_15_0_14days/1.json \
+  --proposed-metrics-template 'output/aruba_15_0_14days/llm_modes_metrics_15_0_14days_run{run}.csv' \
+  --direct-metrics output/llm_direct_15_0_14days/llm_direct_metrics_14days.csv \
   --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
   --output-dir results/6_adl_match/15_0_14days \
   --min-overlap-ratio-for-true-label 0.10 \
+  --days 14 \
+  --n-states 15 \
+  --hamming-threshold 0 \
   --runs 5
 ```
 

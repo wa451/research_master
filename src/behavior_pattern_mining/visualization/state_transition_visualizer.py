@@ -10,6 +10,7 @@ Date: 2026-02-05
 
 import os
 import json
+import re
 import pandas as pd
 import numpy as np
 from datetime import timedelta
@@ -930,6 +931,19 @@ class StateTransitionVisualizer:
     def _state_to_label(self, state) -> str:
         """状態を可視化用のラベルに変換"""
         return self.state_labels.get(state, 'その他')
+
+    def _state_to_display_label(self, state) -> str:
+        """Return the English-only label used in rendered figures.
+
+        State IDs remain unchanged in state tables and JSON exports so existing
+        downstream evaluation and LLM inputs keep their current contract.
+        """
+        if state == 'Other':
+            return 'Other'
+
+        label = self._state_to_label(state)
+        match = re.fullmatch(r'状態(\d+)', label)
+        return f'State {match.group(1)}' if match else label
     
     def visualize_transition_graph(self, figsize: Tuple[int, int] = FIGURE_SIZE, 
                                    save_path: Optional[str] = None):
@@ -1007,7 +1021,7 @@ class StateTransitionVisualizer:
         for state in all_states:
             duration = self.state_durations.get(state, 0)
             G.add_node(state, 
-                      label=self._state_to_label(state),
+                      label=self._state_to_display_label(state),
                       occurrences=self.state_occurrences.get(state, 0),
                       duration=duration,
                       daily_duration=duration / self.num_days)
@@ -1267,7 +1281,7 @@ class StateTransitionVisualizer:
         # 実際に出現する状態のみ表示
         unique_states_in_data = sorted(set(self.state_sequence), key=lambda x: state_to_num.get(x, 0))
         tick_positions = [state_to_num[state] for state in unique_states_in_data]
-        tick_labels = [self._state_to_label(state) for state in unique_states_in_data]
+        tick_labels = [self._state_to_display_label(state) for state in unique_states_in_data]
         
         cbar = plt.colorbar(im, ax=ax, ticks=tick_positions)
         cbar.ax.set_yticklabels(tick_labels, fontsize=12)
@@ -1367,7 +1381,7 @@ class StateTransitionVisualizer:
             # 実際に出現する状態のみ表示
             unique_states_in_data = sorted(set(state_sequence), key=lambda x: state_to_num.get(x, 0))
             tick_positions = [state_to_num[state] for state in unique_states_in_data]
-            tick_labels = [self._state_to_label(state) for state in unique_states_in_data]
+            tick_labels = [self._state_to_display_label(state) for state in unique_states_in_data]
             
             cbar = plt.colorbar(im, ax=ax, ticks=tick_positions)
             cbar.ax.set_yticklabels(tick_labels, fontsize=12)
@@ -1422,7 +1436,7 @@ class StateTransitionVisualizer:
                     duration = self.mode_state_durations[mode_name].get(state, 0)
                     mode_days = self.mode_num_days.get(mode_name, 1)
                     G.add_node(state,
-                              label=self._state_to_label(state),
+                              label=self._state_to_display_label(state),
                               occurrences=self.mode_state_occurrences[mode_name].get(state, 0),
                               duration=duration,
                               daily_duration=duration / mode_days)
@@ -1480,18 +1494,12 @@ class StateTransitionVisualizer:
         self.compute_transition_matrix()
         
         # 保存フォルダとパスを生成（常に保存）
-        save_folder, save_path, state_table_path = self._generate_save_folder(filepath)
+        save_folder, _, state_table_path = self._generate_save_folder(filepath)
         
-        # 可視化と保存（全期間）
-        plt_obj = self.visualize_transition_graph(save_path=save_path)
-
-        # JSONエクスポート（全期間）: 遷移図と同じフォルダに保存
+        # 全期間のJSONは後段のLLM・評価が参照するため保存する。
+        # 全期間（all）の図は生成しない。
         json_path = os.path.join(save_folder, "state_transition_all.json")
         self.export_to_json(json_path)
-        
-        # 時系列図の可視化（全期間）
-        timeline_path = os.path.join(save_folder, "timeline_all.png")
-        self.visualize_mode_timeline(save_path=timeline_path)
         
         self.save_state_table(state_table_path)
         
@@ -1512,9 +1520,9 @@ class StateTransitionVisualizer:
             else:
                 print("  Warning: No valid mode data. Skipping visualization.")
         
-        return plt_obj
+        return None
     
-    def _generate_save_folder(self, filepath: str) -> Tuple[str, str, str]:
+    def _generate_save_folder(self, filepath: str) -> Tuple[str, Optional[str], str]:
         """保存先フォルダと各ファイルパスを生成"""
         data_filename = os.path.splitext(os.path.basename(filepath))[0]
         
@@ -1525,13 +1533,10 @@ class StateTransitionVisualizer:
         if not os.path.exists(save_folder):
             os.makedirs(save_folder)
         
-        # 全期間のグラフ保存パス
-        save_path = os.path.join(save_folder, "state_transition_all.png")
-        
         # 状態テーブル保存パス
         state_table_path = f"state/{data_filename}_{self.n_representative_states}_{self.hamming_threshold}_{self.data_duration_days}days.txt"
         
-        return save_folder, save_path, state_table_path
+        return save_folder, None, state_table_path
 
 
 if __name__ == "__main__":

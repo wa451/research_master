@@ -30,7 +30,7 @@ from src.behavior_pattern_mining.evaluation.adl_correspondence import (
     evaluate_pattern_groundedness,
     evaluate_methods,
     find_occurrences_by_method,
-    is_low_information_sequence,
+    calculate_low_information_ratio,
     load_state_low_information_map,
     load_method_patterns,
     MethodOccurrence,
@@ -103,17 +103,15 @@ class ADLCorrespondenceTests(unittest.TestCase):
 
         self.assertEqual(state_map, {"状態1": True, "状態2": False})
 
-    def test_low_information_threshold_is_strictly_greater_than_half(self) -> None:
-        at_boundary, boundary_ratio = is_low_information_sequence(
+    def test_low_information_ratio_is_diagnostic_without_threshold_classification(self) -> None:
+        boundary_ratio = calculate_low_information_ratio(
             ("状態1", "状態2"),
             other_state_labels=set(),
-            low_information_threshold=0.5,
             state_low_information_map={"状態1": True, "状態2": False},
         )
-        above_boundary, above_ratio = is_low_information_sequence(
+        above_boundary_ratio = calculate_low_information_ratio(
             ("状態1", "状態2", "状態3"),
             other_state_labels=set(),
-            low_information_threshold=0.5,
             state_low_information_map={
                 "状態1": True,
                 "状態2": True,
@@ -122,9 +120,7 @@ class ADLCorrespondenceTests(unittest.TestCase):
         )
 
         self.assertEqual(boundary_ratio, 0.5)
-        self.assertFalse(at_boundary)
-        self.assertGreater(above_ratio, 0.5)
-        self.assertTrue(above_boundary)
+        self.assertGreater(above_boundary_ratio, 0.5)
 
     def test_network_equivalent_state_series_applies_one_second_sampling_and_delayed_off(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -609,7 +605,7 @@ class ADLCorrespondenceTests(unittest.TestCase):
         self.assertEqual(by_pattern["F001"]["is_fragmented"], 1)
         self.assertEqual(by_pattern["F001"]["is_useful_non_redundant"], 0)
         self.assertEqual(by_pattern["F002"]["is_useful_non_redundant"], 1)
-        self.assertEqual(by_pattern["F003"]["is_low_information"], 1)
+        self.assertEqual(by_pattern["F003"]["is_low_information"], "")
         self.assertEqual(by_pattern["F003"]["is_contextless_useless"], 1)
         summary = summary_rows[0]
         self.assertEqual(summary["output_record_count"], 3)
@@ -768,16 +764,21 @@ class ADLCorrespondenceTests(unittest.TestCase):
         self.assertEqual(summary["num_comparable_fragment_children"], 0)
         self.assertAlmostEqual(summary["contextless_useless_rate"], 0.5)
 
-    def test_useful_flag_uses_state_attribute_low_information_result(self) -> None:
-        patterns = [
-            MethodPattern(
-                "proposed",
-                "P001",
-                "pattern",
-                ("状態1", "状態2"),
+    def test_low_information_ratio_does_not_affect_useful_or_contextless_flags(self) -> None:
+        patterns_by_method = {
+            method: [
+                MethodPattern(
+                    method,
+                    pattern_id,
+                    "pattern",
+                    ("状態1", "状態2"),
+                )
+            ]
+            for method, pattern_id in (
+                ("proposed", "P001"),
+                ("frequency", "F001"),
             )
-        ]
-        patterns_by_method = {"proposed": patterns}
+        }
         train_states = [
             StateInterval(ts("2020-01-01 00:00:00"), ts("2020-01-01 00:01:00"), "状態1"),
             StateInterval(ts("2020-01-01 00:01:00"), ts("2020-01-01 00:02:00"), "状態2"),
@@ -823,11 +824,18 @@ class ADLCorrespondenceTests(unittest.TestCase):
             state_low_information_map={"状態1": True, "状態2": True},
         )
 
-        self.assertEqual(detail_rows[0]["is_adl_grounded"], 1)
-        self.assertEqual(detail_rows[0]["is_low_information"], 1)
-        self.assertEqual(detail_rows[0]["is_contextless_useless"], 1)
-        self.assertEqual(detail_rows[0]["is_useful_non_redundant"], 0)
-        self.assertEqual(summary_rows[0]["fragmentation_rate"], 0.0)
+        self.assertEqual({row["method"] for row in detail_rows}, {"proposed", "frequency"})
+        for row in detail_rows:
+            self.assertEqual(row["is_adl_grounded"], 1)
+            self.assertEqual(row["low_information_ratio"], "1.000000")
+            self.assertEqual(row["is_low_information"], "")
+            self.assertEqual(row["is_contextless_useless"], 0)
+            self.assertEqual(row["is_useful_non_redundant"], 1)
+        for summary in summary_rows:
+            self.assertEqual(summary["num_low_information"], "")
+            self.assertEqual(summary["contextless_useless_rate"], 0.0)
+            self.assertEqual(summary["useful_non_redundant_pattern_rate"], 1.0)
+            self.assertEqual(summary["fragmentation_rate"], 0.0)
 
     def test_evaluation5_multi_label_assigned_set_and_other_adl_exclusion(self) -> None:
         patterns, _ = load_method_patterns_from_payload(

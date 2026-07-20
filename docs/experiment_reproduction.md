@@ -67,7 +67,7 @@ uv run python scripts/evaluate_adl_correspondence.py \
   --state-definition state/aruba_15_0_154days.txt \
   --patterns-frequency output/aruba_15_0_154days/state_sequence_counts_15_0_154days.json \
   --patterns-proposed output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json \
-  --output-dir results/5_pattern_quality_low_information_gt_0_5 \
+  --output-dir results/5_pattern_quality_without_low_information_judgment \
   --train-ratio 0.7 \
   --grounded-hit-threshold 0.3 \
   --grounded-purity-threshold 0.3 \
@@ -198,6 +198,7 @@ uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
 - 遷移確率: 各from状態の遷移回数で正規化
 - 可視化閾値: 0.1
 - LLM/ベースライン用JSON: `picture/aruba_15_0_154days/state_transition_*.json`
+- 図: 時間帯別のみ生成する。ノードラベルとタイムライン凡例は `State 1`、`Other` のように英語で表示し、全期間（`all`）の図は生成しない。
 
 ## LLMに入力するJSON形式
 
@@ -341,7 +342,7 @@ uv run python scripts/evaluate_adl_correspondence.py \
   --state-definition state/aruba_15_0_154days.txt \
   --patterns-frequency output/aruba_15_0_154days/state_sequence_counts_15_0_154days.json \
   --patterns-proposed output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json \
-  --output-dir results/5_pattern_quality_low_information_gt_0_5 \
+  --output-dir results/5_pattern_quality_without_low_information_judgment \
   --runs 5 \
   --train-ratio 0.7 \
   --grounded-hit-threshold 0.3 \

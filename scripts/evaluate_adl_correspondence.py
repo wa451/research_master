@@ -121,7 +121,7 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help=(
             "Representative-state TSV used to resolve state IDs and active sensors "
-            "for low-information checks"
+            "for diagnostic low-information ratios"
         ),
     )
     state_attribute_group.add_argument(
@@ -248,12 +248,20 @@ def parse_args() -> argparse.Namespace:
         help="Reuse cached generated baseline pattern CSVs when the input/config hash matches.",
     )
     parser.add_argument("--fragmentation-containment-threshold", type=float, default=0.7)
-    parser.add_argument("--low-information-threshold", type=float, default=0.5)
+    parser.add_argument(
+        "--low-information-threshold",
+        type=float,
+        default=0.5,
+        help=(
+            "Deprecated compatibility option; accepted but ignored. "
+            "Low-information ratio is diagnostic only."
+        ),
+    )
     parser.add_argument(
         "--other-state-labels",
         nargs="+",
         default=sorted(DEFAULT_OTHER_STATE_LABELS),
-        help="State labels treated as other/noise for structural and low-information checks",
+        help="State labels treated as other/noise for structural checks and diagnostic ratios",
     )
     parser.add_argument(
         "--exclude-other-adl-from-any",
@@ -555,6 +563,8 @@ def aggregate_run_summaries(summary_rows_by_run: list[dict]) -> tuple[list[dict]
                 ]
                 if values:
                     summary[count_name] = statistics.mean(values)
+                elif any(count_name in row for row in rows):
+                    summary[count_name] = ""
             for metric in metric_names:
                 values = [float(row.get(metric, 0.0)) for row in rows]
                 summary[metric] = statistics.mean(values) if values else 0.0
@@ -955,16 +965,16 @@ def main() -> None:
             "transition_min_len": args.transition_min_len,
             "transition_max_len": args.transition_max_len,
             "fragmentation_containment_threshold": args.fragmentation_containment_threshold,
-            "low_information_threshold": args.low_information_threshold,
         },
         "deprecated_ignored_thresholds": {
             "assigned_adl_relative_threshold": args.assigned_adl_relative_threshold,
             "assigned_adl_min_purity": args.assigned_adl_min_purity,
+            "low_information_threshold": args.low_information_threshold,
         },
         "primary_metrics": {
             "useful_non_redundant_pattern_rate": (
                 "useful non-redundant patterns / evaluable patterns. A pattern is useful non-redundant "
-                "when it is ADL-grounded and neither contextless useless nor fragmented."
+                "when it is ADL-grounded, not structurally useless, and not fragmented."
             ),
             "fragmentation_rate": (
                 "num fragmented patterns / num_evaluable_patterns, including zero "
@@ -978,15 +988,16 @@ def main() -> None:
                 "contains A -> Other -> A",
                 "contains A -> B -> A -> B",
             ],
-            "low_information": (
-                "ratio of Other/unknown/その他/no-active-sensors states in sequence > "
-                f"{args.low_information_threshold:g}"
-            ),
             "adl_unsupported": (
                 f"any_adl_hit_rate_test < {args.useless_hit_threshold:g} and "
                 f"any_adl_purity_test < {args.useless_purity_threshold:g}"
             ),
         },
+        "low_information_ratio_policy": (
+            "The ratio of Other/unknown/その他/no-active-sensors states is retained "
+            "for diagnostics only. No threshold classification is computed, and the "
+            "ratio does not affect Useful or Contextless metrics."
+        ),
         "fragmentation_definition": {
             "containment_threshold": args.fragmentation_containment_threshold,
             "occurrence_containment": (

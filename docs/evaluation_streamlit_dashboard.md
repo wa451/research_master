@@ -88,7 +88,7 @@ uv run streamlit run app/streamlit_app.py
    `scripts/evaluate_adl_labels.py` を `--state-series-preprocessing network-equivalent --smoothing-window-sec 5 --state-series-days 220 --state-series-only` で実行し、抽出側と同じ1秒粒度化、遅延OFF平滑化、固定代表状態写像、同一状態圧縮を適用した評価5専用の中間出力 `output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv` を作成します。K、ハミング距離、代表状態の構築日数を変えた場合は、それらを含む別ディレクトリを使います。
 
 4. 評価5を実行  
-   抽出時と同じ1秒粒度化・遅延OFF・代表状態写像・同一状態圧縮で評価用state seriesを作成し、`scripts/evaluate_adl_correspondence.py` を実行します。low-information判定には代表状態定義を用います。主な出力は `evaluation5_summary_by_method.csv`, `evaluation5_summary_by_method_by_run.csv`, `evaluation5_pattern_details.csv`, `evaluation5_summary.json` で、比較可能pairがないrunもFragmentationは0として表示し、pair数を診断情報として併記します。
+   抽出時と同じ1秒粒度化・遅延OFF・代表状態写像・同一状態圧縮で評価用state seriesを作成し、`scripts/evaluate_adl_correspondence.py` を実行します。代表状態定義から算出するlow-information ratioは診断値であり、UsefulとContextlessには使用しません。主な出力は `evaluation5_summary_by_method.csv`, `evaluation5_summary_by_method_by_run.csv`, `evaluation5_pattern_details.csv`, `evaluation5_summary.json` です。
 
 変更可能な主な引数は、run数、train/test split、grounded/useless閾値、assigned ADL閾値、FP-Growth設定、transition_probability設定、baseline cache設定、fragmentation閾値、low-information閾値、Other状態・Other ADLの扱いです。評価5画面の `runs` は既定で5です。`runs=5` にすると、`run_llm_extraction.py --runs 5` で提案手法JSONを5回分作成し、評価本体も `--runs 5` で `evaluation5_summary_by_method.csv` に平均と標準偏差、`evaluation5_summary_by_method_by_run.csv` にrun別summaryを出力します。frequency / rule / FP-Growth / transition_probability はrun非依存のため最初の評価runだけで評価し、2回目以降は提案手法だけを評価します。FP-Growth / transition_probability の生成済みパターンは、既定で `output/5_adl_correspondence_baselines_fixed/` に保存して再利用します。複数run用テンプレート欄では、評価に使うrun別LLM JSONの存在確認も表示します。
 

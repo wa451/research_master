@@ -7,7 +7,7 @@
 1. `data/aruba.csv` を読み込む。
 2. 1秒サンプリング、遅延OFFスムージング、連続同一状態の圧縮を行う。
 3. 出現頻度上位K個の代表状態を抽出し、ハミング距離で状態をマッピングする。
-4. 状態遷移確率を計算し、全期間/時間帯別ネットワークを `picture/` に出力する。
+4. 状態遷移確率を計算し、全期間JSONと時間帯別ネットワークを `picture/` に出力する（図は時間帯別のみ）。
 5. 遷移確率ベースライン、頻度ベースライン、LLM抽出を実行する。
 6. Precision/Recall/F1、Groundedness、条件ベース評価を計算する。
 
@@ -125,7 +125,7 @@ uv run python scripts/evaluate_adl_correspondence.py \
   --state-definition state/aruba_15_0_154days.txt \
   --patterns-frequency output/aruba_15_0_154days/state_sequence_counts_15_0_154days.json \
   --patterns-proposed output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json \
-  --output-dir results/5_pattern_quality_low_information_gt_0_5 \
+  --output-dir results/5_pattern_quality_without_low_information_judgment \
   --train-ratio 0.7 \
   --grounded-hit-threshold 0.3 \
   --grounded-purity-threshold 0.3 \
@@ -197,7 +197,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 - `scripts/run_groundedness.py`: LLM系列がグラフ上で根拠を持つか検証。
 - `scripts/evaluate_condition_metrics.py`: support/confidence/時間間隔条件でLLM系列を評価。
 - `scripts/evaluate_adl_labels.py`: ラベル付きCASASデータのADL区間とLLM系列パターンを照合し、ADLカテゴリ別Precision/Recall/F1と境界誤差を評価。
-- `scripts/evaluate_adl_correspondence.py`: frequency、rule-filtered frequency、FP-Growth系、transition probability、proposed method の系列パターンについて、Useful non-redundant、Fragmentation、Contextless uselessを比較。状態ID属性を代表状態定義またはネットワークから解決し、比較可能な短系列―長系列対がないrunも断片数0、評価可能パターン数を分母としてFragmentationを0で保存する。比較可能対数は診断情報として併記する。
+- `scripts/evaluate_adl_correspondence.py`: frequency、rule-filtered frequency、FP-Growth系、transition probability、proposed method の系列パターンについて、Useful non-redundant、Fragmentation、Contextless uselessを比較。UsefulはADL-grounded・非structural・非fragmentedで定義し、low-information ratioは診断値に限定する。比較可能な短系列―長系列対がないrunも断片数0、評価可能パターン数を分母としてFragmentationを0で保存する。
 - `scripts/evaluate_6_compare_adl_interpretation_set.py`: 評価6について、14日版の提案手法とLLM単独ベースラインを比較。`--runs 5` で5回分の平均も出力できる。
 
 新しい実行では `scripts/` 側を使ってください。
@@ -221,13 +221,14 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 - `state/aruba_15_0_154days.txt`: 代表状態テーブル。
 - `picture/aruba_15_0_154days/state_transition_all.json`: 全期間の状態遷移ネットワーク。
 - `picture/aruba_15_0_154days/state_transition_{mode}.json`: 時間帯別ネットワーク。
-- `picture/aruba_15_0_154days/*.png`, `*.eps`: 遷移図とタイムライン。
+- `picture/aruba_15_0_154days/state_transition_{mode}.png`, `*.eps`: 英語ラベルの時間帯別遷移図。
+- `picture/aruba_15_0_154days/timeline_{mode}.png`, `*.eps`: 時間帯別タイムライン。全期間（`all`）の図は生成しない。
 - `output/aruba_15_0_154days/prob_threshold_sequences_15_0_154days.json`: 遷移確率ベースライン。
 - `output/aruba_15_0_154days/state_sequence_counts_15_0_154days.json`: 頻度ベースライン。
 - `output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_*.json`: LLM抽出結果。同じ遷移パターンは1グループにまとめ、時間帯別解釈は `time_band_interpretations` に保持する。
 - `output/aruba_15_0_154days/evaluation_report_15_0_154days_*.txt`: 評価レポート。
 - `results/4_adl_detect/*.csv`, `evaluation_summary.json`: ADLラベル付き単一手法評価の出力。`merged_predictions.csv`, `filtered_predictions.csv`, `adl_interval_hit_metrics.csv` も含む。
-- `results/5_pattern_quality_low_information_gt_0_5/evaluation5_*.csv`, `evaluation5_summary.json`: low-informationの厳密な不等号とFragmentationの全評価可能パターン分母を適用した最新版。率に加えて評価対象数、low-information数、比較可能な短系列―長系列対、系列長分布を保存する。修正前の `results/5_pattern_quality_fixed/` と旧 `results/5_pattern_quality/` は比較用に保持する。
+- `results/5_pattern_quality_without_low_information_judgment/evaluation5_*.csv`, `evaluation5_summary.json`: low-information判定を主指標から除外し、Fragmentationの全評価可能パターン分母を適用した最新版。`low_information_ratio`は詳細CSVの診断値としてのみ保持する。修正前の `results/5_pattern_quality_low_information_gt_0_5/` などは比較用に保持する。
 - `results/6_adl_match/15_0_14days/*.csv`, `evaluation6_comparison_summary.json`: 評価6の提案手法/LLM単独ベースライン比較。`evaluation6_method_comparison.csv` は主比較表、`evaluation6_method_comparison_by_run.csv` はrun別結果。
 - `results/8_vs_llm_own_id_fixed/{tertile,fixed}/*` と `results/8_proposed_own_id_fixed/{tertile,fixed}/*`: 評価8の修正版頻度帯別ADL整合性分析。pattern ID固有かつ一意な物理出現から再集計し、run別値と重み監査も保存する。後者は154日提案手法5 runの正式結果である。
 

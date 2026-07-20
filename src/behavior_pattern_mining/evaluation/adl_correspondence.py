@@ -1341,14 +1341,13 @@ def detect_self_transition(sequence: Sequence[str]) -> tuple[bool, str]:
     return False, ""
 
 
-def is_low_information_sequence(
+def calculate_low_information_ratio(
     sequence: Sequence[str],
     other_state_labels: set[str],
-    low_information_threshold: float,
     state_low_information_map: dict[str, bool] | None = None,
-) -> tuple[bool, float]:
+) -> float:
     if not sequence:
-        return False, 0.0
+        return 0.0
     low_info_markers = {label.lower() for label in other_state_labels}
     low_info_markers.update(
         {
@@ -1379,7 +1378,7 @@ def is_low_information_sequence(
         if "active_sensors" in state_lower and ("なし" in state_text or "[]" in state_text or "none" in state_lower):
             count += 1
     ratio = count / len(sequence)
-    return ratio > low_information_threshold, ratio
+    return ratio
 
 
 def is_contiguous_subsequence(shorter: Sequence[str], longer: Sequence[str]) -> bool:
@@ -1766,10 +1765,9 @@ def evaluate_pattern_groundedness(
             is_useless_b, useless_b_reason = detect_other_state_round_trip(pattern.sequence, other_labels)
             is_useless_c, useless_c_reason = detect_alternating_loop(pattern.sequence)
             is_structural_useless = bool(is_structural_self or is_useless_b or is_useless_c)
-            is_low_information, low_information_ratio = is_low_information_sequence(
+            low_information_ratio = calculate_low_information_ratio(
                 pattern.sequence,
                 other_labels,
-                low_information_threshold=low_information_threshold,
                 state_low_information_map=state_low_information_map,
             )
             is_adl_unsupported = bool(
@@ -1791,12 +1789,12 @@ def evaluate_pattern_groundedness(
             is_fragmented = bool(denominator_eligible and fragment_info["is_fragmented"])
             is_contextless_useless = bool(
                 denominator_eligible
-                and (is_structural_useless or is_low_information or is_adl_unsupported)
+                and (is_structural_useless or is_adl_unsupported)
             )
             is_useful_non_redundant = bool(
                 denominator_eligible
                 and is_adl_grounded
-                and not is_contextless_useless
+                and not is_structural_useless
                 and not is_fragmented
             )
             useless_reasons: list[str] = []
@@ -1867,7 +1865,7 @@ def evaluate_pattern_groundedness(
                 "is_useless": int(is_useless),
                 "is_contextless_useless": int(is_contextless_useless),
                 "is_structural_useless": int(is_structural_useless),
-                "is_low_information": int(is_low_information),
+                "is_low_information": "",
                 "low_information_ratio": f"{low_information_ratio:.6f}",
                 "is_adl_unsupported": int(is_adl_unsupported),
                 "is_fragmented": int(is_fragmented),
@@ -1907,7 +1905,6 @@ def evaluate_pattern_groundedness(
         num_evaluable = len(denominator_rows)
         num_contextless_useless = sum(int(row["is_contextless_useless"]) for row in denominator_rows)
         num_adl_grounded = sum(int(row["is_adl_grounded"]) for row in denominator_rows)
-        num_low_information = sum(int(row["is_low_information"]) for row in denominator_rows)
         num_fragmented = sum(int(row["is_fragmented"]) for row in denominator_rows)
         num_useful_non_redundant = sum(int(row["is_useful_non_redundant"]) for row in denominator_rows)
         sequence_length_distribution = dict(
@@ -1924,7 +1921,7 @@ def evaluate_pattern_groundedness(
             "num_evaluable_patterns": num_evaluable,
             "num_excluded_patterns": len(patterns) - num_evaluable,
             "num_adl_grounded": num_adl_grounded,
-            "num_low_information": num_low_information,
+            "num_low_information": "",
             "num_contextless_useless": num_contextless_useless,
             "num_fragmented": num_fragmented,
             "num_useful_non_redundant": num_useful_non_redundant,

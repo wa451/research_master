@@ -61,9 +61,9 @@
 ## 7.2 評価5: Useful non-redundant pattern / fragmentation evaluation
 
 - 入力: `new_labeled_data/aruba.txt`, 抽出と同じ前処理で生成した `--state-series`, `--state-definition` または `--state-network-json`, frequency/rule/proposed のパターンCSVまたはJSON
-- 出力: `results/5_pattern_quality_low_information_gt_0_5/evaluation5_pattern_details.csv`, `evaluation5_summary_by_method.csv`, `evaluation5_summary_by_method_by_run.csv`, `evaluation5_summary.json`
+- 出力: `results/5_pattern_quality_without_low_information_judgment/evaluation5_pattern_details.csv`, `evaluation5_summary_by_method.csv`, `evaluation5_summary_by_method_by_run.csv`, `evaluation5_summary.json`
 - 対応ファイル: `scripts/evaluate_adl_correspondence.py`, `src/behavior_pattern_mining/evaluation/adl.py`, `src/behavior_pattern_mining/evaluation/adl_correspondence.py`
-- 役割: train期間でpattern->ADL集合を決め、test期間で各出力パターンがADL-groundedか、生活文脈のない系列か、同じrun・時間帯にある長い系列の断片かを評価する。状態IDのactive sensorsを参照し、low-information状態の系列内割合が0.5を超える場合にlow-informationとする。Fragmentationは断片数/評価可能パターン数で、比較可能な短系列―長系列対が0件でも0として保存し、比較可能対数を診断情報として残す。比較対象はfrequency、rule-filtered frequency、FP-Growth系baseline、transition_probability baseline、提案手法。
+- 役割: train期間でpattern->ADL集合を決め、test期間で各出力パターンがADL-groundedか、構造的に無意味か、同じrun・時間帯にある長い系列の断片かを評価する。low-information ratioは診断値としてのみ保存し、UsefulとContextlessには使用しない。Fragmentationは断片数/評価可能パターン数で、比較可能な短系列―長系列対が0件でも0として保存する。比較対象はfrequency、rule-filtered frequency、FP-Growth系baseline、transition_probability baseline、提案手法。
 
 ## 7.3 評価6: LLM ADL interpretation set match
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -23,6 +24,42 @@ FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
 
 class CoreLogicTests(unittest.TestCase):
+    def test_rendered_state_labels_are_english_without_changing_state_ids(self) -> None:
+        visualizer = StateTransitionVisualizer()
+        representative_state = (1, 0)
+        visualizer.state_labels = {
+            representative_state: "状態1",
+            "Other": "その他",
+        }
+
+        self.assertEqual(visualizer._state_to_label(representative_state), "状態1")
+        self.assertEqual(visualizer._state_to_display_label(representative_state), "State 1")
+        self.assertEqual(visualizer._state_to_display_label("Other"), "Other")
+
+    def test_main_exports_all_json_without_rendering_all_figures(self) -> None:
+        visualizer = StateTransitionVisualizer()
+        with (
+            patch.object(visualizer, "load_data", return_value=pd.DataFrame()),
+            patch.object(visualizer, "create_state_vectors"),
+            patch.object(visualizer, "extract_representative_states"),
+            patch.object(visualizer, "map_to_representative_states"),
+            patch.object(visualizer, "compute_transition_matrix"),
+            patch.object(
+                visualizer,
+                "_generate_save_folder",
+                return_value=("picture/test", None, "state/test.txt"),
+            ),
+            patch.object(visualizer, "export_to_json") as export_json,
+            patch.object(visualizer, "save_state_table"),
+            patch.object(visualizer, "visualize_transition_graph") as transition_graph,
+            patch.object(visualizer, "visualize_mode_timeline") as timeline,
+        ):
+            visualizer.main("data/test.csv", mode_split=False)
+
+        export_json.assert_called_once_with("picture/test/state_transition_all.json")
+        transition_graph.assert_not_called()
+        timeline.assert_not_called()
+
     def test_config_loads_from_default_yaml(self) -> None:
         self.assertEqual(DATASET_NAME, "aruba")
         self.assertEqual(LLM_MODEL_NAME, "gemini-2.5-pro")

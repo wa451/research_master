@@ -84,7 +84,7 @@ uv run python scripts/evaluate_adl_correspondence.py \
   --state-definition state/aruba_15_0_154days.txt \
   --patterns-frequency output/aruba_15_0_154days/state_sequence_counts_15_0_154days.json \
   --patterns-proposed output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json \
-  --output-dir results/5_pattern_quality_low_information_gt_0_5 \
+  --output-dir results/5_pattern_quality_without_low_information_judgment \
   --train-ratio 0.7 \
   --grounded-hit-threshold 0.3 \
   --grounded-purity-threshold 0.3 \

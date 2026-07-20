@@ -30,7 +30,7 @@
 | `scripts/run_groundedness.py` | LLM出力系列が状態遷移グラフ上の根拠を持つかを評価する。 |
 | `scripts/evaluate_condition_metrics.py` | support, confidence, 時間間隔条件を用いた系列評価を実行する。 |
 | `scripts/evaluate_adl_labels.py` | ラベル付きCASASデータを使い、抽出パターンとADL区間の対応付け、ADLカテゴリ別Precision/Recall/F1、境界誤差を評価する。 |
-| `scripts/evaluate_adl_correspondence.py` | frequency, rule-filtered frequency, FP-Growth系baseline, transition_probability baseline, proposed method のパターンを共通形式に正規化し、評価5の3指標を手法別に比較する。状態属性に基づくlow-information判定、time-band限定照合、同一run・時間帯内のfragmentation判定、比較可能pair数を出力し、`--runs` で複数runを集計する。pair=0でもfragmented/evaluableを0として出力する。 |
+| `scripts/evaluate_adl_correspondence.py` | frequency, rule-filtered frequency, FP-Growth系baseline, transition_probability baseline, proposed method のパターンを共通形式に正規化し、評価5の3指標を手法別に比較する。low-information ratioは診断値に限定し、time-band限定照合、同一run・時間帯内のfragmentation判定、比較可能pair数を出力する。pair=0でもfragmented/evaluableを0として出力する。 |
 | `scripts/evaluate_6_compare_adl_interpretation_set.py` | 評価6について、先頭14日を入力とする提案手法とLLM単独ベースラインを、14日条件の代表状態定義で写像した同じ全220日状態系列・ADL正解区間で比較する。`--runs` で複数run平均も出力する。 |
 | `scripts/evaluate_8_frequency_stratified_adl_consistency.py` | 評価6詳細CSVまたは提案手法JSONを入力に、pattern ID固有の物理出現を一意化し、修正後出現数からrunごとにLow / Middle / Highを再割当てしてADL解釈ラベル整合性を集計する。修正前後件数、run別値、頻度加重の重み監査も保存する。 |
 

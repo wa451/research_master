@@ -144,7 +144,6 @@ output/
 ```
 picture/
 ├── aruba_15_0_154days/
-│   ├── state_transition_all.png (全期間)
 │   ├── state_transition_all.json
 │   ├── state_transition_Morning.png
 │   ├── state_transition_Morning.json
@@ -154,7 +153,6 @@ picture/
 │   ├── state_transition_Night.json
 │   ├── state_transition_Midnight.png
 │   ├── state_transition_Midnight.json
-│   ├── timeline_all.png
 │   ├── timeline_Morning.png
 │   ├── timeline_Daytime.png
 │   ├── timeline_Night.png

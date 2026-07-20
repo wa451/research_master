@@ -16,7 +16,7 @@
 - `run_groundedness.py`: Groundedness評価。
 - `evaluate_condition_metrics.py`: 条件ベース評価。
 - `evaluate_adl_labels.py`: ラベル付きCASASデータによるADL評価。
-- `evaluate_adl_correspondence.py`: 頻度、ルール、FP-Growth、遷移確率、提案手法をUseful non-redundant / Fragmentation / Contextless uselessで横比較する評価。low-information判定用に `--state-definition` または `--state-network-json` が必須で、比較可能な短系列―長系列対がないrunも評価可能パターン数を分母としてFragmentationを0にする。
+- `evaluate_adl_correspondence.py`: 頻度、ルール、FP-Growth、遷移確率、提案手法をUseful non-redundant / Fragmentation / Contextless uselessで横比較する評価。low-information ratioは診断値に限定し、UsefulとContextlessには使用しない。比較可能な短系列―長系列対がないrunも評価可能パターン数を分母としてFragmentationを0にする。
 - `evaluate_6_compare_adl_interpretation_set.py`: 評価6について、先頭14日を入力とする提案手法とLLM単独ベースラインを、14日条件の代表状態定義で写像した同じ全220日状態系列上で比較する。`--runs 5` でset一致指標に加え、1 run合計のトークン数・API応答時間の5回平均も出力する。
 
 新しく実行する場合は、この `scripts/` 側を使ってください。

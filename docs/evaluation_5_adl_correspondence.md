@@ -16,16 +16,16 @@
 
 | 指標 | 定義 | 見ること |
 |---|---|---|
-| `Useful non-redundant pattern rate` | `is_adl_grounded AND NOT is_contextless_useless AND NOT is_fragmented` なパターン数 / 評価可能パターン数 | 生活文脈があり、かつ冗長な断片ではないパターンの割合。 |
+| `Useful non-redundant pattern rate` | `is_adl_grounded AND NOT is_structural_useless AND NOT is_fragmented` なパターン数 / 評価可能パターン数 | ADLに支持され、構造的に無意味でも断片的でもないパターンの割合。low-information状態の割合は条件に含めない。 |
 | `Fragmentation rate` | `is_fragmented` なパターン数 / 評価可能パターン数。比較可能な短系列―長系列対が0件の場合も、断片数0として0を出力する。 | 長いパターンの断片として出ている部分系列の割合。比較可能対数と比較可能な子パターン数も診断情報として併記する。 |
-| `Contextless useless rate` | `is_contextless_useless` なパターン数 / 評価可能パターン数 | 構造的に無意味、情報量が低い、ADLに支持されないパターンの割合。 |
+| `Contextless useless rate` | `is_contextless_useless` なパターン数 / 評価可能パターン数 | 構造的に無意味、またはADLに支持されないパターンの割合。low-information状態の割合は条件に含めない。 |
 
 ### 新しい主指標の判定
 
 ```text
 is_useful_non_redundant =
   is_adl_grounded
-  AND NOT is_contextless_useless
+  AND NOT is_structural_useless
   AND NOT is_fragmented
 ```
 
@@ -34,8 +34,9 @@ is_useful_non_redundant =
 | 判定 | 定義 |
 |---|---|
 | `structural_useless` | `A -> A`、`A -> Other -> A`、または `A -> B -> A -> B` を含む。 |
-| `low_information` | `--state-definition` または `--state-network-json` から解決したactive sensorsが空の状態、および `Other`、`unknown`、`その他` として明示された状態のsequence内割合が `--low-information-threshold` を超える。既定値は `0.5` であり、割合がちょうど0.5の場合はlow-informationとしない。状態IDの属性を解決できない場合、正式評価はエラーで停止する。 |
 | `adl_unsupported` | `any_adl_hit_rate_test < --useless-hit-threshold` かつ `any_adl_purity_test < --useless-purity-threshold`。既定値はいずれも `0.1`。 |
+
+`low_information_ratio` は、active sensorsが空の状態および明示Other等の状態が系列に占める割合として詳細CSVへ残すが、診断専用である。閾値によるlow-information真偽判定は行わず、UsefulおよびContextlessのどちらにも使用しない。後方互換のため `is_low_information` と `num_low_information` の列名は残すが、値は空欄とする。`--low-information-threshold` も受理するが無視する非推奨引数である。
 
 `is_fragmented` は、同一手法・同一run・同一時間帯内であるパターン `p` がより長いパターン `q` の連続部分系列であり、かつ以下を満たす場合にtrueである。同じ `(p, q)` の組は1回だけ数える。
 
@@ -56,7 +57,7 @@ occurrence_containment(p, q)
 |---|---|---|
 | ラベル付きCASAS | `new_labeled_data/aruba.txt` | ADL begin/endラベルを含む正解データ。 |
 | 代表状態系列CSV | `output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv` | `start_time,end_time,state_id` 形式の代表状態区間。抽出と同じ前処理・代表状態定義から生成した系列を全手法の照合に共用する。 |
-| 代表状態定義または状態遷移ネットワーク | `state/aruba_15_0_154days.txt` または `picture/aruba_15_0_154days/state_transition_all.json` | 状態IDに対応するactive sensorsを解決し、low-information状態を判定する。どちらか一方を必ず指定する。 |
+| 代表状態定義または状態遷移ネットワーク | `state/aruba_15_0_154days.txt` または `picture/aruba_15_0_154days/state_transition_all.json` | 状態IDに対応するactive sensorsを解決し、診断用 `low_information_ratio` を算出する。どちらか一方を必ず指定する。 |
 | frequencyパターン | `output/aruba_15_0_154days/state_sequence_counts_15_0_154days.json` | 頻度ベースライン系列。 |
 | rule-filteredパターン | `output/5_rule_filter/*.csv` | ルールフィルタ済み頻度系列。 |
 | FP-Growthパターン | train期間の代表状態系列から実行時生成 | 関連研究ベースラインとして使う頻出n-gram系列。 |
@@ -67,10 +68,10 @@ occurrence_containment(p, q)
 
 | 出力 | 内容 |
 |---|---|
-| `results/5_pattern_quality_low_information_gt_0_5/evaluation5_summary_by_method.csv` | 手法ごとの主指標、対象数、比較可能pair数、系列長分布。`--runs 2` 以上ではrun平均と標準偏差。 |
-| `results/5_pattern_quality_low_information_gt_0_5/evaluation5_summary_by_method_by_run.csv` | runごとの手法別主指標、対象数、比較可能pair数、系列長分布。`--runs 2` 以上、または `--skip-missing-runs` 指定時に出力。 |
-| `results/5_pattern_quality_low_information_gt_0_5/evaluation5_pattern_details.csv` | 手法別・run別・パターン別の詳細結果。 |
-| `results/5_pattern_quality_low_information_gt_0_5/evaluation5_summary.json` | 入力パス、状態属性、train/test期間、閾値、run情報、skipped methods、手法別集計。state-seriesの生成条件は本節のStep 3と実行コマンドで管理する。修正前結果は `results/5_pattern_quality_fixed/` に保持する。 |
+| `results/5_pattern_quality_without_low_information_judgment/evaluation5_summary_by_method.csv` | 手法ごとの主指標、対象数、比較可能pair数、系列長分布。`--runs 2` 以上ではrun平均と標準偏差。 |
+| `results/5_pattern_quality_without_low_information_judgment/evaluation5_summary_by_method_by_run.csv` | runごとの手法別主指標、対象数、比較可能pair数、系列長分布。`--runs 2` 以上、または `--skip-missing-runs` 指定時に出力。 |
+| `results/5_pattern_quality_without_low_information_judgment/evaluation5_pattern_details.csv` | 手法別・run別・パターン別の詳細結果。 |
+| `results/5_pattern_quality_without_low_information_judgment/evaluation5_summary.json` | 入力パス、状態属性、train/test期間、閾値、run情報、skipped methods、手法別集計。state-seriesの生成条件は本節のStep 3と実行コマンドで管理する。直前の修正前結果は `results/5_pattern_quality_low_information_gt_0_5/` に保持する。 |
 
 FP-Growth系とtransition_probabilityの生成済みパターンはCSVキャッシュとして保存できる。同じ `state_series`、train期間、CLI設定で再実行した場合はこのCSVを読み込み、ベースライン生成時間を削減する。修正版の正式再集計では既存キャッシュを上書きしないよう `output/5_adl_correspondence_baselines_fixed/` を指定する。
 
@@ -78,9 +79,9 @@ FP-Growth系とtransition_probabilityの生成済みパターンはCSVキャッ�
 
 | 順序 | ファイル | 読み方 |
 |---|---|---|
-| 1 | `evaluation5_summary_by_method.csv` | 3指標に加え、`output_record_count`, `unique_sequence_count`, `num_evaluable_patterns`, `num_excluded_patterns`, `num_adl_grounded`, `num_low_information`, `num_contextless_useless`, `num_fragmented`, `num_useful_non_redundant`, `num_comparable_fragment_pairs`, `num_comparable_fragment_children`, `fragmentation_status`, `sequence_length_distribution_json` を確認する。複数run時のcount列は1 run当たりの平均である。 |
+| 1 | `evaluation5_summary_by_method.csv` | 3指標に加え、`output_record_count`, `unique_sequence_count`, `num_evaluable_patterns`, `num_excluded_patterns`, `num_adl_grounded`, `num_contextless_useless`, `num_fragmented`, `num_useful_non_redundant`, `num_comparable_fragment_pairs`, `num_comparable_fragment_children`, `fragmentation_status`, `sequence_length_distribution_json` を確認する。複数run時のcount列は1 run当たりの平均である。`num_low_information` は互換列として空欄になる。 |
 | 2 | `evaluation5_summary_by_method_by_run.csv` | 各runの整数countと率を確認する。Fragmentationは比較可能pair数と比較可能な子パターン数も併せて確認し、pair=0で率が0の場合を抑制成功と解釈しない。 |
-| 3 | `evaluation5_pattern_details.csv` | detailsとして、`run`, `is_adl_grounded`, `is_low_information`, `is_contextless_useless`, `is_fragmented`, `comparable_fragment_parent_ids`, `fragment_parent_ids`, `is_useful_non_redundant`, `evaluation_status` を確認する。 |
+| 3 | `evaluation5_pattern_details.csv` | detailsとして、`run`, `is_adl_grounded`, `is_structural_useless`, `is_adl_unsupported`, `is_contextless_useless`, `is_fragmented`, `comparable_fragment_parent_ids`, `fragment_parent_ids`, `is_useful_non_redundant`, `low_information_ratio`, `evaluation_status` を確認する。`is_low_information` は互換列として空欄になる。 |
 | 4 | `evaluation5_summary.json` | 再現条件として、`train_period`, `test_period`, `thresholds`, `runs_completed`, `skipped_runs`, `skipped_methods`, FP-Growth設定を確認する。 |
 
 FP-Growth系を見る場合は、supportやdurationなどのメタデータ列も確認できる。ただし評価5の集計指標として出力するのは上記3指標のみである。
@@ -155,7 +156,7 @@ uv run python scripts/evaluate_adl_correspondence.py \
   --patterns-rule-medium output/5_rule_filter/frequency_rule_medium.csv \
   --patterns-rule-strong output/5_rule_filter/frequency_rule_strong.csv \
   --patterns-proposed output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json \
-  --output-dir results/5_pattern_quality_low_information_gt_0_5 \
+  --output-dir results/5_pattern_quality_without_low_information_judgment \
   --train-ratio 0.7 \
   --grounded-hit-threshold 0.3 \
   --grounded-purity-threshold 0.3 \
@@ -178,7 +179,6 @@ uv run python scripts/evaluate_adl_correspondence.py \
   --baseline-cache-dir output/5_adl_correspondence_baselines_fixed \
   --use-baseline-cache \
   --fragmentation-containment-threshold 0.7 \
-  --low-information-threshold 0.5 \
   --other-state-labels その他 Other Other_ADL unknown \
   --exclude-other-adl-from-any \
   --min-overlap-seconds 1
@@ -197,7 +197,7 @@ uv run python scripts/evaluate_adl_correspondence.py \
   --patterns-rule-medium output/5_rule_filter/frequency_rule_medium.csv \
   --patterns-rule-strong output/5_rule_filter/frequency_rule_strong.csv \
   --patterns-proposed output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json \
-  --output-dir results/5_pattern_quality_low_information_gt_0_5 \
+  --output-dir results/5_pattern_quality_without_low_information_judgment \
   --runs 5 \
   --train-ratio 0.7 \
   --enable-fp-growth-baseline \
@@ -232,7 +232,7 @@ uv run python scripts/evaluate_adl_correspondence.py \
   --patterns-rule-medium output/5_rule_filter/frequency_rule_medium.csv \
   --patterns-rule-strong output/5_rule_filter/frequency_rule_strong.csv \
   --patterns-proposed output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json \
-  --output-dir results/5_pattern_quality_low_information_gt_0_5 \
+  --output-dir results/5_pattern_quality_without_low_information_judgment \
   --train-ratio 0.7 \
   --grounded-hit-threshold 0.3 \
   --grounded-purity-threshold 0.3 \
@@ -261,13 +261,13 @@ uv run python scripts/evaluate_adl_correspondence.py \
 ## 処理手順の内部仕様
 
 1. ラベル付きCASASをADL区間に変換し、評価5用のmulti-label ADLへ展開する。
-2. 代表状態系列CSVを読み込み、代表状態定義またはネットワークのノード属性から、active sensorsが空の状態IDを解決する。系列中の状態IDを解決できない場合はエラーで停止する。
+2. 代表状態系列CSVを読み込み、代表状態定義またはネットワークのノード属性から、active sensorsが空の状態IDを解決して診断用 `low_information_ratio` を算出する。系列中の状態IDを解決できない場合はエラーで停止する。
 3. ADL区間と代表状態系列を時系列順にtrain/testへ分割する。
 4. 各手法のパターンを `method, pattern_id, pattern_name, sequence, count` に正規化する。
 5. `--enable-fp-growth-baseline` 指定時は、train期間の状態系列から `fp_growth`, `fp_growth_filtered` を生成する。
 6. train期間で各パターンを検索し、ADLカテゴリ別の重なり時間から `assigned_adl_set_train` を決める。`time_band` を持つレコードは、出現の半開区間全体が同じ時間帯に収まる場合だけ使う。
 7. test期間で同じ時間帯条件によりパターンを検索し、trainで決めた `assigned_adl_set_train` を固定してADL-groundedを判定する。
-8. Contextless useless、fragmentation、useful non-redundantを判定し、率、分子・分母、比較可能pair数、系列長分布を集計する。
+8. 構造条件とADL支持だけからContextless uselessを判定し、ADL-grounded・非structural・非fragmentedからuseful non-redundantを判定する。率、分子・分母、比較可能pair数、系列長分布を集計する。
 9. `--runs` が2以上の場合はrun別summaryを保存する。Fragmentation rateは比較可能対0件のrunを0として含め、全runから平均・標準偏差を計算する。
 
 ### assigned_adl_set_train
@@ -351,7 +351,7 @@ train期間だけを使い、各パターンにADLカテゴリ集合を割り当
 | `--baseline-cache-dir` | `output/5_adl_correspondence_baselines_fixed` |
 | `--use-baseline-cache` / `--no-use-baseline-cache` | enabled |
 | `--fragmentation-containment-threshold` | `0.7` |
-| `--low-information-threshold` | `0.5` |
+| `--low-information-threshold` | 非推奨。互換性のため受理するが無視する。 |
 | `--runs` | `1` |
 | `--patterns-proposed-template` | 任意 |
 | `--skip-missing-runs` | disabled |
@@ -362,7 +362,8 @@ train期間だけを使い、各パターンにADLカテゴリ集合を割り当
 
 - test期間でpattern -> ADLを再割り当てしない。
 - `time_band` を持つパターンは、半開区間 `[start,end)` 全体が同じ時間帯に収まる場合だけ照合する。
-- 状態IDのlow-information属性を解決できない場合は、通常状態と仮定せずエラーで停止する。
+- 状態IDのactive sensors属性を解決できない場合は、診断用比率を推測せずエラーで停止する。
+- `low_information_ratio` はUsefulおよびContextlessへ影響しない。高い比率を持つパターンがUsefulになり得るため、Usefulは「情報量が高い割合」ではない。
 - 比較可能な短系列―長系列対が0件の場合も、Fragmentation rateは `0 / 評価可能パターン数 = 0` とする。ただし、比較機会がないため断片化抑制の証拠とはしない。
 - `test_support=0` のパターンは、既定では主指標の分母から除外する。
 - `Other_ADL` は既定で `any_adl_hit_rate` と `any_adl_purity` の意味あるADLから除外する。
