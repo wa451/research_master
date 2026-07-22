@@ -7,11 +7,11 @@ description: Change repository-wide reproducibility, artifact placement, logging
 
 ## Workflow
 
-1. Read `docs/artifact_policy.md`, `docs/experiment_reproduction.md`, and the relevant producer documentation.
+1. Read `docs/artifact_policy.md`, `docs/experiment_reproduction.md`, `docs/known_issues.md`, and the relevant producer documentation.
 2. Inspect the producer, every downstream reader found with `rg`, tests, and representative existing headers or summary keys. Determine whether each artifact is an input, intermediate output, or paper-facing result.
 3. Preserve paths, field names, types, row grain, and defaults. Prefer additive fields; make a breaking migration only when explicitly requested and document compatibility impact.
 4. Keep reproduction metadata consistent with existing summaries, including the inputs and parameters needed to explain the run. Do not invent a universal schema when producers use different contracts.
-5. Never overwrite existing experiment artifacts during verification. Use a temporary or new output directory and keep generated data out of Git.
+5. Never overwrite existing experiment artifacts during verification. Use a temporary or new output directory, do not add generated data to Git without explicit approval, and preserve any already tracked fixed artifacts.
 6. Update producer, consumers, documentation, and tests together.
 
 ## Verification

@@ -13,7 +13,7 @@
 
 - 入力: イベントDataFrame
 - 出力: 1秒粒度の状態ベクトルDataFrame、連続同一状態を圧縮した状態ベクトル
-- 対応ファイル: `src/behavior_pattern_mining/visualization/state_transition_visualizer.py`, `scripts/run_build_network_from_labeled_casas.py`
+- 対応ファイル: `src/behavior_pattern_mining/data/state_vectors.py`, `src/behavior_pattern_mining/visualization/state_transition_visualizer.py`, `scripts/run_build_network_from_labeled_casas.py`
 - 役割: Sample-and-Holdで各センサーのON/OFF状態を生成し、遅延OFF窓幅（既定5秒、`--smoothing-window-sec` で変更可能）でスムージングし、連続する同一状態を圧縮する。
 
 ## 3. Representative state extraction / mapping
@@ -21,13 +21,15 @@
 - 入力: 圧縮済み状態ベクトル
 - 出力: 代表状態リスト、`state/*.txt`、代表状態ラベル列
 - 対応ファイル: `src/behavior_pattern_mining/visualization/state_transition_visualizer.py`, `src/behavior_pattern_mining/states/state_mapping.py`, `src/behavior_pattern_mining/baselines/frequency.py`, `src/behavior_pattern_mining/llm/direct_log_extractor.py`
-- 役割: 出現頻度上位K個を代表状態にし、未知状態をハミング距離閾値以下なら最近傍代表状態へ、超過なら「その他」へ写像する。
+- 役割: 出現頻度上位K個を代表状態にし、通常パイプラインでは未知状態をハミング距離閾値以下なら最近傍代表状態へ、超過なら「その他」へ写像する。
+
+direct-log baselineの最終写像は現在、完全一致のみを採用しており、この共通説明と一致しない。比較条件として意図した差か未確定のため、[KI-04](known_issues.md) を参照する。
 
 ## 4. Transition network construction
 
 - 入力: 代表状態ラベル列
 - 出力: 遷移確率行列、`picture/*/state_transition_all.json`, `picture/*/state_transition_{mode}.json`
-- 対応ファイル: `src/behavior_pattern_mining/visualization/state_transition_visualizer.py`
+- 対応ファイル: `src/behavior_pattern_mining/network/transitions.py`, `src/behavior_pattern_mining/visualization/state_transition_visualizer.py`
 - 役割: 自己連続遷移を圧縮し、状態ごとの遷移回数を確率化する。必要に応じてMorning/Daytime/Night/Midnightに分割する。
 
 ## 5. LLM-based pattern extraction
@@ -40,9 +42,9 @@
 ## 6. Baseline methods
 
 - 入力: モード別状態遷移JSON、状態定義TSV、元ログ
-- 出力: `prob_threshold_sequences_*.json`, `state_sequence_counts_*.json`, association output CSV
+- 出力: `prob_threshold_sequences_*.json`, `state_sequence_counts_*.json`
 - 対応ファイル: `src/behavior_pattern_mining/baselines/transition_probability.py`, `src/behavior_pattern_mining/baselines/frequency.py`
-- 役割: 遷移確率0.2以上のパス列挙、状態列の頻度カウント、探索的なApriori/FP-Growth/n-gramを提供する。
+- 役割: 遷移確率0.2以上のパス列挙と、代表状態列の連続部分列（n-gram）の頻度カウントを提供する。FP-Growth系baselineは通常baselineではなく評価5の比較処理内で生成する。独立したApriori baselineは現在のリポジトリにない。
 
 ## 7. Evaluation
 
@@ -72,6 +74,13 @@
 - 対応ファイル: `scripts/evaluate_6_compare_adl_interpretation_set.py`, `src/behavior_pattern_mining/evaluation/adl_interpretation_set.py`, `src/behavior_pattern_mining/evaluation/llm_usage.py`
 - 役割: LLMが一体的に生成したパターン名・ADL集合・根拠のうち、ADL集合とCASAS重複集合を順序なしで比較し、解釈の意味的正当性を定量的に代理評価する。提案手法は `sequence × time_band` 単位へ展開する。状態遷移ネットワーク入力と、同じ14日分の前処理済み代表状態系列を直接LLMへ入力する構成を比較し、記録が揃うrunではトークン数も比較する。
 
+## 7.4 評価7: K / hamming parameter sensitivity
+
+- 入力: 条件ごとの提案手法JSON、状態系列、ラベル付きCASASデータ
+- 出力: `results/7_param_search/` と `results/7_param_search/top10_5runs/` の条件別・run別CSV/JSON
+- 対応ファイル: `scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py`, `scripts/run_evaluation7_top_condition_repeats.py`, `src/behavior_pattern_mining/evaluation/evaluation7_staged.py`
+- 役割: Kとハミング距離の全条件をrun 1で評価し、上位条件だけを合計5 runまで追加実行して平均・標準偏差を集計する。
+
 ## 7.5 評価8: Frequency-stratified ADL consistency
 
 - 入力: 14日手法比較では評価6の `evaluation6_pattern_set_details_by_method.csv` とstate series、154日提案手法単独では提案手法JSON・抽出時と同じ前処理で生成したstate series・ADL正解データ。
@@ -82,6 +91,6 @@
 ## 8. Visualization
 
 - 入力: 遷移確率行列、状態滞在時間、代表状態列
-- 出力: `picture/*/state_transition_*.png`, `.eps`, `timeline_*.png`, `.eps`
+- 出力: `picture/*/state_transition_*.png`, `state_transition_*.eps`, `timeline_*.png`
 - 対応ファイル: `src/behavior_pattern_mining/visualization/state_transition_visualizer.py`
 - 役割: NetworkXで状態遷移グラフを描画し、代表状態タイムラインをヒートマップとして保存する。

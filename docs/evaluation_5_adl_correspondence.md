@@ -64,12 +64,14 @@ occurrence_containment(p, q)
 | transition_probabilityパターン | train期間の代表状態系列から実行時生成 | 代表状態遷移確率が高い経路を抽出するベースライン。 |
 | proposedパターン | `output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json` | 提案手法のLLM系列。`--runs 5` では `_1.json` から `_5.json` までを評価して平均を出す。 |
 
+上表とStep 1--4は、`K=15`, `hamming=0`, `154days` を各入力パスで明示する正式再現条件である。一方、評価CLIで省略可能なパターン入力を省略すると、`configs/default.yaml` 由来の `K=15`, `hamming=1`, `154days` のパスを使い、`--output-dir` の既定値は `results/5_pattern_quality_fixed/` となる。正式出力先 `results/5_pattern_quality_without_low_information_judgment/` は自動では選ばれない。`hamming=0` とCLI既定由来の `hamming=1` の不一致は [KI-01](known_issues.md#ki-01) で追跡しているため、正式再現では本書の入力パスと出力先を省略しない。
+
 ### 出力
 
 | 出力 | 内容 |
 |---|---|
 | `results/5_pattern_quality_without_low_information_judgment/evaluation5_summary_by_method.csv` | 手法ごとの主指標、対象数、比較可能pair数、系列長分布。`--runs 2` 以上ではrun平均と標準偏差。 |
-| `results/5_pattern_quality_without_low_information_judgment/evaluation5_summary_by_method_by_run.csv` | runごとの手法別主指標、対象数、比較可能pair数、系列長分布。`--runs 2` 以上、または `--skip-missing-runs` 指定時に出力。 |
+| `results/5_pattern_quality_without_low_information_judgment/evaluation5_summary_by_method_by_run.csv` | runごとの手法別主指標、対象数、比較可能pair数、系列長分布。`--runs 2` 以上、または欠損runが `--skip-missing-runs` により実際にskipされた場合に出力。`--runs 1 --skip-missing-runs` だけでは、欠損がなければ出力しない。 |
 | `results/5_pattern_quality_without_low_information_judgment/evaluation5_pattern_details.csv` | 手法別・run別・パターン別の詳細結果。 |
 | `results/5_pattern_quality_without_low_information_judgment/evaluation5_summary.json` | 入力パス、状態属性、train/test期間、閾値、run情報、skipped methods、手法別集計。state-seriesの生成条件は本節のStep 3と実行コマンドで管理する。直前の修正前結果は `results/5_pattern_quality_low_information_gt_0_5/` に保持する。 |
 
@@ -220,7 +222,7 @@ uv run python scripts/evaluate_adl_correspondence.py \
 
 ### 5. 🟩 **スキップ可** FP-Growth系baselineなしで評価5を実行する
 
-`fp_growth`, `fp_growth_filtered` を比較しない場合は、通常実行から `--enable-fp-growth-baseline` と `--fp-*` 引数を外して実行する。
+`fp_growth`, `fp_growth_filtered` を比較しない場合は、通常実行から `--enable-fp-growth-baseline` と各FP-Growth関連引数を外して実行する。
 
 ```bash
 uv run python scripts/evaluate_adl_correspondence.py \
@@ -337,6 +339,7 @@ train期間だけを使い、各パターンにADLカテゴリ集合を割り当
 | `--useless-purity-threshold` | `0.1` |
 | `--assigned-adl-purity-threshold` | `0.10` |
 | `--assigned-adl-max-categories` | `3` |
+| `--enable-fp-growth-baseline` | disabled。正式コマンドでは明示して有効化する。 |
 | `--fp-min-support` | `0.05` |
 | `--fp-top-k` | `50` |
 | `--fp-min-len` | `2` |

@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 from src.behavior_pattern_mining.states.state_mapping import (
+    DEFAULT_ACTIVE_VALUES,
+    DEFAULT_INACTIVE_VALUES,
     load_event_log,
     load_state_mapping,
     map_vector_to_state,
@@ -391,37 +393,52 @@ def load_state_series_csv(path: Path) -> list[StateInterval]:
     return intervals
 
 
-def build_state_series_from_event_log(
-    event_log_path: Path,
-    state_table_path: Path,
+_OrderedSensorEvent = tuple[datetime, str, str]
+
+
+def _build_state_intervals_from_ordered_sensor_events(
+    events: Iterable[_OrderedSensorEvent],
+    sensor_columns: Sequence[str],
+    state_mapping: dict[tuple[int, ...], str],
     hamming_threshold: int,
 ) -> list[StateInterval]:
-    """Map an existing event log and state table to timestamped state intervals."""
-    events = load_event_log(event_log_path)
-    sensor_cols, state_mapping = load_state_mapping(state_table_path)
-    current_sensor_state = {sensor: 0 for sensor in sensor_cols}
+    """入力順のセンサーイベントを代表状態の連続区間へ変換する。
 
+    ``events`` は ``(timestamp, sensor, value)`` の順序付き系列であり、この
+    関数内では並べ替えない。未知のセンサーとON/OFFに解釈できない値は状態更新にも
+    最終時刻にも含めず、受理したイベントだけを代表状態へ写像する。
+
+    最終区間の終了は、event-driven前処理の既存仕様に合わせて最後に受理した
+    イベントの時刻とする。このため、最後のイベントで始まる長さ0の区間は出力しない。
+    """
+    current_sensor_state = {sensor: 0 for sensor in sensor_columns}
     intervals: list[StateInterval] = []
     current_label: str | None = None
     current_start: datetime | None = None
     last_timestamp: datetime | None = None
 
-    for _, row in events.iterrows():
-        timestamp = row["timestamp"].to_pydatetime()
-        sensor = str(row["sensor"]).strip()
-        value = str(row["value"]).strip().upper()
+    # 評価結果の再現性を保つため、同一時刻を含め呼び出し側から渡された順序を維持する。
+    for timestamp, raw_sensor, raw_value in events:
+        sensor = raw_sensor.strip()
+        value = raw_value.strip().upper()
         if sensor not in current_sensor_state:
             continue
 
-        if value in {"ON", "OPEN", "PRESENT", "1", "TRUE"}:
+        if value in DEFAULT_ACTIVE_VALUES:
             current_sensor_state[sensor] = 1
-        elif value in {"OFF", "CLOSE", "ABSENT", "0", "FALSE"}:
+        elif value in DEFAULT_INACTIVE_VALUES:
             current_sensor_state[sensor] = 0
         else:
             continue
 
-        vector = tuple(current_sensor_state[sensor_name] for sensor_name in sensor_cols)
-        state_id = map_vector_to_state(vector, state_mapping, hamming_threshold=hamming_threshold)
+        vector = tuple(
+            current_sensor_state[sensor_name] for sensor_name in sensor_columns
+        )
+        state_id = map_vector_to_state(
+            vector,
+            state_mapping,
+            hamming_threshold=hamming_threshold,
+        )
 
         if current_label is None:
             current_label = state_id
@@ -440,7 +457,11 @@ def build_state_series_from_event_log(
 
         last_timestamp = timestamp
 
-    if current_label is not None and current_start is not None and last_timestamp is not None:
+    if (
+        current_label is not None
+        and current_start is not None
+        and last_timestamp is not None
+    ):
         if last_timestamp > current_start:
             intervals.append(
                 StateInterval(
@@ -451,6 +472,30 @@ def build_state_series_from_event_log(
             )
 
     return intervals
+
+
+def build_state_series_from_event_log(
+    event_log_path: Path,
+    state_table_path: Path,
+    hamming_threshold: int,
+) -> list[StateInterval]:
+    """イベントログを代表状態の時刻区間へ変換する。"""
+    events = load_event_log(event_log_path)
+    sensor_cols, state_mapping = load_state_mapping(state_table_path)
+    ordered_events = (
+        (
+            row["timestamp"].to_pydatetime(),
+            str(row["sensor"]),
+            str(row["value"]),
+        )
+        for _, row in events.iterrows()
+    )
+    return _build_state_intervals_from_ordered_sensor_events(
+        ordered_events,
+        sensor_columns=sensor_cols,
+        state_mapping=state_mapping,
+        hamming_threshold=hamming_threshold,
+    )
 
 
 def load_sensor_id_map(path: Path | None) -> dict[str, str]:
@@ -469,31 +514,23 @@ def _ceil_to_second(timestamp: datetime) -> datetime:
     return rounded
 
 
-def build_network_equivalent_state_series_from_labeled_casas(
+_MappedBinaryEvent = tuple[datetime, int, str, int]
+_SensorOnIntervals = dict[str, list[tuple[datetime, datetime]]]
+
+
+def _load_mapped_binary_events(
     labeled_casas_path: Path,
-    state_table_path: Path,
-    hamming_threshold: int,
-    smoothing_window_sec: int = 5,
-    sensor_map_path: Path | None = None,
-    duration_days: int | None = None,
-) -> list[StateInterval]:
-    """Build the compressed state series used by the transition-network pipeline.
+    sensor_id_map: dict[str, str],
+    sensor_columns: Sequence[str],
+) -> list[_MappedBinaryEvent]:
+    """CASASログから代表状態表に対応する二値イベントを読み込む。
 
-    This is a change-point implementation of the network builder's 1-second
-    Sample-and-Hold plus ``rolling(window).max()`` delayed-OFF preprocessing.
-    It avoids materializing one row per second, which is prohibitively large
-    for the full 220-day Evaluation 5 period. Representative states are loaded
-    from ``state_table_path`` and are never re-extracted from evaluation data.
+    ON/OFFとして解釈できない値は除外し、代表状態表に存在しないセンサーは
+    まとめて既存の例外にする。イベントは時刻、同時刻では元の行番号の順に並べ、
+    同秒内の更新順を再現できる形で返す。
     """
-    if smoothing_window_sec < 0:
-        raise ValueError("smoothing_window_sec must be non-negative")
-    if duration_days is not None and duration_days < 1:
-        raise ValueError("duration_days must be >= 1")
-
-    sensor_id_map = load_sensor_id_map(sensor_map_path)
-    sensor_columns, state_mapping = load_state_mapping(state_table_path)
     sensor_set = set(sensor_columns)
-    events: list[tuple[datetime, int, str, int]] = []
+    events: list[_MappedBinaryEvent] = []
     unexpected_sensors: set[str] = set()
 
     with labeled_casas_path.open("r", encoding="utf-8") as handle:
@@ -502,9 +539,9 @@ def build_network_equivalent_state_series_from_labeled_casas(
             if len(parts) < 4:
                 continue
             value = parts[3].strip().upper()
-            if value in {"ON", "OPEN", "PRESENT", "1", "TRUE"}:
+            if value in DEFAULT_ACTIVE_VALUES:
                 binary_value = 1
-            elif value in {"OFF", "CLOSE", "ABSENT", "0", "FALSE"}:
+            elif value in DEFAULT_INACTIVE_VALUES:
                 binary_value = 0
             else:
                 continue
@@ -534,6 +571,18 @@ def build_network_equivalent_state_series_from_labeled_casas(
         )
 
     events.sort(key=lambda item: (item[0], item[1]))
+    return events
+
+
+def _build_one_second_sensor_updates(
+    events: Sequence[_MappedBinaryEvent],
+    duration_days: int | None,
+) -> tuple[datetime, datetime, dict[datetime, dict[str, int]]]:
+    """分析期間と1秒境界のセンサー更新を構築する。
+
+    期間は最初のイベント日の00:00を始端とする半開区間である。イベント時刻は
+    1秒境界へ切り上げ、同じ秒・同じセンサーの更新は入力順で最後の値を採用する。
+    """
     first_timestamp = events[0][0]
     last_timestamp = events[-1][0]
     period_start = datetime.combine(first_timestamp.date(), datetime.min.time())
@@ -549,15 +598,31 @@ def build_network_equivalent_state_series_from_labeled_casas(
     for timestamp, _, sensor, binary_value in events:
         sample_time = _ceil_to_second(timestamp)
         if period_start <= sample_time < period_end:
-            # The network implementation processes every event up to the
-            # current sample; the last event for a sensor in one second wins.
+            # 半開区間を維持し、同秒の同一センサーは後のイベントで上書きする。
             updates_by_time[sample_time][sensor] = binary_value
 
-    smoothed_intervals_by_sensor: dict[str, list[tuple[datetime, datetime]]] = {
+    return period_start, period_end, updates_by_time
+
+
+def _build_delayed_off_intervals_by_sensor(
+    sensor_columns: Sequence[str],
+    updates_by_time: dict[datetime, dict[str, int]],
+    period_start: datetime,
+    period_end: datetime,
+    smoothing_window_sec: int,
+) -> _SensorOnIntervals:
+    """センサー別に遅延OFF適用後のON半開区間を生成する。
+
+    1秒サンプリングのtrailing rolling maxと一致させるため、OFF端を
+    ``window - 1`` 秒だけ延長する。重なる区間と端点で接する区間は、従来どおり
+    1区間へ統合する。
+    """
+    smoothed_intervals_by_sensor: _SensorOnIntervals = {
         sensor: [] for sensor in sensor_columns
     }
     sorted_update_times = sorted(updates_by_time)
     delayed_off_extension = timedelta(seconds=max(smoothing_window_sec - 1, 0))
+
     for sensor in sensor_columns:
         raw_state = 0
         on_start: datetime | None = None
@@ -593,6 +658,22 @@ def build_network_equivalent_state_series_from_labeled_casas(
                 merged.append((start_time, end_time))
         smoothed_intervals_by_sensor[sensor] = merged
 
+    return smoothed_intervals_by_sensor
+
+
+def _build_state_intervals_from_sensor_boundaries(
+    smoothed_intervals_by_sensor: _SensorOnIntervals,
+    sensor_columns: Sequence[str],
+    state_mapping: dict[tuple[int, ...], str],
+    hamming_threshold: int,
+    period_start: datetime,
+    period_end: datetime,
+) -> list[StateInterval]:
+    """ON区間の境界から圧縮済み代表状態区間を構築する。
+
+    代表状態は呼び出し側から渡された固定表だけで写像する。同じ代表状態が境界を
+    またいで連続する場合は、端点が一致する区間だけを連結して既存出力を保つ。
+    """
     boundary_updates: dict[datetime, dict[str, int]] = defaultdict(dict)
     for sensor, intervals in smoothed_intervals_by_sensor.items():
         for start_time, end_time in intervals:
@@ -614,7 +695,11 @@ def build_network_equivalent_state_series_from_labeled_casas(
     def append_interval(start_time: datetime, end_time: datetime, state_id: str) -> None:
         if end_time <= start_time:
             return
-        if output and output[-1].state_id == state_id and output[-1].end_time == start_time:
+        if (
+            output
+            and output[-1].state_id == state_id
+            and output[-1].end_time == start_time
+        ):
             previous = output[-1]
             output[-1] = StateInterval(
                 start_time=previous.start_time,
@@ -642,71 +727,82 @@ def build_network_equivalent_state_series_from_labeled_casas(
     return output
 
 
+def build_network_equivalent_state_series_from_labeled_casas(
+    labeled_casas_path: Path,
+    state_table_path: Path,
+    hamming_threshold: int,
+    smoothing_window_sec: int = 5,
+    sensor_map_path: Path | None = None,
+    duration_days: int | None = None,
+) -> list[StateInterval]:
+    """状態遷移ネットワークと等価な圧縮代表状態系列を構築する。
+
+    1秒Sample-and-Holdと ``rolling(window).max()`` の遅延OFFを変化点だけで
+    再現し、評価5の長期間データで1秒行列を展開しない。代表状態は
+    ``state_table_path`` の固定表を使い、評価データから再抽出しない。
+    """
+    if smoothing_window_sec < 0:
+        raise ValueError("smoothing_window_sec must be non-negative")
+    if duration_days is not None and duration_days < 1:
+        raise ValueError("duration_days must be >= 1")
+
+    sensor_id_map = load_sensor_id_map(sensor_map_path)
+    sensor_columns, state_mapping = load_state_mapping(state_table_path)
+    events = _load_mapped_binary_events(
+        labeled_casas_path,
+        sensor_id_map,
+        sensor_columns,
+    )
+    period_start, period_end, updates_by_time = _build_one_second_sensor_updates(
+        events,
+        duration_days,
+    )
+    smoothed_intervals_by_sensor = _build_delayed_off_intervals_by_sensor(
+        sensor_columns,
+        updates_by_time,
+        period_start,
+        period_end,
+        smoothing_window_sec,
+    )
+    return _build_state_intervals_from_sensor_boundaries(
+        smoothed_intervals_by_sensor,
+        sensor_columns,
+        state_mapping,
+        hamming_threshold,
+        period_start,
+        period_end,
+    )
+
+
 def build_state_series_from_labeled_casas(
     labeled_casas_path: Path,
     state_table_path: Path,
     hamming_threshold: int,
     sensor_map_path: Path | None = None,
 ) -> list[StateInterval]:
-    """Build representative-state intervals directly from a labeled CASAS text file."""
+    """ラベル付きCASASテキストから代表状態の時刻区間を構築する。"""
     sensor_id_map = load_sensor_id_map(sensor_map_path)
     sensor_cols, state_mapping = load_state_mapping(state_table_path)
-    current_sensor_state = {sensor: 0 for sensor in sensor_cols}
+    sensor_set = set(sensor_cols)
 
-    intervals: list[StateInterval] = []
-    current_label: str | None = None
-    current_start: datetime | None = None
-    last_timestamp: datetime | None = None
+    def ordered_events() -> Iterable[_OrderedSensorEvent]:
+        for raw_line in labeled_casas_path.read_text(encoding="utf-8").splitlines():
+            parts = raw_line.strip().split()
+            if len(parts) < 4:
+                continue
 
-    for raw_line in labeled_casas_path.read_text(encoding="utf-8").splitlines():
-        parts = raw_line.strip().split()
-        if len(parts) < 4:
-            continue
+            sensor = sensor_id_map.get(parts[2].strip(), parts[2].strip())
+            if sensor not in sensor_set:
+                # 未知センサーは従来どおり、時刻や値を解釈する前に除外する。
+                continue
+            yield parse_timestamp(parts[0], parts[1]), sensor, parts[3]
 
-        sensor = sensor_id_map.get(parts[2].strip(), parts[2].strip())
-        value = parts[3].strip().upper()
-        if sensor not in current_sensor_state:
-            continue
-
-        timestamp = parse_timestamp(parts[0], parts[1])
-        if value in {"ON", "OPEN", "PRESENT", "1", "TRUE"}:
-            current_sensor_state[sensor] = 1
-        elif value in {"OFF", "CLOSE", "ABSENT", "0", "FALSE"}:
-            current_sensor_state[sensor] = 0
-        else:
-            continue
-
-        vector = tuple(current_sensor_state[sensor_name] for sensor_name in sensor_cols)
-        state_id = map_vector_to_state(vector, state_mapping, hamming_threshold=hamming_threshold)
-
-        if current_label is None:
-            current_label = state_id
-            current_start = timestamp
-        elif state_id != current_label:
-            if current_start is not None and timestamp > current_start:
-                intervals.append(
-                    StateInterval(
-                        start_time=current_start,
-                        end_time=timestamp,
-                        state_id=current_label,
-                    )
-                )
-            current_label = state_id
-            current_start = timestamp
-
-        last_timestamp = timestamp
-
-    if current_label is not None and current_start is not None and last_timestamp is not None:
-        if last_timestamp > current_start:
-            intervals.append(
-                StateInterval(
-                    start_time=current_start,
-                    end_time=last_timestamp,
-                    state_id=current_label,
-                )
-            )
-
-    return intervals
+    return _build_state_intervals_from_ordered_sensor_events(
+        ordered_events(),
+        sensor_columns=sensor_cols,
+        state_mapping=state_mapping,
+        hamming_threshold=hamming_threshold,
+    )
 
 
 def write_state_series_csv(intervals: Sequence[StateInterval], path: Path) -> None:

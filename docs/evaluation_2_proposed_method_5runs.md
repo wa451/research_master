@@ -19,8 +19,8 @@
 | Precision | LLMが出した系列のうち、ベースライン系列と一致した割合。 |
 | Recall | ベースライン系列のうち、LLMが抽出できた割合。 |
 | F1 | PrecisionとRecallの調和平均。 |
-| run間のばらつき | 5回の出力パターン数、Precision / Recall / F1の差を見る。 |
-| 出力パターン数 | 各runでLLMが抽出した系列数を見る。 |
+| run間のばらつき | Excelのrun別Precision / Recall / F1を比較する。現在のExcelは標準偏差を自動出力しない（[KI-03](known_issues.md)）。 |
+| 出力パターン数 | 各runのLLM JSONのレコード数を見る。現在のExcelにはこの件数を収録しない（[KI-03](known_issues.md)）。 |
 
 現在の比較では、状態系列の完全一致をTPとして扱う。
 
@@ -46,16 +46,18 @@
 | `output/aruba_15_1_154days/llm_mode_records_run{run}/state_transition_{mode}_raw.txt` | LLMの生応答。 |
 | `output/aruba_15_1_154days/llm_mode_records_run{run}/state_transition_{mode}_metrics.json` | backend、token使用量、処理時間など。 |
 | `output/aruba_15_1_154days/failed_responses/*.txt` | パースできなかったLLM応答。 |
+| `output/aruba_15_1_154days/llm_modes_metrics_15_1_154days_run{run}.csv` | run・時間帯ごとのbackend、処理時間、token使用量。 |
+| `output/aruba_15_1_154days/llm_modes_metrics_avg_15_1_154days.csv` | 時間帯ごとの処理時間・token使用量の平均。 |
 | `output/aruba_15_1_154days/evaluation_report_15_1_154days_{run}.txt` | 各runの評価レポート。 |
-| `output/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx` | 5回分の評価指標集計。 |
+| `output/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx` | run別Precision / Recall / F1と平均行。標準偏差・出力パターン数は含まない。 |
 
 ## 結果の読み方
 
 | 順序 | ファイル | 読み方 |
 |---|---|---|
-| 1 | `output/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx` | summaryとして、5回平均、標準偏差、run間のばらつきを見る。 |
+| 1 | `output/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx` | summaryとして、run別と5回平均のPrecision / Recall / F1を見る。標準偏差が必要な場合はrun別行から別途算出する（[KI-03](known_issues.md)）。 |
 | 2 | `llm_sequences_modes_15_1_154days_{run}.json`, `evaluation_report_15_1_154days_{run}.txt` | detailsとして、各runの抽出系列、パターン数、Precision / Recall / F1を確認する。 |
-| 3 | `configs/default.yaml`, `docs/paper_parameters.md`, `llm_mode_records_run{run}/*_metrics.json` | 再現条件として、モデル名、temperature、run数、token使用量を確認する。 |
+| 3 | `configs/default.yaml`, `docs/paper_parameters.md`, `llm_mode_records_run{run}/*_metrics.json`, `llm_modes_metrics_*_run{run}.csv` | 再現条件として、モデル名、temperature、run数、token使用量を確認する。 |
 
 ## 実行手順
 
@@ -77,7 +79,7 @@ uv run python scripts/run_baselines.py
 
 ### 3. 🟥 **必須** 提案手法のLLM抽出と評価を5回実行する
 
-評価2の主結果を作るために実行する。`llm_mode_records_run{run}/*.json` が存在する時間帯モードは、スクリプト側でスキップされる。
+評価2の主結果を作るために実行する。抽出モジュールは成功済みの時間帯checkpointをスキップする。ただし、現在のbatchがrunごとに独立したcheckpointを参照するかは未解決であり、生成された5ファイルを独立試行と断定しない（[KI-02](known_issues.md)）。
 
 ```bash
 uv run python scripts/run_llm_eval_batch.py
@@ -104,7 +106,7 @@ uv run python scripts/run_all.py
 1. `scripts/run_build_network.py` が状態遷移ネットワークJSONを生成する。
 2. `scripts/run_baselines.py` が遷移確率・頻度ベースラインを生成する。
 3. `scripts/run_llm_eval_batch.py` が `src/behavior_pattern_mining/llm/pattern_extractor.py` を複数回呼び出す。
-4. LLM抽出は時間帯モードごとに保存され、成功済みモードは再実行時にスキップされる。
+4. LLM抽出は時間帯モードごとに保存され、成功済みモードは再実行時にスキップされる。run別checkpointの独立性は [KI-02](known_issues.md) を参照する。
 5. `src/behavior_pattern_mining/evaluation/compare_patterns.py` がLLM系列とベースライン系列を比較する。
 6. 5回分の評価結果をExcelへ集計する。
 
@@ -129,3 +131,5 @@ uv run python scripts/run_all.py
 - LLM APIを使うため、ネットワーク接続と `.env` の `GEMINI_API_KEY` が必要。
 - 同じrun番号のJSONがある場合、スクリプト側でスキップされることがある。完全に作り直す場合は既存出力を退避してから実行する。
 - 評価2の出力は、評価3、評価4、評価5の入力にも使える。
+- 現在のExcelはrun別値と平均だけを保存し、標準偏差と出力パターン数は保存しない（[KI-03](known_issues.md)）。
+- 無引数実行の `h=1` と現論文採用条件 `h=0` の関係は未解決である（[KI-01](known_issues.md)）。

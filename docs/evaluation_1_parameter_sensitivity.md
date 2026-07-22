@@ -46,6 +46,8 @@
 | `output/aruba_{K}_{hamming}_{DAYS}days/prob_threshold_sequences_{K}_{hamming}_{DAYS}days.json` | 遷移確率ベースライン系列。 |
 | `output/aruba_{K}_{hamming}_{DAYS}days/state_sequence_counts_{K}_{hamming}_{DAYS}days.json` | 頻度ベースライン系列。 |
 | `output/aruba_{K}_{hamming}_{DAYS}days/llm_sequences_modes_{K}_{hamming}_{DAYS}days_*.json` | LLM抽出系列。 |
+| `output/aruba_{K}_{hamming}_{DAYS}days/llm_modes_metrics_{K}_{hamming}_{DAYS}days_run{run}.csv` | run・時間帯ごとのbackend、処理時間、token使用量。 |
+| `output/aruba_{K}_{hamming}_{DAYS}days/llm_modes_metrics_avg_{K}_{hamming}_{DAYS}days.csv` | 時間帯ごとの処理時間・token使用量の平均。 |
 | `output/aruba_{K}_{hamming}_{DAYS}days/evaluation_report_{K}_{hamming}_{DAYS}days_*.txt` | LLM出力とベースラインの比較レポート。 |
 | `output/aruba_{K}_{hamming}_{DAYS}days/llm_eval_runs_{K}_{hamming}_{DAYS}days.xlsx` | 複数run評価の集計。 |
 
@@ -53,7 +55,7 @@
 
 | 順序 | ファイル | 読み方 |
 |---|---|---|
-| 1 | `output/aruba_{K}_{hamming}_{DAYS}days/llm_eval_runs_{K}_{hamming}_{DAYS}days.xlsx` | LLMまで実行した場合のsummaryとして、平均Precision / Recall / F1とばらつきを見る。 |
+| 1 | `output/aruba_{K}_{hamming}_{DAYS}days/llm_eval_runs_{K}_{hamming}_{DAYS}days.xlsx` | LLMまで実行した場合のsummaryとして、run別と平均のPrecision / Recall / F1を見る。標準偏差と出力パターン数は現在のExcelには含まれない（[KI-03](known_issues.md)）。 |
 | 2 | `state/aruba_{K}_{hamming}_{DAYS}days.txt`, `picture/.../state_transition_*.json`, `output/.../state_sequence_counts_*.json` | detailsとして、状態の意味、遷移の複雑さ、頻出系列の内容を見る。 |
 | 3 | `configs/default.yaml`, `docs/paper_parameters.md` | 再現条件として、`K`, ハミング距離、日数、閾値を確認する。 |
 
@@ -83,7 +85,7 @@ uv run python scripts/run_baselines.py
 
 ### 4. 🟨 **条件付き** LLM抽出と評価を実行する
 
-LLM出力やF1まで比較する場合だけ実行する。既に同条件のLLM出力と評価CSVがある場合は再実行しなくてよい。
+LLM出力やF1まで比較する場合だけ実行する。既に同条件のLLM出力、評価レポート、評価Excelがある場合は再実行しなくてよい。`llm_modes_metrics_*.csv` は評価指標ではなく、LLMの処理時間・token使用量を記録する。
 
 ```bash
 uv run python scripts/run_llm_eval_batch.py
@@ -132,7 +134,10 @@ uv run python scripts/run_all.py
 
 ## 注意点
 
-- 条件を変えるたびに同じ出力先へ再生成される可能性がある。既存結果を残したい場合は出力を退避してから実行する。
+- 同じ `K`, `hamming_threshold`, `DAYS` 条件を再実行すると、同じ出力先の成果物を再利用または上書きする可能性がある。既存結果を残したい場合は出力を退避してから実行する。異なる条件は通常、条件suffixを含む別ディレクトリへ保存される。
 - LLM出力は非決定性を含むため、構造的な違いを見る場合はまず `state/`, `picture/`, `output/*baseline*` を比較する。
 - LLMまで含めて比較する場合は、評価2と同じく複数runの平均で比較する。
 - `experiment_config.py` は互換レイヤーとして使われているため、削除しない。
+- 無引数実行の `h=1` と現論文採用条件 `h=0` の関係は未解決である（[KI-01](known_issues.md)）。
+- 複数runのcheckpoint独立性と集計項目は未解決である（[KI-02](known_issues.md), [KI-03](known_issues.md)）。
+- `configs/default.yaml` の一部のパス設定を参照せず固定パスを使う入口がある（[KI-14](known_issues.md)）。

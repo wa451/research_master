@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -9,6 +10,7 @@ from src.behavior_pattern_mining.evaluation.adl import (
     PatternRecord,
     PredictionInterval,
     StateInterval,
+    build_state_series_from_event_log,
     build_state_series_from_labeled_casas,
     compute_interval_hit_evaluation,
     filter_predictions_by_duration,
@@ -115,6 +117,70 @@ class ADLEvaluationTests(unittest.TestCase):
         self.assertGreaterEqual(len(intervals), 2)
         self.assertEqual(intervals[0].state_id, "状態2")
         self.assertEqual(intervals[0].start_time, ts("2020-01-01 00:00:00"))
+
+    def test_event_log_and_labeled_casas_build_same_complete_intervals(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            event_log_path = Path(tmpdir) / "events.csv"
+            labeled_casas_path = Path(tmpdir) / "labeled.txt"
+            event_log_path.write_text(
+                "2020-01-01,00:00:00.000000,Kitchen,ON\n"
+                "2020-01-01,00:00:01.000000,Bedroom,ON\n"
+                "2020-01-01,00:00:01.250000,IgnoredSensor,ON\n"
+                "2020-01-01,00:00:01.500000,Kitchen,MAYBE\n"
+                "2020-01-01,00:00:02.000000,Kitchen,OFF\n"
+                "2020-01-01,00:00:04.000000,Bedroom,OFF\n"
+                "2020-01-01,00:00:05.000000,Kitchen,ON\n"
+                "2020-01-01,00:00:06.000000,Kitchen,OFF\n",
+                encoding="utf-8",
+            )
+            labeled_casas_path.write_text(
+                "2020-01-01 00:00:00.000000 M001 ON\n"
+                "2020-01-01 00:00:01.000000 M002 ON\n"
+                "2020-01-01 00:00:01.250000 M999 ON\n"
+                "2020-01-01 00:00:01.500000 M001 MAYBE\n"
+                "2020-01-01 00:00:02.000000 M001 OFF\n"
+                "2020-01-01 00:00:04.000000 M002 OFF\n"
+                "2020-01-01 00:00:05.000000 M001 ON\n"
+                "2020-01-01 00:00:06.000000 M001 OFF\n",
+                encoding="utf-8",
+            )
+
+            event_log_intervals = build_state_series_from_event_log(
+                event_log_path=event_log_path,
+                state_table_path=FIXTURES_DIR / "sample_state_table.tsv",
+                hamming_threshold=1,
+            )
+            labeled_casas_intervals = build_state_series_from_labeled_casas(
+                labeled_casas_path=labeled_casas_path,
+                state_table_path=FIXTURES_DIR / "sample_state_table.tsv",
+                hamming_threshold=1,
+                sensor_map_path=FIXTURES_DIR / "sample_sensor_map.json",
+            )
+
+        expected = [
+            StateInterval(
+                ts("2020-01-01 00:00:00"),
+                ts("2020-01-01 00:00:02"),
+                "状態2",
+            ),
+            StateInterval(
+                ts("2020-01-01 00:00:02"),
+                ts("2020-01-01 00:00:04"),
+                "状態3",
+            ),
+            StateInterval(
+                ts("2020-01-01 00:00:04"),
+                ts("2020-01-01 00:00:05"),
+                "状態1",
+            ),
+            StateInterval(
+                ts("2020-01-01 00:00:05"),
+                ts("2020-01-01 00:00:06"),
+                "状態2",
+            ),
+        ]
+        self.assertEqual(event_log_intervals, expected)
+        self.assertEqual(labeled_casas_intervals, expected)
 
     def test_overlap_and_temporal_iou(self) -> None:
         overlap = interval_overlap_seconds(

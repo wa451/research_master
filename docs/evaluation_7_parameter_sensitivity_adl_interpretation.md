@@ -39,9 +39,19 @@
 
 条件ごとの入力パスが既定命名と異なる場合は、`--patterns-template` と `--state-series-template` を使う。
 
+| 実行区分 | 条件 | run | state series | 出力先 |
+|---|---|---:|---|---|
+| CLI既定 | `K=15`, `hamming=1`, `days=30` | `1` | `output/6_adl_evaluation_30/state_series.csv` | `results/7_param_search/` |
+| 正式一次スクリーニング | コマンドで指定したKとhammingの直積、`days=30` | `1` | 条件別パス | `results/7_param_search/` |
+| 正式上位条件評価 | `--conditions-file` の上位10条件、`days=30` | `1--5` | 条件別パス | `results/7_param_search/top10_5runs/` |
+
+`(K, hamming, days)=(15,1,30)` だけは、テンプレート未指定時に上表のlegacyパス `output/6_adl_evaluation_30/state_series.csv` を使う。それ以外は `output/6_adl_evaluation_{K}_{hamming}_{days}days/state_series.csv` を使う。正式な感度分析ではコマンドに探索条件を明示し、CLI既定の単一条件と区別する。評価5・6の正式条件 `hamming=0` との不一致は [KI-01](known_issues.md#ki-01)、state seriesの前処理差は [KI-06](known_issues.md#ki-06) で追跡している。
+
 ## 実行コマンド
 
 `--days 30` は状態遷移ネットワークの構築およびLLM入力に使う先頭30日を表す。各条件の `evaluate_adl_labels.py --write-state-series` は、その30日条件で作成した代表状態定義を固定して全220日を写像した照合系列を生成し、評価7のADL集合整合性は全220日で算出する。
+
+`evaluate_adl_labels.py` のstate-series前処理を明示しない現行フローは `event-driven` 既定を使う。抽出系と同じ1秒Sample-and-Hold・遅延OFFへ統一するかは [KI-06](known_issues.md#ki-06) の未解決事項である。
 
 小さい設定で既存出力だけを使って確認する例:
 

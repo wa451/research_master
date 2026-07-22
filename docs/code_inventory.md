@@ -1,159 +1,60 @@
 # Code Inventory
 
-この文書は、現在のパッケージ化後のリポジトリ構造と処理内容をまとめた台帳です。Pythonファイル単位の詳細は `docs/python_file_inventory.md` を参照してください。
+この文書は、処理の責務と主要な実装・実行入口の対応を示す。個々のPythonファイルの台帳は [python_file_inventory.md](python_file_inventory.md)、処理のデータフローは [pipeline.md](pipeline.md) を参照する。
 
-## 現在の実装配置
+## 責務の配置
 
-主要な実装本体は `src/behavior_pattern_mining/` にあります。実験の実行入口は `scripts/` に集約しています。
-
-| 責務 | 実装本体 | 実行入口 |
+| 責務 | 主な実装 | 実行入口 |
 |---|---|---|
-| 前処理・代表状態・遷移ネットワーク・可視化 | `src/behavior_pattern_mining/visualization/state_transition_visualizer.py` | `scripts/run_build_network.py` |
-| ラベル付きCASASからのネットワーク構築 | `src/behavior_pattern_mining/visualization/state_transition_visualizer.py` | `scripts/run_build_network_from_labeled_casas.py` |
-| 遷移確率ベースライン | `src/behavior_pattern_mining/baselines/transition_probability.py` | `scripts/run_baselines.py` |
-| 頻度ベースライン | `src/behavior_pattern_mining/baselines/frequency.py` | `scripts/run_baselines.py` |
-| 提案手法LLM抽出 | `src/behavior_pattern_mining/llm/pattern_extractor.py` | `scripts/run_llm_extraction.py` |
-| LLM複数回実行評価 | `src/behavior_pattern_mining/pipelines/llm_eval_batch.py` | `scripts/run_llm_eval_batch.py` |
-| LLM単独ベースライン（前処理済み代表状態系列の直接入力） | `src/behavior_pattern_mining/llm/direct_log_extractor.py`, `src/behavior_pattern_mining/evaluation/direct_log.py` | `scripts/run_direct_log_baseline.py` |
-| Precision/Recall/F1評価 | `src/behavior_pattern_mining/evaluation/compare_patterns.py`, `src/behavior_pattern_mining/evaluation/metrics.py` | `scripts/run_evaluation.py` |
+| Sample-and-Hold、遅延OFF、連続状態圧縮 | `src/behavior_pattern_mining/data/state_vectors.py` | `scripts/run_build_network.py` |
+| 代表状態抽出・写像 | `src/behavior_pattern_mining/states/state_mapping.py`, `src/behavior_pattern_mining/visualization/state_transition_visualizer.py` | `scripts/run_build_network.py`, `scripts/run_build_network_from_labeled_casas.py` |
+| 状態遷移回数・確率・滞在時間 | `src/behavior_pattern_mining/network/transitions.py` | 上記network構築入口 |
+| JSON・状態表・図の出力統括 | `src/behavior_pattern_mining/visualization/state_transition_visualizer.py` | 上記network構築入口 |
+| 遷移確率baseline | `src/behavior_pattern_mining/baselines/transition_probability.py` | `scripts/run_baselines.py` |
+| 頻度baseline | `src/behavior_pattern_mining/baselines/frequency.py` | `scripts/run_baselines.py` |
+| 提案手法のLLM抽出 | `src/behavior_pattern_mining/llm/pattern_extractor.py` | `scripts/run_llm_extraction.py` |
+| 複数run抽出・旧比較集計 | `src/behavior_pattern_mining/pipelines/llm_eval_batch.py` | `scripts/run_llm_eval_batch.py` |
+| direct-log LLM baseline | `src/behavior_pattern_mining/llm/direct_log_extractor.py`, `src/behavior_pattern_mining/evaluation/direct_log.py` | `scripts/run_direct_log_baseline.py` |
+| Precision/Recall/F1比較 | `src/behavior_pattern_mining/evaluation/metrics.py`, `src/behavior_pattern_mining/evaluation/compare_patterns.py` | `scripts/run_evaluation.py` |
 | Groundedness | `src/behavior_pattern_mining/evaluation/groundedness.py`, `src/behavior_pattern_mining/evaluation/groundedness_check.py` | `scripts/run_groundedness.py` |
 | 条件ベース評価 | `src/behavior_pattern_mining/evaluation/condition_metrics.py` | `scripts/evaluate_condition_metrics.py` |
-| ADL評価 | `src/behavior_pattern_mining/evaluation/adl.py` | `scripts/evaluate_adl_labels.py` |
-| 評価5: パターン単位ADL-grounded/Useless評価 | `src/behavior_pattern_mining/evaluation/adl_correspondence.py` | `scripts/evaluate_adl_correspondence.py` |
-| 評価6: ADL解釈ラベルset比較評価 | `src/behavior_pattern_mining/evaluation/adl_interpretation_set.py` | `scripts/evaluate_6_compare_adl_interpretation_set.py` |
-| 評価7: K・ハミング距離の二段階感度評価 | `src/behavior_pattern_mining/evaluation/evaluation7_staged.py` | `scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py`, `scripts/run_evaluation7_top_condition_repeats.py` |
-| 評価8: 頻度帯別ADL整合性評価 | `src/behavior_pattern_mining/evaluation/adl_interpretation_set.py` | `scripts/evaluate_8_frequency_stratified_adl_consistency.py` |
+| 評価4 | `src/behavior_pattern_mining/evaluation/adl.py` | `scripts/evaluate_adl_labels.py` |
+| 評価5 | `src/behavior_pattern_mining/evaluation/adl_correspondence.py` | `scripts/evaluate_adl_correspondence.py` |
+| 評価6 | `src/behavior_pattern_mining/evaluation/adl_interpretation_set.py`, `src/behavior_pattern_mining/evaluation/llm_usage.py` | `scripts/evaluate_6_compare_adl_interpretation_set.py` |
+| 評価7 | `src/behavior_pattern_mining/evaluation/evaluation7_staged.py` | `scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py`, `scripts/run_evaluation7_top_condition_repeats.py` |
+| 評価8 | `src/behavior_pattern_mining/evaluation/adl_interpretation_set.py` と評価8スクリプト内の後段集計 | `scripts/evaluate_8_frequency_stratified_adl_consistency.py` |
+| Streamlitラッパー | `app/streamlit_app.py`, `app/command_builder.py`, `app/utils.py` | `uv run streamlit run app/streamlit_app.py` |
 
-## フォルダの役割
+`scripts/` は実行入口だが、すべてが薄いラッパーではない。特に後段評価スクリプトには入出力・集計処理が残るため、修正時は `src/` だけでなく対象scriptも確認する。
+
+## ディレクトリの役割
 
 | パス | 役割 |
 |---|---|
-| `configs/` | 実験設定。現在は `configs/default.yaml` が中心。 |
-| `data/` | 入力データ置き場。Git管理外。 |
-| `new_labeled_data/` | ラベル付きCASASデータ置き場。 |
-| `docs/` | パイプライン、評価手順、再現手順、ファイル台帳などの文書。 |
-| `prompts/` | LLMプロンプト。 |
-| `scripts/` | 実験・評価のCLI入口。 |
-| `src/behavior_pattern_mining/` | 研究ロジックの実装本体。 |
-| `state/` | 代表状態テーブル出力。 |
-| `picture/` | 状態遷移ネットワークJSON、図、タイムライン出力。 |
-| `output/` | LLM出力、ベースライン出力、中間生成物。 |
-| `results/` | ADL評価などの後段評価出力。 |
-| `support/` | 補助調査スクリプト。 |
-| `tests/` | `unittest` ベースの回帰テスト。 |
+| `configs/` | 共通既定値、センサー対応、ADL最小時間設定 |
+| `data/`, `new_labeled_data/` | 生入力。Git管理・編集対象外 |
+| `prompts/` | 実行時に読むLLMプロンプト |
+| `scripts/` | 実験・評価の実行入口 |
+| `src/behavior_pattern_mining/` | 再利用する研究ロジック |
+| `app/` | 既存CLIを組み立てて実行するStreamlit UI |
+| `tests/` | 回帰テスト |
+| `state/` | 代表状態表 |
+| `picture/` | 状態遷移JSON、遷移図、timeline図 |
+| `output/` | LLM出力、baseline、中間成果物 |
+| `results/` | 後段評価結果 |
 
-## 推奨実行順序
+## 文書の正本
 
-```bash
-uv run python scripts/run_build_network.py
-uv run python scripts/run_baselines.py
-uv run python scripts/run_llm_eval_batch.py
-uv run python scripts/run_groundedness.py
-uv run python scripts/evaluate_condition_metrics.py
-```
+| 確認内容 | 文書 |
+|---|---|
+| センサログから評価までの流れ | [pipeline.md](pipeline.md) |
+| 評価全体の入口と順序 | [experiment_reproduction.md](experiment_reproduction.md) |
+| 論文採用パラメータ | [paper_parameters.md](paper_parameters.md) |
+| 評価固有のCLI・入出力・指標 | `evaluation_1_*.md` から `evaluation_8_*.md` |
+| 成果物の扱い | [artifact_policy.md](artifact_policy.md) |
+| 未確定の実装・文書差 | [known_issues.md](known_issues.md) |
+| 段階的な構造整理の記録 | [refactoring_plan.md](refactoring_plan.md) |
 
-まとめて実行する場合:
+## 共通設定の注意
 
-```bash
-uv run python scripts/run_all.py
-```
-
-ADL評価:
-
-```bash
-uv run python scripts/run_build_network_from_labeled_casas.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --sensor-map configs/aruba_sensor_map.json
-
-uv run python scripts/run_llm_extraction.py
-
-uv run python scripts/evaluate_adl_labels.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --state-table state/aruba_15_1_154days.txt \
-  --sensor-map configs/aruba_sensor_map.json \
-  --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/4_adl_detect
-```
-
-評価5: パターン単位ADL-grounded/Useless評価:
-
-```bash
-uv run python scripts/evaluate_adl_correspondence.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --state-series output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv \
-  --state-definition state/aruba_15_0_154days.txt \
-  --patterns-frequency output/aruba_15_0_154days/state_sequence_counts_15_0_154days.json \
-  --patterns-proposed output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json \
-  --output-dir results/5_pattern_quality_without_low_information_judgment \
-  --train-ratio 0.7 \
-  --grounded-hit-threshold 0.3 \
-  --grounded-purity-threshold 0.3 \
-  --useless-hit-threshold 0.1 \
-  --useless-purity-threshold 0.1 \
-  --assigned-adl-purity-threshold 0.10 \
-  --assigned-adl-max-categories 3 \
-  --enable-fp-growth-baseline \
-  --fp-min-support 0.05 \
-  --fp-top-k 50 \
-  --fp-min-len 2 \
-  --fp-max-len 4 \
-  --fp-max-median-duration-seconds 1800 \
-  --fp-max-p90-duration-seconds 3600 \
-  --other-state-labels その他 Other Other_ADL unknown \
-  --exclude-other-adl-from-any \
-  --min-overlap-seconds 1
-```
-
-評価6: LLM解釈ラベルとADL重なりラベルのset一致比較:
-
-```bash
-uv run python scripts/run_build_network_from_labeled_casas.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --sensor-map configs/aruba_sensor_map.json \
-  --days 14 \
-  --hamming-threshold 0
-
-uv run python scripts/run_llm_extraction.py --days 14 --hamming-threshold 0
-
-uv run python scripts/evaluate_adl_labels.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --state-table state/aruba_15_0_14days.txt \
-  --sensor-map configs/aruba_sensor_map.json \
-  --patterns output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
-  --output-dir output/6_adl_evaluation_15_0_14days \
-  --write-state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
-  --hamming-threshold 0
-
-uv run python scripts/run_direct_log_baseline.py \
-  --log-days 14 \
-  --hamming-threshold 0 \
-  --extract-only
-
-uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
-  --patterns-proposed output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
-  --patterns-direct output/llm_direct_15_0_14days/1.json \
-  --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/6_adl_match/15_0_14days \
-  --min-overlap-ratio-for-true-label 0.10
-```
-
-## 設定
-
-| 項目 | 現在値 | 定義箇所 |
-|---|---:|---|
-| データセット名 | `aruba` | `configs/default.yaml` |
-| 代表状態数 K | `15` | `configs/default.yaml` |
-| ハミング距離閾値 | `1` | `configs/default.yaml` |
-| 分析日数 | `154` | `configs/default.yaml` |
-| サンプリング間隔 | `1s` | `configs/default.yaml` |
-| 遅延OFF窓幅 | `5`秒 | `configs/default.yaml` |
-| 可視化の最小遷移確率 | `0.1` | `configs/default.yaml` |
-| ベースライン遷移確率閾値 | `0.2` | `configs/default.yaml` |
-| パターン長 | `2-4` | `configs/default.yaml` |
-| LLMモデル | `gemini-2.5-pro` | `configs/default.yaml` |
-| Temperature | `0.2` | `configs/default.yaml` |
-| ADL予測最小継続時間 | ADLカテゴリ別 | `configs/adl_min_duration.json` |
-| Arubaラベル付きCASASセンサーID対応 | `M001` などを部屋名へ変換 | `configs/aruba_sensor_map.json` |
-
-`experiment_config.py` は `configs/default.yaml` を読み込み、既存モジュール向けに定数を公開する互換レイヤーです。現時点では削除しないでください。
+`experiment_config.py` は `configs/default.yaml` を読み、既存モジュールへ定数を公開する互換レイヤーである。ただし、すべてのCLI引数や入出力パスを設定ファイルが支配するわけではない。共通既定の `K=15, h=1, 154日` と、論文採用条件の `K=15, h=0` を区別し、対象評価のCLIと [known_issues.md](known_issues.md) を確認する。

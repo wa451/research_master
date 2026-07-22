@@ -90,7 +90,7 @@ uv run streamlit run app/streamlit_app.py
 4. 評価5を実行  
    抽出時と同じ1秒粒度化・遅延OFF・代表状態写像・同一状態圧縮で評価用state seriesを作成し、`scripts/evaluate_adl_correspondence.py` を実行します。代表状態定義から算出するlow-information ratioは診断値であり、UsefulとContextlessには使用しません。主な出力は `evaluation5_summary_by_method.csv`, `evaluation5_summary_by_method_by_run.csv`, `evaluation5_pattern_details.csv`, `evaluation5_summary.json` です。
 
-変更可能な主な引数は、run数、train/test split、grounded/useless閾値、assigned ADL閾値、FP-Growth設定、transition_probability設定、baseline cache設定、fragmentation閾値、low-information閾値、Other状態・Other ADLの扱いです。評価5画面の `runs` は既定で5です。`runs=5` にすると、`run_llm_extraction.py --runs 5` で提案手法JSONを5回分作成し、評価本体も `--runs 5` で `evaluation5_summary_by_method.csv` に平均と標準偏差、`evaluation5_summary_by_method_by_run.csv` にrun別summaryを出力します。frequency / rule / FP-Growth / transition_probability はrun非依存のため最初の評価runだけで評価し、2回目以降は提案手法だけを評価します。FP-Growth / transition_probability の生成済みパターンは、既定で `output/5_adl_correspondence_baselines_fixed/` に保存して再利用します。複数run用テンプレート欄では、評価に使うrun別LLM JSONの存在確認も表示します。
+変更可能な主な引数は、run数、train/test split、grounded/useless閾値、assigned ADL閾値、FP-Growth設定、transition_probability設定、baseline cache設定、fragmentation閾値、Other状態・Other ADLの扱いです。low-information閾値はCLI互換のため受理されますが無視され、診断用ratioだけが保存されます。評価5画面の `runs` は既定で5です。`runs=5` にすると、`run_llm_extraction.py --runs 5` で提案手法JSONを5回分作成し、評価本体も `--runs 5` で `evaluation5_summary_by_method.csv` に平均と標準偏差、`evaluation5_summary_by_method_by_run.csv` にrun別summaryを出力します。frequency / rule / FP-Growth / transition_probability はrun非依存のため最初の評価runだけで評価し、2回目以降は提案手法だけを評価します。FP-Growth / transition_probability の生成済みパターンは、既定で `output/5_adl_correspondence_baselines_fixed/` に保存して再利用します。複数run用テンプレート欄では、評価に使うrun別LLM JSONの存在確認も表示します。
 
 結果タブでは `evaluation5_summary_by_method.csv` を選ぶと、`useful_non_redundant_pattern_rate`, `fragmentation_rate`, `contextless_useless_rate` を手法別に表示・グラフ化できます。`evaluation5_summary_by_method_by_run.csv` ではrunごとの対象数、比較可能pair数、比較可能な子パターン数、Fragmentationのばらつきを確認できます。`evaluation5_pattern_details.csv` では各パターンの `run`, `is_adl_grounded`, `is_low_information`, `is_contextless_useless`, `is_fragmented`, `comparable_fragment_parent_ids`, `fragment_parent_ids`, `is_useful_non_redundant` を確認できます。
 
@@ -161,7 +161,7 @@ output/logs/evaluation_dashboard/
 
 ## 結果表示と過去run比較
 
-「結果比較」タブでは、既存の `results/` と評価6の中間 `output/` からCSV/JSONを自動検出します。
+「結果比較」タブでは、既存の `results/` と、アプリの候補パターンに一致する一部の評価6中間 `output/` からCSV/JSONを検出します。標準条件の中間ディレクトリが候補に含まれない場合は、入力欄で直接指定します。
 
 - CSVは `st.dataframe` で表示します。
 - CSVは「表示するカラム」で、見たい列だけに絞り込めます。

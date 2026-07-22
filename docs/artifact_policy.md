@@ -37,7 +37,7 @@ output/
 ├── 5_rule_filter/
 ├── 5_adl_evaluation_15_0_154days_fixed/
 ├── 5_adl_correspondence_baselines_fixed/
-├── 6_adl_evaluation_14/
+├── 6_adl_evaluation_15_0_14days/
 ├── aruba_15_0_154days/
 ├── aruba_15_0_14days/
 ├── llm_direct_15_0_14days/
@@ -59,3 +59,5 @@ output/
 3. データセット本体とAPIキーはGit管理しない。
 4. 既存の追跡済み生成物を外す場合は、先に `docs/experiment_reproduction.md` の再現手順と必要成果物リストを更新する。
 5. 生成物を削除する場合は、論文再現に不要であることを確認してから行う。
+
+現在の `.gitignore` は `output/`, `picture/`, `results/` を除外しており、この文書が想定する「固定成果物の最小限管理」と運用が一致していない。正本の保管先を決めるまでは、既存成果物を一括でGitへ追加せず [known_issues.md](known_issues.md) のKI-11として扱う。

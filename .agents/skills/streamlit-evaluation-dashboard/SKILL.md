@@ -7,7 +7,7 @@ description: Change evaluation controls, command building or execution, dry-run,
 
 ## Workflow
 
-1. Read `docs/evaluation_streamlit_dashboard.md`, the relevant `docs/evaluation_*.md`, and the affected CLI's `argparse` definition or `--help`.
+1. Read `docs/evaluation_streamlit_dashboard.md`, the relevant `docs/evaluation_*.md`, `docs/known_issues.md`, and the affected CLI's `argparse` definition or safe `--help` output.
 2. Keep responsibilities separated: UI and result rendering in `app/streamlit_app.py`, command construction in `app/command_builder.py`, and subprocess/log helpers in `app/utils.py`.
 3. Expose only supported CLI arguments. Build commands as argument lists, show the preview before execution, and route execution through `app.utils.run_command`; do not use `shell=True` or reimplement research logic.
 4. For each changed step, keep required inputs, expected outputs, ordering, conditional generation, and batch behavior consistent with the CLI.

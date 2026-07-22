@@ -7,7 +7,7 @@ description: Add, change, or debug numbered evaluation logic, metrics, CLIs, mod
 
 ## Workflow
 
-1. Find and read the matching `docs/evaluation_*.md`; inspect the target script/module, its `argparse` definition or `--help`, and focused tests.
+1. Find and read the matching `docs/evaluation_*.md` and `docs/known_issues.md`; inspect the target script/module, its `argparse` definition, safe `--help` output, and focused tests.
 2. Identify the evaluation grain, inputs, outputs, split rules, defaults, aggregation, and missing-input/run behavior from the current code and documentation. Report conflicts before choosing a behavior.
 3. Search for downstream readers before changing a filename or CSV/JSON field.
 4. Implement evaluation logic in `src/behavior_pattern_mining/evaluation/` when reusable; keep `scripts/` as a thin CLI.
@@ -16,7 +16,7 @@ description: Add, change, or debug numbered evaluation logic, metrics, CLIs, mod
 
 ## Verification
 
-- Run the target CLI with `--help`.
+- After confirming it is an `argparse` entry point, run the target CLI with `--help`.
 - Run the narrowest relevant unit test or fixture-based evaluation.
 - Compare produced headers/summary keys when the output contract changes; write only to a temporary or explicitly requested output directory.
 - Inspect the final diff and state any research rule or path that remains uncertain.

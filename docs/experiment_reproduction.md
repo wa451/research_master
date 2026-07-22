@@ -1,409 +1,134 @@
 # Experiment Reproduction
 
-この手順は、現在のコードで論文・発表に使った結果を再現するための入口です。評価ごとの詳しい手順、実行順序、出力ファイルは以下の個別ドキュメントに分けています。設定値の詳細は `docs/paper_parameters.md` も参照してください。
+この文書は、現在のコードで実験を再実行するときの共通前提と評価間の依存順序を示す。評価固有のCLI引数・入力・出力・指標は各評価文書、論文採用値は [paper_parameters.md](paper_parameters.md) を正本とする。
 
-## 評価ドキュメント
+現在の `configs/default.yaml` は `K=15, h=1`、論文採用条件は `K=15, h=0` である。引数を受けない `scripts/run_all.py` は現在の共通既定値で動き、論文採用条件を自動的に再現する入口ではない。正規の再現方法を確定するまでは [KI-01](known_issues.md) として扱う。
 
-| 評価 | 内容 | 詳細 |
-|---|---|---|
-| 評価1 | 代表状態数K・ハミング距離の感度分析 | `docs/evaluation_1_parameter_sensitivity.md` |
-| 評価2 | 提案手法の5回実行評価 | `docs/evaluation_2_proposed_method_5runs.md` |
-| 評価3 | 提案手法とLLM単独ベースラインの比較 | `docs/evaluation_3_direct_log_baseline_comparison.md` |
-| 評価4 | ラベル付きCASASデータによる単一手法ADL評価 | `docs/evaluation_4_labeled_casas_adl.md` |
-| 評価5 | ADLラベルを用いたパターン単位評価 | `docs/evaluation_5_adl_correspondence.md` |
-| 評価6 | LLM解釈ラベルとADL重なりラベルのSet一致評価 | `docs/evaluation_6_adl_interpretation_set.md` |
-| 評価7 | 代表状態数K・ハミング距離の二段階感度評価 | `docs/evaluation_7_parameter_sensitivity_adl_interpretation.md` |
-| 評価8 | 頻度帯別ADL整合性評価 | `docs/evaluation_8_frequency_stratified_adl_consistency.md` |
+## 1. 事前準備
 
-## 最短の実行順序
+1. 依存関係を同期する。
 
-提案手法の主結果を再現する場合:
+   ```bash
+   uv sync
+   ```
+
+2. 入力を配置する。
+
+   - 通常ログ: `data/aruba.csv`
+   - ラベル付きCASAS: `new_labeled_data/aruba.txt`
+   - センサー対応: `configs/aruba_sensor_map.json`
+
+3. LLM処理を行う場合だけ、リポジトリ直下の `.env` に `GEMINI_API_KEY` を設定する。APIキーと生データはGitへ追加しない。
+
+4. 再実行前に、同じ条件名の `state/`, `picture/`, `output/`, `results/` が存在しないか確認する。既存成果物を消したり上書きしたりせず、必要なら別の出力先を使う。
+
+## 2. 共通の処理順序
+
+```text
+sensor log
+  -> 1秒Sample-and-Hold / 5秒遅延OFF / 連続状態圧縮
+  -> 代表状態K件の抽出と代表状態への写像
+  -> 状態遷移ネットワーク
+  -> 通常baseline / LLM抽出
+  -> 評価1〜3
+  -> ラベル付きCASASを使う評価4〜8
+```
+
+前処理・写像・遷移構築の詳細は [pipeline.md](pipeline.md) を参照する。direct-log写像、ADL照合用状態系列など、経路間で条件が一致しない可能性は [known_issues.md](known_issues.md) に記録している。
+
+## 3. 現在の共通既定値による主要パイプライン
+
+次は `configs/default.yaml` の `K=15, h=1, 154日` を使う。LLMを含むため、保存済み出力を利用できる場合は再実行しない。
+
+1. 状態遷移ネットワークを構築する。
+
+   ```bash
+   uv run python scripts/run_build_network.py
+   ```
+
+2. 遷移確率・頻度baselineを生成する。
+
+   ```bash
+   uv run python scripts/run_baselines.py
+   ```
+
+3. 提案手法のLLM抽出を実行する。
+
+   ```bash
+   uv run python scripts/run_llm_extraction.py
+   ```
+
+一括入口は次のとおりだが、LLM APIを呼び、現在の共通既定値を使う。
 
 ```bash
-uv sync
 uv run python scripts/run_all.py
 ```
 
-ラベル付きCASASによるADL評価まで実行する場合:
+## 4. 評価の依存関係
 
-```bash
-uv run python scripts/run_build_network_from_labeled_casas.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --sensor-map configs/aruba_sensor_map.json
+| 評価 | 主な前提成果物 | 実行文書 |
+|---:|---|---|
+| 1 | 条件別network、baseline、提案手法JSON | [evaluation_1_parameter_sensitivity.md](evaluation_1_parameter_sensitivity.md) |
+| 2 | 共通network・baseline、複数runの提案手法JSON | [evaluation_2_proposed_method_5runs.md](evaluation_2_proposed_method_5runs.md) |
+| 3 | 提案手法出力とdirect-log出力 | [evaluation_3_direct_log_baseline_comparison.md](evaluation_3_direct_log_baseline_comparison.md) |
+| 4 | ラベル付きCASAS、代表状態表、提案手法JSON | [evaluation_4_labeled_casas_adl.md](evaluation_4_labeled_casas_adl.md) |
+| 5 | 抽出時と対応する全期間state series、各手法のpattern | [evaluation_5_adl_correspondence.md](evaluation_5_adl_correspondence.md) |
+| 6 | 14日条件の提案手法・direct-log JSON、比較用state series | [evaluation_6_adl_interpretation_set.md](evaluation_6_adl_interpretation_set.md) |
+| 7 | 条件別提案手法JSON・state series、評価6と同じ正解データ | [evaluation_7_parameter_sensitivity_adl_interpretation.md](evaluation_7_parameter_sensitivity_adl_interpretation.md) |
+| 8 | 評価6detailsまたは提案手法JSON、対応するstate series | [evaluation_8_frequency_stratified_adl_consistency.md](evaluation_8_frequency_stratified_adl_consistency.md) |
 
-uv run python scripts/run_llm_extraction.py
+評価4〜8はStreamlitからも既存CLIを組み立てられる。先にdry-runでコマンドと条件別パスを確認する。詳細は [evaluation_streamlit_dashboard.md](evaluation_streamlit_dashboard.md) を参照する。
 
-uv run python scripts/evaluate_adl_labels.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --state-table state/aruba_15_1_154days.txt \
-  --sensor-map configs/aruba_sensor_map.json \
-  --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/4_adl_detect \
-  --iou-thresholds 0.3 0.5 \
-  --wake-window-minutes 30 \
-  --match-mode exact \
-  --merge-gap-minutes 5 \
-  --min-duration-config configs/adl_min_duration.json \
-  --hit-tolerance-minutes 10
-```
+## 5. 共通研究条件
 
-評価5のUseful non-redundant / Fragmentation / Contextless useless評価まで行う場合は、抽出時と同じ前処理で全220日の代表状態系列CSVを作成してから次を実行する。既存の修正前結果は上書きしない。
-
-```bash
-uv run python scripts/evaluate_adl_labels.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --state-table state/aruba_15_0_154days.txt \
-  --sensor-map configs/aruba_sensor_map.json \
-  --hamming-threshold 0 \
-  --state-series-preprocessing network-equivalent \
-  --smoothing-window-sec 5 \
-  --state-series-days 220 \
-  --write-state-series output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv \
-  --state-series-only
-
-uv run python scripts/evaluate_adl_correspondence.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --state-series output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv \
-  --state-definition state/aruba_15_0_154days.txt \
-  --patterns-frequency output/aruba_15_0_154days/state_sequence_counts_15_0_154days.json \
-  --patterns-proposed output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json \
-  --output-dir results/5_pattern_quality_without_low_information_judgment \
-  --train-ratio 0.7 \
-  --grounded-hit-threshold 0.3 \
-  --grounded-purity-threshold 0.3 \
-  --useless-hit-threshold 0.1 \
-  --useless-purity-threshold 0.1 \
-  --assigned-adl-purity-threshold 0.10 \
-  --assigned-adl-max-categories 3 \
-  --enable-fp-growth-baseline \
-  --fp-min-support 0.05 \
-  --fp-top-k 50 \
-  --fp-min-len 2 \
-  --fp-max-len 4 \
-  --fp-max-median-duration-seconds 1800 \
-  --fp-max-p90-duration-seconds 3600 \
-  --baseline-cache-dir output/5_adl_correspondence_baselines_fixed \
-  --use-baseline-cache \
-  --other-state-labels その他 Other Other_ADL unknown \
-  --exclude-other-adl-from-any \
-  --min-overlap-seconds 1
-```
-
-提案手法を5回平均する場合は、先に `scripts/run_llm_extraction.py --runs 5` で `_1.json` から `_5.json` までを作成し、評価5本体に `--runs 5` を追加する。標準命名以外を使う場合は `--patterns-proposed-template` で `{run}` を含むパスを指定する。
-
-評価6で提案手法とLLM単独ベースラインのADL解釈ラベルを比較する場合は、コンテキスト長を揃えるため両手法を14日版で実行する。
-
-```bash
-uv run python scripts/run_build_network_from_labeled_casas.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --sensor-map configs/aruba_sensor_map.json \
-  --days 14 \
-  --hamming-threshold 0
-
-uv run python scripts/run_llm_extraction.py --days 14 --hamming-threshold 0
-
-uv run python scripts/evaluate_adl_labels.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --state-table state/aruba_15_0_14days.txt \
-  --sensor-map configs/aruba_sensor_map.json \
-  --patterns output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
-  --output-dir output/6_adl_evaluation_15_0_14days \
-  --write-state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
-  --hamming-threshold 0
-
-uv run python scripts/run_direct_log_baseline.py \
-  --log-days 14 \
-  --hamming-threshold 0 \
-  --extract-only
-
-uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
-  --patterns-proposed output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
-  --patterns-direct output/llm_direct_15_0_14days/1.json \
-  --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/6_adl_match/15_0_14days \
-  --min-overlap-ratio-for-true-label 0.10
-```
-
-評価8は、14日条件の手法比較と154日条件の提案手法単独を別ディレクトリへ出力する。
-
-```bash
-uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
-  --analysis-scope comparison_14days \
-  --evaluation6-details results/6_adl_match/15_0_14days/evaluation6_pattern_set_details_by_method.csv \
-  --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
-  --output-dir results/8_vs_llm_own_id_fixed \
-  --frequency-band-mode both
-```
-
-```bash
-uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
-  --analysis-scope proposed_154days \
-  --patterns-proposed output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json \
-  --patterns-proposed-template 'output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_{run}.json' \
-  --state-series output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --n-states 15 \
-  --hamming-threshold 0 \
-  --days 154 \
-  --runs 5 \
-  --output-dir results/8_proposed_own_id_fixed \
-  --frequency-band-mode both \
-  --fixed-frequency-bin-edges 0,1,10,100,1000,10000
-```
-
-以下は全体の共通設定と補足です。
-
-## 使用データセット
-
-- 既定データセット: `aruba`
-- 配置: `data/aruba.csv`
-- 形式: ヘッダなし4列イベントログ `date,time,sensor,value`
-- Git管理: `data/` は `.gitignore` で除外済み
-
-## 前処理条件
-
-- 期間: 最初の154日
-- サンプリング: 1秒
-- 状態生成: Sample-and-Hold
-- スムージング: 遅延OFF窓幅5秒
-- 圧縮: 連続する同一状態ベクトルを1つに圧縮
-- ON値: `ON`, `OPEN`, `PRESENT`, `1`, `1`
-- OFF値: `OFF`, `CLOSE`, `ABSENT`, `0`, `0`
-
-## 論文採用条件の代表状態とマッピング
-
-- 代表状態数 K: 15
-- 抽出方法: 圧縮済み状態ベクトルの出現頻度上位K件
-- ハミング距離閾値: 0
-- マッピング条件: 代表状態に完全一致する場合だけその状態。完全一致しない場合は「その他」。
-- 出力: `state/aruba_15_0_154days.txt`
-
-`configs/default.yaml` の互換用既定値は現在も `hamming_threshold=1`
-である。論文値を再現するコマンドでは、この既定に依存せず必ず
-`--hamming-threshold 0` と条件別パスを明示する。
-
-## 時間帯分割
-
-| mode | range |
+| 項目 | 論文採用値・処理 |
 |---|---|
-| Morning | 06:00-10:00 |
-| Daytime | 10:00-18:00 |
-| Night | 18:00-24:00 |
-| Midnight | 00:00-06:00 |
+| 対象 | Aruba、先頭154日（評価6などは抽出入力14日） |
+| 状態生成 | 1秒Sample-and-Hold |
+| ノイズ処理 | 遅延OFF窓幅5秒 |
+| 圧縮 | 連続する同一状態ベクトルを1状態へ圧縮 |
+| 代表状態 | 頻度上位K、採用値K=15 |
+| 採用h | 0。共通config既定は1なので区別する |
+| 時間帯 | Morning 06:00–10:00、Daytime 10:00–18:00、Night 18:00–24:00、Midnight 00:00–06:00 |
+| LLM | `gemini-2.5-pro`, temperature 0.2 |
+| 通常系列長 | 2〜4 |
 
-## 遷移ネットワーク
+評価ごとの閾値、分母、split、missing-run処理は共通化せず、個別評価文書に従う。
 
-- 自己連続遷移: 圧縮して除外
-- 遷移確率: 各from状態の遷移回数で正規化
-- 可視化閾値: 0.1
-- LLM/ベースライン用JSON: `picture/aruba_15_0_154days/state_transition_*.json`
-- 図: 時間帯別のみ生成する。ノードラベルとタイムライン凡例は `State 1`、`Other` のように英語で表示し、全期間（`all`）の図は生成しない。
+## 6. LLM promptと出力
 
-## LLMに入力するJSON形式
+- 提案手法は `prompts/pattern_extraction_prompt.md`、direct-logは `prompts/direct_log_pattern_extraction_prompt.md` を実行時に読む。
+- promptファイル欠落時には実装内fallbackが使われるが、許可ラベル集合に差があるため [KI-12](known_issues.md) として未解決である。
+- 提案手法の各要素は少なくとも `パターン名`, `ADL系列ラベル`, `解釈の根拠`, `遷移のパターン` を扱う。
+- prompt、モデル、temperature、API呼び出し条件を再現作業のついでに変更しない。
 
-```json
-{
-  "nodes": [
-    {
-      "state_id": "状態1",
-      "active_sensors": ["Kitchen"],
-      "avg_duration_minutes_per_day": 12.345
-    }
-  ],
-  "edges": [
-    {
-      "from": "状態1",
-      "to": "状態2",
-      "probability": 0.234
-    }
-  ]
-}
-```
+## 7. 成果物の対応
 
-## LLMプロンプト
+| 種類 | 現行パターン |
+|---|---|
+| 代表状態表 | `state/aruba_{K}_{h}_{days}days.txt` |
+| network JSON | `picture/aruba_{K}_{h}_{days}days/state_transition_*.json` |
+| 遷移図 | `picture/aruba_{K}_{h}_{days}days/state_transition_*.png`, `.eps` |
+| timeline | `picture/aruba_{K}_{h}_{days}days/timeline_*.png` |
+| 通常baseline | `output/aruba_{K}_{h}_{days}days/{prob_threshold_sequences,state_sequence_counts}_*.json` |
+| 提案手法 | `output/aruba_{K}_{h}_{days}days/llm_sequences_modes_*_{run}.json` |
+| direct-log | 明示条件時は `output/llm_direct_{K}_{h}_{days}days/{run}.json`、無引数の共通既定日数では互換形式 `output/llm_direct_{days}/{run}.json` |
+| 後段評価 | `results/{evaluation-specific directory}/` |
 
-- モード別ネットワーク入力: `src/behavior_pattern_mining/llm/pattern_extractor.py` の `PROMPT_TEMPLATE`
-- 外部化コピー: `prompts/pattern_extraction_prompt.md`
-- 前処理済み代表状態系列の直接入力: `src/behavior_pattern_mining/llm/direct_log_extractor.py` の `PROMPT_TEMPLATE`
-- 外部化コピー: `prompts/direct_log_pattern_extraction_prompt.md`
-- モデル: `gemini-2.5-pro`
-- Temperature: `0.2`
-- APIキー: `.env` の `GEMINI_API_KEY`
-- 出力制約: JSON配列、各要素は `パターン名`, `解釈の根拠`, `遷移のパターン` を持つ。系列長は2-4。
+成果物の保存方針は [artifact_policy.md](artifact_policy.md) を参照する。ファイル名やCSV/JSON schemaを文書整理のために変更しない。
 
-## ベースライン手法
+## 8. 検証
 
-### 遷移確率ベースライン
+1. LLMを呼ばない回帰テストを実行する。
 
-- 実装: `src/behavior_pattern_mining/baselines/transition_probability.py`
-- 入力: モード別 `state_transition_{mode}.json`
-- 閾値: 遷移確率0.2以上
-- 系列長: 2-4
-- 除外状態: `その他`
-- 同一状態の再訪: 不許可
-- 出力: `output/aruba_15_1_154days/prob_threshold_sequences_15_1_154days.json`
+   ```bash
+   uv run python -m unittest discover -s tests
+   ```
 
-### 頻度ベースライン
+2. 対象CLIが `argparse` を使うことを確認してから `--help` と文書の引数を照合する。
+3. 再生成した場合は、条件suffix、CSV列名・行数・主要集計値、JSONキー・型、run番号を既存成果物と比較する。
+4. LLM処理は保存済み応答、checkpoint、モック、dry-runを優先し、APIを検証目的だけで大量実行しない。
 
-- 実装: `src/behavior_pattern_mining/baselines/frequency.py`
-- 入力: `data/aruba.csv`, `state/aruba_15_1_154days.txt`
-- 系列長: 2-4
-- ハミング距離による代表状態寄せ: 有効
-- 出力上限: TOP 50
-- 出力: `output/aruba_15_1_154days/state_sequence_counts_15_1_154days.json`
+## 9. 再現性上の未解決事項
 
-## 評価指標
-
-- 実装: `src/behavior_pattern_mining/evaluation/compare_patterns.py`
-- 指標: Precision, Recall, F1
-- TP: LLM系列がベースライン系列と一致
-- FP: LLM系列にあるがベースラインにない
-- FN: ベースラインにあるがLLM系列にない
-- 部分一致: 現在は不許可
-- 比較対象:
-  - LLM vs 遷移確率ベースライン
-  - LLM vs 頻度ベースライン
-
-## Groundednessの計算方法
-
-- 実装: `src/behavior_pattern_mining/evaluation/groundedness_check.py`
-- 入力グラフ: `picture/aruba_15_1_154days/state_transition_all.json`
-- LLM出力: 既定では `output/llm_direct_{DAYS}/*.json`
-- 条件:
-  - 系列長が2-4
-  - 自己ループ `A -> A` がない
-  - すべての隣接ペアがMarkov graphに存在する
-  - 各エッジ確率が0.2以上
-- Groundedness: 条件を満たしたパターン数 / 全パターン数
-
-## 図表の生成方法
-
-- 状態遷移図: `scripts/run_build_network.py`
-- タイムライン図: `scripts/run_build_network.py`
-- LLM評価Excel: `scripts/run_llm_eval_batch.py`
-- direct log評価Excel: `scripts/run_direct_log_baseline.py`
-- condition評価JSON/TXT: `scripts/evaluate_condition_metrics.py`
-
-## 実行コマンド例
-
-```bash
-uv sync
-
-# 1. 状態遷移ネットワークと代表状態テーブル
-uv run python scripts/run_build_network.py
-
-# 2. ベースライン
-uv run python scripts/run_baselines.py
-
-# 3. LLM抽出と評価を5回実行
-uv run python scripts/run_llm_eval_batch.py
-
-# 4. Groundedness
-uv run python scripts/run_groundedness.py
-
-# 5. 条件ベース評価
-uv run python scripts/evaluate_condition_metrics.py
-
-# 6. ラベル付きCASAS ADL評価
-uv run python scripts/run_build_network_from_labeled_casas.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --sensor-map configs/aruba_sensor_map.json
-
-uv run python scripts/run_llm_extraction.py
-
-uv run python scripts/evaluate_adl_labels.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --state-table state/aruba_15_1_154days.txt \
-  --sensor-map configs/aruba_sensor_map.json \
-  --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/4_adl_detect \
-  --write-state-series results/4_adl_detect/state_series.csv \
-  --merge-gap-minutes 5 \
-  --min-duration-config configs/adl_min_duration.json \
-  --hit-tolerance-minutes 10
-
-# 評価5・8で共用する、抽出前処理と等価な全220日の代表状態系列
-uv run python scripts/evaluate_adl_labels.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --state-table state/aruba_15_0_154days.txt \
-  --sensor-map configs/aruba_sensor_map.json \
-  --hamming-threshold 0 \
-  --state-series-preprocessing network-equivalent \
-  --smoothing-window-sec 5 \
-  --state-series-days 220 \
-  --write-state-series output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv \
-  --state-series-only
-
-# 7. 評価5: Useful non-redundant / Fragmentation / Contextless useless評価
-uv run python scripts/evaluate_adl_correspondence.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --state-series output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv \
-  --state-definition state/aruba_15_0_154days.txt \
-  --patterns-frequency output/aruba_15_0_154days/state_sequence_counts_15_0_154days.json \
-  --patterns-proposed output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json \
-  --output-dir results/5_pattern_quality_without_low_information_judgment \
-  --runs 5 \
-  --train-ratio 0.7 \
-  --grounded-hit-threshold 0.3 \
-  --grounded-purity-threshold 0.3 \
-  --useless-hit-threshold 0.1 \
-  --useless-purity-threshold 0.1 \
-  --assigned-adl-purity-threshold 0.10 \
-  --assigned-adl-max-categories 3 \
-  --enable-fp-growth-baseline \
-  --fp-min-support 0.05 \
-  --fp-top-k 50 \
-  --fp-min-len 2 \
-  --fp-max-len 4 \
-  --fp-max-median-duration-seconds 1800 \
-  --fp-max-p90-duration-seconds 3600 \
-  --baseline-cache-dir output/5_adl_correspondence_baselines_fixed \
-  --use-baseline-cache \
-  --other-state-labels その他 Other Other_ADL unknown \
-  --exclude-other-adl-from-any \
-  --min-overlap-seconds 1
-
-# 8. 評価6: ADL解釈ラベルset評価。提案手法とLLM単独ベースラインを14日版で比較
-uv run python scripts/run_build_network_from_labeled_casas.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --sensor-map configs/aruba_sensor_map.json \
-  --days 14 \
-  --hamming-threshold 0
-
-uv run python scripts/run_llm_extraction.py --days 14 --hamming-threshold 0
-
-uv run python scripts/evaluate_adl_labels.py \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --state-table state/aruba_15_0_14days.txt \
-  --sensor-map configs/aruba_sensor_map.json \
-  --patterns output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
-  --output-dir output/6_adl_evaluation_15_0_14days \
-  --write-state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
-  --hamming-threshold 0
-
-uv run python scripts/run_direct_log_baseline.py \
-  --log-days 14 \
-  --hamming-threshold 0 \
-  --extract-only
-
-uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
-  --patterns-proposed output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
-  --patterns-direct output/llm_direct_15_0_14days/1.json \
-  --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/6_adl_match/15_0_14days \
-  --min-overlap-ratio-for-true-label 0.10
-```
-
-まとめて実行する場合:
-
-```bash
-uv run python scripts/run_all.py
-```
-
-## 注意点
-
-- LLM実行にはネットワーク接続と `GEMINI_API_KEY` が必要。
-- `scripts/run_llm_eval_batch.py` はLLM抽出モジュールに明示的な出力先を渡し、評価対象と同じ `llm_sequences_modes_{K}_{hamming}_{days}days_{run}.json` を生成する。
-- 既存の `output/` と `picture/` はGit追跡されている生成物を含む。再生成すると大きな差分が出る。
+run独立性、direct-logの写像、公平なK/h伝播、ADL状態系列の前処理、評価6のrun母集団、評価8の30日互換scopeなどは、意図した仕様が未確定である。詳細と判断事項は [known_issues.md](known_issues.md) を参照し、現在の挙動を正当化する説明へ置き換えない。

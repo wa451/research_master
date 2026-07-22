@@ -40,12 +40,14 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 
 ### 入力
 
-| 入力 | 既定パス | 役割 |
+| 入力 | 正式14日評価で明示するパス | 役割 |
 |---|---|---|
 | 提案手法LLM JSON | `output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json` | `time_band_interpretations` を持つ提案手法出力。 |
 | LLM単独ベースラインJSON | `output/llm_direct_15_0_14days/1.json` | 同期間の前処理済み代表状態系列をLLMへ直接入力した出力。 |
 | 14日条件の全220日照合系列 | `output/6_adl_evaluation_15_0_14days/state_series.csv` | 先頭14日で作成した代表状態定義を固定し、全220日で両手法の出現区間を同条件検索する。 |
 | ADL正解データ | `new_labeled_data/aruba.txt` | CASAS activity `begin/end` からADL正解区間を内部生成する。 |
+
+この表はargparse既定値ではない。省略時の現行CLIは、提案手法に `output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json`、LLM単独に `output/llm_direct_15_1_14days/1.json`、state seriesに互換パス `output/6_adl_evaluation_14/state_series.csv` を使う。`--labeled-casas` を省略した場合は `output/adl_label_intervals.csv` を使い、出力先は設定値から `results/6_adl_match/15_1_14days/` へ解決される。さらに `--n-states` と `--hamming-threshold` のargparse既定値は未指定（summaryではnull）である。正式14日評価ではStep 7--8のとおり `--days 14 --n-states 15 --hamming-threshold 0` と各パスを明示する。既定値と正式条件の不一致は [KI-01](known_issues.md#ki-01) および [KI-08](known_issues.md#ki-08) で追跡している。
 
 ### 出力
 
@@ -65,7 +67,7 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 | 順序 | ファイル | 読み方 |
 |---|---|---|
 | 1 | `evaluation6_method_comparison.csv` | `conditional_mean_*` と `end_to_end_mean_*` を区別して見る。`--runs 5` の場合は5回平均と標準偏差、およびcoverage/rateの平均も確認する。 |
-| 2 | `evaluation6_llm_usage_comparison.csv` | `num_runs_with_complete_metrics` を確認し、両手法で完全な記録がある共通runを明示して入力・応答・合計トークン数を比較する。現保存結果では両手法とも第1--5試行の完全な使用量記録を用いる。期間による入力規模の比較では、提案手法の各時間帯の入力を期間ごとに合計し、LLM単独の上限超過は実行ログに記録されたAPIエラーに基づいて判定する。 |
+| 2 | `evaluation6_llm_usage_comparison.csv` | `num_runs_with_complete_metrics` を手法ごとに確認して入力・応答・合計トークン数を比較する。現保存結果では両手法とも第1--5試行の完全な使用量記録を用いるが、実装は共通run集合へ自動制限しない。期間による入力規模の比較では、提案手法の各時間帯の入力を期間ごとに合計し、LLM単独の上限超過は実行ログに記録されたAPIエラーに基づいて判定する。 |
 | 3 | `evaluation6_method_comparison_by_run.csv` | runごとのばらつきを確認する。平均値だけでなく、特定runだけ大きく外れていないかを見る。 |
 | 4 | `evaluation6_pattern_set_details_by_method.csv` | `occurrence_status`, `truth_status`, `prediction_status`, `is_metric_evaluable`, `is_end_to_end_evaluable`, `raw_pred_adl_labels`, `unknown_pred_adl_labels` と2種類の指標列を見てズレの原因を確認する。 |
 | 5 | `evaluation6_comparison_summary.json` | 再現条件として、入力パス、run数、14日版で揃っているか、`min_overlap_ratio_for_true_label`, 許可ラベル、使用量集計元を確認する。 |
@@ -109,6 +111,8 @@ uv run python scripts/run_llm_extraction.py \
 ### 4. 🟨 **条件付き** 評価6用の全220日照合系列を作る
 
 `output/6_adl_evaluation_15_0_14days/pattern_occurrences.csv` または `output/6_adl_evaluation_15_0_14days/state_series.csv` がなければ実行する。この系列は、先頭14日で作成した代表状態表を全220日のセンサログへ適用した照合用中間ファイルであり、`output/` に保存する。ディレクトリ名の `14days` は抽出・LLM入力条件を表し、照合系列の長さを表さない。
+
+次のコマンドは `--state-series-preprocessing` を指定しないため、現行CLIの `event-driven` 既定を使う。抽出系の1秒Sample-and-Hold・遅延OFF系列とどちらへ統一するかは未解決であり、[KI-06](known_issues.md#ki-06) で追跡している。
 
 ```bash
 uv run python scripts/evaluate_adl_labels.py \
@@ -155,7 +159,10 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
   --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
   --output-dir results/6_adl_match/15_0_14days \
-  --min-overlap-ratio-for-true-label 0.10
+  --min-overlap-ratio-for-true-label 0.10 \
+  --days 14 \
+  --n-states 15 \
+  --hamming-threshold 0
 ```
 
 ### 8. 🟩 **スキップ可** 5回分の平均を出す
@@ -297,6 +304,8 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 9. 出現なし、正解ADL重なりなし、予測欠落、語彙外を別々の評価状態として記録し、定義済みの分母規則でset指標を計算する。
 10. 提案手法は各runの時間帯別メトリクスを合計し、LLM単独ベースラインは各runのメトリクスを使って、run合計の平均と標準偏差を算出する。
 
+欠損パターンrunは手法ごとに独立してskipされ、LLM使用量も手法ごとの完全runだけで平均される。また、ラベル別・時間帯別CSVは全runのdetail行をpoolして集計する。pairedな共通run、run等重み、detail poolのどれを正式集計とするかは未解決であり、[KI-09](known_issues.md#ki-09) で追跡している。
+
 既定の `match_mode=exact` は、状態系列の全開始位置を1つずつずらして連続部分系列を照合する。開始位置の異なる重なり一致は別出現として数える。パターン途中への別状態の挿入、状態の置換・削除・飛び越しは認めない。保存済み主評価も `exact` を使用する。`skip-other` は感度確認用の互換オプションであり、主評価には用いない。
 
 ### LLM使用量・応答時間の比較
@@ -305,7 +314,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 
 - 提案手法: Morning / Daytime / Night / Midnight の記録済み成功API呼び出しをrun内で合計する。
 - LLM単独ベースライン: 同期間の前処理済み代表状態系列を直接入力した記録済み成功API呼び出しをrun値とする。
-- `--runs 5` の場合: 上記のrun合計を5回分平均し、標準偏差も保存する。
+- `--runs 5` の場合: 上記のrun合計を、各手法で完全な記録があるrunについて平均し、標準偏差も保存する。
 - `duration_sec` はGemini APIの応答待ち時間であり、前処理・プロンプト構築・ファイル保存を含む全工程時間ではない。
 - パース失敗などの失敗API呼び出しは既存メトリクスに含まれない。
 - 4時間帯のいずれか、または必要なメトリクス値が欠けたrunは0として補わず平均から除外し、`num_runs_with_complete_metrics` と `evaluation6_comparison_summary.json` の `missing_metrics` に記録する。
@@ -365,9 +374,9 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 
 | パラメータ | 既定値・例 |
 |---|---|
-| 使用日数 | `14`日 |
-| 代表状態数 | 既定 `15`。条件変更時は `--n-states` で指定する。 |
-| ハミング距離閾値 | 採用値 `0`。条件変更時は `--hamming-threshold` で指定する。 |
+| 正式評価の使用日数 | `--days 14` を明示 |
+| 正式評価の代表状態数 | `--n-states 15` を明示 |
+| 正式評価のハミング距離閾値 | `--hamming-threshold 0` を明示 |
 | `--min-overlap-ratio-for-true-label` | `0.10` |
 | time_band-aware | `true` |
 | 時間帯境界 | `[start,end)` 全体が同じ時間帯に含まれる出現だけを採用 |

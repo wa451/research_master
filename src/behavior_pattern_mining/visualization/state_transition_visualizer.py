@@ -11,11 +11,12 @@ Date: 2026-02-05
 import os
 import json
 import re
+from pathlib import Path
 import pandas as pd
 import numpy as np
 from datetime import timedelta
-from collections import Counter, defaultdict
-from typing import List, Tuple, Dict, Optional
+from collections import Counter
+from typing import Dict, List, Optional, Tuple, Union
 import networkx as nx
 import matplotlib.pyplot as plt
 
@@ -30,6 +31,20 @@ from experiment_config import (
     SAMPLING_INTERVAL as CONFIG_SAMPLING_INTERVAL,
     SMOOTHING_WINDOW_SEC,
     TIME_MODES,
+)
+from src.behavior_pattern_mining.data.state_vectors import (
+    apply_delayed_off_smoothing,
+    build_sample_and_hold_state_vectors,
+    compress_consecutive_state_vectors,
+)
+from src.behavior_pattern_mining.network.transitions import (
+    compress_consecutive_states,
+    compute_state_durations,
+    compute_transition_statistics,
+)
+from src.behavior_pattern_mining.states.state_mapping import (
+    find_nearest_representative_vector,
+    hamming_distance,
 )
 
 # 定数定義
@@ -57,6 +72,9 @@ LAYOUT_ITERATIONS = 100                 # レイアウト計算の反復回数�
 # センサー値のON/OFF判定用セット
 SENSOR_ON_VALUES  = {'ON', 'OPEN', 'PRESENT', '1', 1}
 SENSOR_OFF_VALUES = {'OFF', 'CLOSE', 'ABSENT', '0', 0}
+
+StateVector = Tuple[int, ...]
+MappedState = Union[StateVector, str]
 
 class StateTransitionVisualizer:
     """
@@ -144,11 +162,14 @@ class StateTransitionVisualizer:
         """
         print("Step 1: データ読み込みと前処理")
         
+        # 形式判定は先頭行の読み込みを伴うため、結果を保持して重複I/Oを避ける。
+        is_event_log_format = self._is_event_log_format(filepath)
+
         # CSV読み込み
-        df_csv = pd.read_csv(filepath, header=None if self._is_event_log_format(filepath) else 0)
+        df_csv = pd.read_csv(filepath, header=None if is_event_log_format else 0)
         
         # 形式を判定
-        if self._is_event_log_format(filepath):
+        if is_event_log_format:
             print("  イベントログ形式を検出")
             return self._load_event_log_format(df_csv, filepath)
         else:
@@ -331,12 +352,9 @@ class StateTransitionVisualizer:
         
         print(f"  時間範囲: {len(time_range)}秒")
         
-        # 状態ベクトルを生成
-        state_vectors = self._generate_state_vectors(df, time_range)
-        
-        self.state_vectors_df = pd.DataFrame(state_vectors, 
-                                             index=time_range,
-                                             columns=self.sensor_list)
+        # 状態変化点を前方補完し、Pythonの秒単位dict生成を避けて同じ
+        # Sample-and-Hold系列を構築する。
+        self.state_vectors_df = self._generate_state_vectors(df, time_range)
         
         print(f"  状態ベクトル生成完了: {len(self.state_vectors_df)}行 × {len(self.sensor_list)}列")
         print("  状態ベクトルのサンプル（先頭5行）:")
@@ -351,21 +369,17 @@ class StateTransitionVisualizer:
         
         return self.state_vectors_df
     
-    def _generate_state_vectors(self, df: pd.DataFrame, time_range) -> List[Dict]:
-        """状態ベクトルを生成"""
-        sensor_states = {sensor: 0 for sensor in self.sensor_list}
-        state_vectors = []
-        events = df.to_dict('records')
-        event_idx = 0
-        
-        for current_time in time_range:
-            # この時刻までに発生したイベントを処理
-            while event_idx < len(events) and events[event_idx]['timestamp'] <= current_time:
-                sensor_states[events[event_idx]['sensor_id']] = events[event_idx]['binary_value']
-                event_idx += 1
-            
-            state_vectors.append(sensor_states.copy())
-        return state_vectors
+    def _generate_state_vectors(
+        self,
+        df: pd.DataFrame,
+        time_range: pd.DatetimeIndex,
+    ) -> pd.DataFrame:
+        """イベントを指定サンプル時刻の0/1状態ベクトルへ変換する。"""
+        return build_sample_and_hold_state_vectors(
+            events=df,
+            time_range=time_range,
+            sensor_columns=self.sensor_list,
+        )
     
     def _apply_smoothing(self):
         """
@@ -388,14 +402,11 @@ class StateTransitionVisualizer:
         w = self.smoothing_window_sec  # 1秒サンプリングなので秒数 = 行数
         print(f"  チャタリング除去 (遅延OFF窓: {w}秒) を適用中...")
 
-        # 各センサー列に rolling max を適用して遅延OFFを実現する。
-        # rolling(w).max() は「異なる ON 信号が W 内にあれば ON を維持」する効果を持つ。
-        # min_periods=1 はデータ先頭でウィンドウが不足している際に NaN にしないため。
-        smoothed = (
-            self.state_vectors_df
-            .rolling(window=w, min_periods=1)
-            .max()
-            .astype(int)
+        # 研究条件上のrolling max仕様は純粋関数へ委譲し、ここでは進捗表示と
+        # クラスが保持するDataFrameの更新だけを担当する。
+        smoothed = apply_delayed_off_smoothing(
+            self.state_vectors_df,
+            window_size=w,
         )
 
         before = (self.state_vectors_df == 0).sum().sum()  # 元のOFF数
@@ -408,10 +419,9 @@ class StateTransitionVisualizer:
         """連続する同じ状態ベクトルを除去"""
         original_length = len(self.state_vectors_df)
         
-        # 連続する同じ状態を検出
-        state_tuples = [tuple(row) for row in self.state_vectors_df.values]
-        keep_indices = [0] + [i for i in range(1, len(state_tuples)) if state_tuples[i] != state_tuples[i - 1]]
-        self.state_vectors_df = self.state_vectors_df.iloc[keep_indices]
+        self.state_vectors_df = compress_consecutive_state_vectors(
+            self.state_vectors_df
+        )
         
         print(f"  状態ベクトル圧縮: {original_length}行 → {len(self.state_vectors_df)}行")
     
@@ -495,31 +505,56 @@ class StateTransitionVisualizer:
 # 状態マッピング(似た状態を代表状態に割り当てる)
     def _compute_hamming_distance(self, state1: Tuple, state2: Tuple) -> int:
         """2つの状態ベクトル間のハミング距離を計算"""
-        return sum(s1 != s2 for s1, s2 in zip(state1, state2))
+        return hamming_distance(state1, state2)
+
+    def _map_state_vector(
+        self,
+        current_state: StateVector,
+        mapping_cache: Dict[StateVector, MappedState],
+    ) -> MappedState:
+        """1つの状態ベクトルを既存順序の代表状態またはOtherへ写像する。
+
+        同じ生状態は期間中に繰り返し現れるため、呼び出し側のcacheへ結果を保存して
+        ハミング距離の再計算を避ける。完全一致は閾値に関係なく採用し、最近傍が
+        同距離の場合は頻度順位が先の代表状態を選ぶ既存条件を維持する。
+        """
+        if current_state in mapping_cache:
+            return mapping_cache[current_state]
+
+        if current_state in self.representative_states:
+            mapped_state: MappedState = current_state
+        else:
+            nearest_state = find_nearest_representative_vector(
+                current_state,
+                representative_vectors=self.representative_states,
+                hamming_threshold=self.hamming_threshold,
+            )
+            mapped_state = nearest_state if nearest_state is not None else "Other"
+
+        mapping_cache[current_state] = mapped_state
+        return mapped_state
+
+    def _map_state_vectors(
+        self,
+        state_vectors: pd.DataFrame,
+        mapping_cache: Optional[Dict[StateVector, MappedState]] = None,
+    ) -> List[MappedState]:
+        """DataFrameの各行を代表状態へ写像し、入力行と同じ順序で返す。"""
+        cache = mapping_cache if mapping_cache is not None else {}
+        return [
+            self._map_state_vector(tuple(row), cache)
+            for row in state_vectors.values
+        ]
     
     def _calculate_state_durations(self):
         """各状態の滞在時間を計算（秒単位）"""
-        # 滞在時間を初期化
-        for state in self.representative_states:
-            self.state_durations[state] = 0
-        self.state_durations['Other'] = 0
-        
         # データの日数を計算
         self.num_days = max(len(self.state_vectors_df.index.normalize().unique()), 1)
-        
-        # 時系列インデックスから時間差を計算
-        timestamps = self.state_vectors_df.index
-        
-        for i in range(len(self.state_sequence)):
-            state = self.state_sequence[i]
-            
-            # 次の状態までの時間を計算（最後の状態は1秒とする）
-            if i < len(timestamps) - 1:
-                duration = (timestamps[i + 1] - timestamps[i]).total_seconds()
-            else:
-                duration = 1.0  # 最後の状態
-            
-            self.state_durations[state] += duration
+        self.state_durations = compute_state_durations(
+            state_sequence=self.state_sequence,
+            timestamps=self.state_vectors_df.index,
+            known_states=[*self.representative_states, "Other"],
+        )
         
         print(f"  滞在時間計算完了 (データ日数: {self.num_days}日):")
         for state in self.representative_states:
@@ -545,32 +580,8 @@ class StateTransitionVisualizer:
         """
         print("\nStep 4: 状態マッピング処理")
         
-        mapped_states = []
-        other_count = 0
-        
-        for idx, row in self.state_vectors_df.iterrows():
-            current_state = tuple(row.values)
-            
-            # 代表状態に含まれていればそのまま使用
-            if current_state in self.representative_states:
-                mapped_states.append(current_state)
-            else:
-                # 最も近い代表状態を探す
-                min_distance = float('inf')
-                closest_state = None
-                
-                for rep_state in self.representative_states:
-                    distance = self._compute_hamming_distance(current_state, rep_state)
-                    if distance < min_distance:
-                        min_distance = distance
-                        closest_state = rep_state
-                
-                # 距離が閾値以下なら代表状態に、そうでなければ"Other"
-                if min_distance <= self.hamming_threshold:
-                    mapped_states.append(closest_state)
-                else:
-                    mapped_states.append('Other')
-                    other_count += 1
+        mapped_states = self._map_state_vectors(self.state_vectors_df)
+        other_count = sum(state == "Other" for state in mapped_states)
         
         print(f"  マッピング完了: {other_count}個を'Other'に分類")
         
@@ -597,33 +608,16 @@ class StateTransitionVisualizer:
         print("\nStep 5: 遷移確率行列の計算")
         
         # マッピング後の自己遷移を圧縮
-        compressed_sequence = [s for i, s in enumerate(self.state_sequence)
-                                if i == 0 or s != self.state_sequence[i - 1]]
+        compressed_sequence = compress_consecutive_states(self.state_sequence)
         
         print(f"  マッピング後のパターン長: {len(self.state_sequence)}")
         print(f"  圧縮後: {len(compressed_sequence)}")
         
-        # 各状態の出現回数をカウント（圧縮後のパターン内での出現回数）
-        occurrence_counter = Counter(compressed_sequence)
-        self.state_occurrences = dict(occurrence_counter)
-        
-        # 遷移回数をカウント
-        transition_counts = defaultdict(lambda: defaultdict(int))
-        
-        for i in range(len(compressed_sequence) - 1):
-            from_state = compressed_sequence[i]
-            to_state = compressed_sequence[i + 1]
-            transition_counts[from_state][to_state] += 1
-        
-        # 確率に変換
-        self.transition_matrix = {}
-        
-        for from_state, to_states in transition_counts.items():
-            total = sum(to_states.values())
-            self.transition_matrix[from_state] = {
-                to_state: count / total
-                for to_state, count in to_states.items()
-            }
+        transition_statistics = compute_transition_statistics(
+            compressed_sequence
+        )
+        self.state_occurrences = transition_statistics.occurrences
+        self.transition_matrix = transition_statistics.probabilities
         
         print(f"  遷移パターン数: {sum(len(v) for v in self.transition_matrix.values())}")
         
@@ -643,6 +637,7 @@ class StateTransitionVisualizer:
         self.mode_transition_matrices = {}
         self.mode_state_occurrences = {}
         self.mode_state_sequences = {}
+        mapping_cache: Dict[StateVector, MappedState] = {}
         
         for mode_name, (start_time, end_time) in self.time_modes.items():
             print(f"\n  モード '{mode_name}' ({start_time} - {end_time}) を処理中...")
@@ -657,31 +652,11 @@ class StateTransitionVisualizer:
             
             print(f"    データ行数: {len(filtered_df)}")
             
-            # このモードのデータで状態パターンを作成（既存の代表状態を使用）
-            mode_sequence = []
-            other_count = 0
-            
-            for idx, row in filtered_df.iterrows():
-                current_state = tuple(row.values)
-                
-                if current_state in self.representative_states:
-                    mode_sequence.append(current_state)
-                else:
-                    # 最も近い代表状態を探す
-                    min_distance = float('inf')
-                    closest_state = None
-                    
-                    for rep_state in self.representative_states:
-                        distance = self._compute_hamming_distance(current_state, rep_state)
-                        if distance < min_distance:
-                            min_distance = distance
-                            closest_state = rep_state
-                    
-                    if min_distance <= self.hamming_threshold:
-                        mode_sequence.append(closest_state)
-                    else:
-                        mode_sequence.append('Other')
-                        other_count += 1
+            # 代表状態順と閾値を維持しつつ、同じ生状態の距離計算を再利用する。
+            mode_sequence = self._map_state_vectors(
+                filtered_df,
+                mapping_cache=mapping_cache,
+            )
             
             # パターンが空の場合はスキップ
             if len(mode_sequence) == 0:
@@ -691,8 +666,7 @@ class StateTransitionVisualizer:
             self.mode_state_sequences[mode_name] = mode_sequence
             
             # 自己遷移を圧縮
-            compressed_sequence = [s for i, s in enumerate(mode_sequence)
-                                    if i == 0 or s != mode_sequence[i - 1]]
+            compressed_sequence = compress_consecutive_states(mode_sequence)
             
             print(f"    パターン長: {len(mode_sequence)} -> 圧縮後: {len(compressed_sequence)}")
             
@@ -701,22 +675,19 @@ class StateTransitionVisualizer:
                 print(f"    Warning: Mode '{mode_name}' has insufficient transitions. Skipping...")
                 continue
             
-            # 出現回数をカウント
-            occurrence_counter = Counter(compressed_sequence)
-            self.mode_state_occurrences[mode_name] = dict(occurrence_counter)
+            transition_statistics = compute_transition_statistics(
+                compressed_sequence
+            )
+            self.mode_state_occurrences[mode_name] = (
+                transition_statistics.occurrences
+            )
             
-            # このモードでの各状態の滞在時間を計算
-            mode_durations = {state: 0 for state in self.representative_states}
-            mode_durations['Other'] = 0
-            
-            timestamps = filtered_df.index
-            for i in range(len(mode_sequence)):
-                state = mode_sequence[i]
-                if i < len(timestamps) - 1:
-                    duration = (timestamps[i + 1] - timestamps[i]).total_seconds()
-                else:
-                    duration = 1.0
-                mode_durations[state] += duration
+            # 変化点の時刻差から、従来どおり最後の状態へ1秒を加えて集計する。
+            mode_durations = compute_state_durations(
+                state_sequence=mode_sequence,
+                timestamps=filtered_df.index,
+                known_states=[*self.representative_states, "Other"],
+            )
             
             # モード別の滞在時間を保存
             self.mode_state_durations[mode_name] = mode_durations
@@ -724,23 +695,7 @@ class StateTransitionVisualizer:
             # このモードの日数を計算
             self.mode_num_days[mode_name] = max(len(filtered_df.index.normalize().unique()), 1)
             
-            # 遷移回数をカウント
-            transition_counts = defaultdict(lambda: defaultdict(int))
-            
-            for i in range(len(compressed_sequence) - 1):
-                from_state = compressed_sequence[i]
-                to_state = compressed_sequence[i + 1]
-                transition_counts[from_state][to_state] += 1
-            
-            # 確率に変換
-            mode_transition_matrix = {}
-            
-            for from_state, to_states in transition_counts.items():
-                total = sum(to_states.values())
-                mode_transition_matrix[from_state] = {
-                    to_state: count / total
-                    for to_state, count in to_states.items()
-                }
+            mode_transition_matrix = transition_statistics.probabilities
             
             self.mode_transition_matrices[mode_name] = mode_transition_matrix
             
@@ -762,12 +717,10 @@ class StateTransitionVisualizer:
         """
         print("\nStep 7: 状態テーブル保存")
         
-        # 保存先ディレクトリが存在しない場合は作成
-        save_dir = os.path.dirname(filepath)
-        if save_dir and not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-        
-        with open(filepath, 'w', encoding='utf-8') as f:
+        output_path = Path(filepath)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with output_path.open('w', encoding='utf-8') as f:
             # ヘッダー行（状態とセンサーのリスト）
             header = ['状態'] + self.sensor_list
             f.write('\t'.join(header) + '\n')
@@ -787,6 +740,62 @@ class StateTransitionVisualizer:
         
         print(f"  状態テーブルを保存: {filepath}")
 
+    def _active_sensors_for_state(self, state: MappedState) -> List[str]:
+        """代表状態でONのセンサー名を状態表と同じ列順で返す。"""
+        if state == "Other":
+            return []
+        return [
+            sensor
+            for sensor, value in zip(self.sensor_list, state)
+            if int(value) == 1
+        ]
+
+    def _build_transition_export_payload(
+        self,
+        states: List[MappedState],
+        state_durations: Dict[MappedState, float],
+        num_days: int,
+        transition_matrix: Dict[MappedState, Dict[MappedState, float]],
+    ) -> Dict[str, List[Dict]]:
+        """状態一覧と遷移行列から既存契約のLLM入力JSONを組み立てる。
+
+        nodeとedgeは受け取った辞書・系列の挿入順を保持し、確率と1日平均滞在時間は
+        従来どおり小数3桁へ丸める。配列順と丸めはLLM入力を変え得るため固定する。
+        """
+        effective_days = max(num_days, 1)
+        nodes = []
+        for state in states:
+            duration_sec = state_durations.get(state, 0.0)
+            nodes.append(
+                {
+                    "state_id": self._state_to_label(state),
+                    "active_sensors": self._active_sensors_for_state(state),
+                    "avg_duration_minutes_per_day": round(
+                        (duration_sec / effective_days) / 60.0,
+                        3,
+                    ),
+                }
+            )
+
+        edges = [
+            {
+                "from": self._state_to_label(from_state),
+                "to": self._state_to_label(to_state),
+                "probability": round(float(probability), 3),
+            }
+            for from_state, transitions in transition_matrix.items()
+            for to_state, probability in transitions.items()
+        ]
+        return {"nodes": nodes, "edges": edges}
+
+    @staticmethod
+    def _write_json(filepath: str, payload: Dict) -> None:
+        """親ディレクトリを作成し、既存と同じUTF-8整形JSONを書き込む。"""
+        output_path = Path(filepath)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("w", encoding="utf-8") as output_file:
+            json.dump(payload, output_file, ensure_ascii=False, indent=2)
+
     def export_to_json(self, filepath: str):
         """
         状態遷移ネットワークをLLM向けJSON形式で保存
@@ -801,54 +810,17 @@ class StateTransitionVisualizer:
         if self.transition_matrix is None or not self.state_labels:
             raise ValueError("遷移行列または状態ラベルが未作成です。main() または各処理を先に実行してください。")
 
-        # ノード情報の作成
-        nodes = []
         all_states = list(self.representative_states)
         if 'Other' in self.state_durations:
             all_states.append('Other')
 
-        for state in all_states:
-            state_id = self._state_to_label(state)
-            duration_sec = self.state_durations.get(state, 0.0)
-            avg_minutes = (duration_sec / max(self.num_days, 1)) / 60.0
-
-            if state == 'Other':
-                active_sensors = []
-            else:
-                active_sensors = [
-                    sensor
-                    for sensor, value in zip(self.sensor_list, state)
-                    if int(value) == 1
-                ]
-
-            nodes.append({
-                "state_id": state_id,
-                "active_sensors": active_sensors,
-                "avg_duration_minutes_per_day": round(avg_minutes, 3)
-            })
-
-        # エッジ情報の作成
-        edges = []
-        for from_state, transitions in self.transition_matrix.items():
-            for to_state, prob in transitions.items():
-                edges.append({
-                    "from": self._state_to_label(from_state),
-                    "to": self._state_to_label(to_state),
-                    "probability": round(float(prob), 3)
-                })
-
-        export_data = {
-            "nodes": nodes,
-            "edges": edges
-        }
-
-        # 保存先ディレクトリが存在しない場合は作成
-        save_dir = os.path.dirname(filepath)
-        if save_dir and not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(export_data, f, ensure_ascii=False, indent=2)
+        export_data = self._build_transition_export_payload(
+            states=all_states,
+            state_durations=self.state_durations,
+            num_days=self.num_days,
+            transition_matrix=self.transition_matrix,
+        )
+        self._write_json(filepath, export_data)
 
         print(f"  JSONを保存: {filepath}")
 
@@ -873,57 +845,22 @@ class StateTransitionVisualizer:
         mode_occurrences = self.mode_state_occurrences.get(mode_name, {})
         mode_days = max(self.mode_num_days.get(mode_name, 1), 1)
 
-        # ノード情報の作成（当該モードで出現した状態のみ）
-        nodes = []
-        all_states = list(self.representative_states)
+        # 当該モードで出現した状態だけを、代表状態の既存順序で出力する。
+        all_states = [
+            state
+            for state in self.representative_states
+            if state in mode_occurrences
+        ]
         if 'Other' in mode_occurrences:
             all_states.append('Other')
 
-        for state in all_states:
-            if state not in mode_occurrences:
-                continue
-
-            state_id = self._state_to_label(state)
-            duration_sec = mode_durations.get(state, 0.0)
-            avg_minutes = (duration_sec / mode_days) / 60.0
-
-            if state == 'Other':
-                active_sensors = []
-            else:
-                active_sensors = [
-                    sensor
-                    for sensor, value in zip(self.sensor_list, state)
-                    if int(value) == 1
-                ]
-
-            nodes.append({
-                "state_id": state_id,
-                "active_sensors": active_sensors,
-                "avg_duration_minutes_per_day": round(avg_minutes, 3)
-            })
-
-        # エッジ情報の作成
-        edges = []
-        for from_state, transitions in mode_transition_matrix.items():
-            for to_state, prob in transitions.items():
-                edges.append({
-                    "from": self._state_to_label(from_state),
-                    "to": self._state_to_label(to_state),
-                    "probability": round(float(prob), 3)
-                })
-
-        export_data = {
-            "nodes": nodes,
-            "edges": edges
-        }
-
-        # 保存先ディレクトリが存在しない場合は作成
-        save_dir = os.path.dirname(filepath)
-        if save_dir and not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(export_data, f, ensure_ascii=False, indent=2)
+        export_data = self._build_transition_export_payload(
+            states=all_states,
+            state_durations=mode_durations,
+            num_days=mode_days,
+            transition_matrix=mode_transition_matrix,
+        )
+        self._write_json(filepath, export_data)
 
         print(f"    JSON保存完了: {filepath}")
 
@@ -1498,7 +1435,7 @@ class StateTransitionVisualizer:
         
         # 全期間のJSONは後段のLLM・評価が参照するため保存する。
         # 全期間（all）の図は生成しない。
-        json_path = os.path.join(save_folder, "state_transition_all.json")
+        json_path = str(Path(save_folder) / "state_transition_all.json")
         self.export_to_json(json_path)
         
         self.save_state_table(state_table_path)
@@ -1524,19 +1461,21 @@ class StateTransitionVisualizer:
     
     def _generate_save_folder(self, filepath: str) -> Tuple[str, Optional[str], str]:
         """保存先フォルダと各ファイルパスを生成"""
-        data_filename = os.path.splitext(os.path.basename(filepath))[0]
+        data_filename = Path(filepath).stem
         
         # 保存先フォルダ: picture/データセット名_代表状態数_ハミング距離閾値/
-        save_folder = f"picture/{data_filename}_{self.n_representative_states}_{self.hamming_threshold}_{self.data_duration_days}days"
+        parameter_suffix = (
+            f"{data_filename}_{self.n_representative_states}_"
+            f"{self.hamming_threshold}_{self.data_duration_days}days"
+        )
+        save_folder = Path("picture") / parameter_suffix
         
-        # フォルダを作成
-        if not os.path.exists(save_folder):
-            os.makedirs(save_folder)
+        save_folder.mkdir(parents=True, exist_ok=True)
         
         # 状態テーブル保存パス
-        state_table_path = f"state/{data_filename}_{self.n_representative_states}_{self.hamming_threshold}_{self.data_duration_days}days.txt"
+        state_table_path = Path("state") / f"{parameter_suffix}.txt"
         
-        return save_folder, None, state_table_path
+        return str(save_folder), None, str(state_table_path)
 
 
 if __name__ == "__main__":

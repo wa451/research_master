@@ -6,12 +6,13 @@
 
 ## 実行条件と入力
 
-評価8は次の2条件を別々に実行・保存する。両者を同じCSVや出力ディレクトリへ混在させない。
+正式分析は次の2条件を別々に実行・保存する。加えて、過去の30日詳細CSVを読むためのCLI互換scopeがある。各条件を同じCSVや出力ディレクトリへ混在させない。
 
 | 条件 | scope | 入力 | 出力先 |
 |---|---|---|---|
 | 14日・手法比較 | `comparison_14days` | 評価6のproposed / direct-log詳細CSV | `results/8_vs_llm_own_id_fixed/` |
 | 154日・提案手法のみ | `proposed_154days` | 154日提案手法JSON 5 run、抽出時と同じ前処理で生成したstate series、ADL正解データ | `results/8_proposed_own_id_fixed/` |
+| 30日・手法比較（互換） | `comparison_30days` | 過去に生成した30日評価6詳細CSV | 14日と異なる明示先（例: `results/8_vs_llm_30days_own_id_fixed/`） |
 
 ### 14日・手法比較
 
@@ -34,6 +35,10 @@
 `state_series`、`match_mode`、skip条件を読む。summaryにstate seriesがない場合は
 `--state-series` を明示する。旧詳細CSVに `num_occurrences` が存在していても、
 state seriesを特定できなければ停止する。
+
+### 30日・手法比較（互換scope）
+
+`comparison_30days` は過去の30日詳細CSVを再利用するCLI互換scopeであり、正式分析の標準scopeではない。現行実装は詳細CSVの対象期間が30日条件かを検証せず、`--output-dir` を省略すると14日比較と同じ `results/8_vs_llm_own_id_fixed/` を使う。期間の妥当性を入力summaryとパスで確認し、14日結果を上書きしない別出力先を必ず明示する。この制約は [KI-10](known_issues.md#ki-10) で追跡している。
 
 ### 154日・提案手法のみ
 
@@ -124,7 +129,7 @@ ADL集合指標は空帯では定義できないため、パターンが存在�
 |---|---|
 | `evaluation8_frequency_band_details.csv` | 評価6の詳細に修正前・修正後出現数、差分、fallback、重複監査、頻度帯を加えたレコード単位出力。 |
 | `evaluation8_by_frequency_band.csv` | 頻度帯別の全run平均・標本標準偏差。 |
-| `evaluation8_by_frequency_band_by_method.csv` | 14日・手法比較だけで出力するmethod × frequency band別集計。提案手法のみでは重複するため出力しない。 |
+| `evaluation8_by_frequency_band_by_method.csv` | 14日・30日のcomparison scopeで出力するmethod × frequency band別集計。提案手法のみでは重複するため出力しない。 |
 | `evaluation8_by_frequency_band_by_run.csv` | method × run × frequency bandの集計。 |
 | `evaluation8_occurrence_weighted_summary.csv` | methodごとの全体occurrence-weighted指標のrun平均・標本標準偏差。 |
 | `evaluation8_summary.json` | 入力、有効期間、ID・一意化方針、tie方針、run別結果、平均、重み総和検証を記録する再現用summary。 |
@@ -166,6 +171,17 @@ uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
   --evaluation6-details results/6_adl_match/15_0_14days/evaluation6_pattern_set_details_by_method.csv \
   --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
   --output-dir results/8_vs_llm_own_id_fixed \
+  --frequency-band-mode tertile
+```
+
+### 30日・手法比較（互換scope）
+
+```bash
+uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
+  --analysis-scope comparison_30days \
+  --evaluation6-details results/6_adl_match/15_0_30days/evaluation6_pattern_set_details_by_method.csv \
+  --state-series output/6_adl_evaluation_15_0_30days/state_series.csv \
+  --output-dir results/8_vs_llm_30days_own_id_fixed \
   --frequency-band-mode tertile
 ```
 
@@ -232,4 +248,4 @@ uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
   --frequency-band-mode tertile
 ```
 
-14日比較の結果は `evaluation8_by_frequency_band_by_method.csv`、154日提案手法のみの結果は `evaluation8_by_frequency_band.csv` でLow / Middle / Highの `conditional_mean_*` と `end_to_end_mean_*` を区別して比較する。後方互換列 `mean_multilabel_precision`, `mean_multilabel_recall`, `mean_multilabel_f1` はend-to-endを表す。高頻度帯のPrecisionが高いかは、その値を確認して判断し、頻度のみから有用性を結論付けない。
+14日・30日comparison scopeの結果は `evaluation8_by_frequency_band_by_method.csv`、154日提案手法のみの結果は `evaluation8_by_frequency_band.csv` でLow / Middle / Highの `conditional_mean_*` と `end_to_end_mean_*` を区別して比較する。後方互換列 `mean_multilabel_precision`, `mean_multilabel_recall`, `mean_multilabel_f1` はend-to-endを表す。高頻度帯のPrecisionが高いかは、その値を確認して判断し、頻度のみから有用性を結論付けない。

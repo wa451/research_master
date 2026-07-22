@@ -1,221 +1,122 @@
 # 論文掲載用パラメータ一覧
 
-本研究で使用した主要なパラメータを以下にまとめています。論文本体には、以下の「コア設定値」セクションの値を明示してください。
+この文書は、論文・発表で参照する主要条件をまとめる。評価4〜8に固有の閾値・分母・splitは各評価文書を正本とし、ここでは共通条件を繰り返さない。
 
----
+## 1. 論文採用条件と共通既定値
 
-## 1. コア設定値（論文に必須記載）
+| 項目 | 論文採用条件 | `configs/default.yaml` | 注意 |
+|---|---:|---:|---|
+| データセット | `aruba` | `aruba` | 通常ログは先頭154日 |
+| 代表状態数 K | `15` | `15` | 圧縮後の頻度上位K状態 |
+| ハミング距離閾値 h | `0` | `1` | 採用条件は完全一致のみ。二重標準は [KI-01](known_issues.md) |
+| サンプリング間隔 | `1s` | `1s` | Sample-and-Hold |
+| 遅延OFF窓幅 | `5`秒 | `5`秒 | センサーOFFを遅延させる平滑化 |
+| 分析期間 | `154`日 | `154`日 | 評価6などはLLM入力14日を別途使用 |
 
-### 1.1 状態遷移ネットワーク構築 (`scripts/run_build_network.py`, `src/behavior_pattern_mining/visualization/state_transition_visualizer.py`)
+論文条件を示す成果物には `{K}_{h}_{days}days` のsuffixを使う。`h=0` と `h=1` の成果物を同じ評価へ混在させない。
 
-| パラメータ | 値 | 説明 |
-|-----------|-----|------|
-| **代表状態の数（K）** | 15 | 頻度上位K個の状態パターンを選定 |
-| **ハミング距離の閾値** | 0 | 完全一致する代表状態だけへ割り当て、それ以外はOther扱い |
-| **最小遷移確率（可視化）** | 0.1 | グラフ表示時の最小エッジ閾値 |
-| **データ期間** | 154日 | 分析対象の日数 |
-| **データ期間比率** | 0.7 | 全体日数の70%を使用する場合の設定値 |
-| **サンプリング間隔** | 1秒 | 状態ベクトル化の時間粒度 |
-| **遅延OFF窓幅** | 5秒 | チャタリング除去時のスムージング窓（秒） |
+## 2. 状態遷移ネットワーク
 
-**時間帯モード定義:**
-- Morning: 06:00 - 10:00
-- Daytime: 10:00 - 18:00
-- Night: 18:00 - 24:00 (次日00:00)
-- Midnight: 00:00 - 06:00
+| パラメータ | 値 |
+|---|---:|
+| 可視化する最小遷移確率 | `0.1` |
+| 連続自己状態 | 圧縮して除外 |
+| 遷移確率の分母 | 同じfrom状態から出る遷移回数 |
 
----
+時間帯は次の4区分である。
 
-### 1.2 ベースライン手法チェーン（遷移確率ベース）
+| mode | 時刻範囲 |
+|---|---|
+| Morning | 06:00–10:00 |
+| Daytime | 10:00–18:00 |
+| Night | 18:00–24:00 |
+| Midnight | 00:00–06:00 |
 
-#### 確率的閾値抽出 (`scripts/run_baselines.py`, `src/behavior_pattern_mining/baselines/transition_probability.py`)
+全期間と4時間帯のnetwork JSONを出力する。遷移図は時間帯ごとのPNG/EPS、timelineは時間帯ごとのPNGだけを出力し、全期間図は生成しない。
 
-| パラメータ | 値 | 説明 |
-|-----------|-----|------|
-| **遷移確率の閾値** | 0.2 | 20%以上の遷移エッジのみ選定 |
-| **最小系列長** | 2 | 検出する行動パターンの最小ノード数 |
-| **最大系列長** | 4 | 検出する行動パターンの最大ノード数 |
-| **除外状態** | "その他" | フィルタリング対象の状態 |
-| **状態の再訪許可** | False | 同じ状態を複数回通過することを禁止 |
-| **TOP_N** | 0 | 0の場合は条件を満たす全パターンを抽出（件数制限なし） |
+## 3. 通常baseline
 
----
+### 3.1 遷移確率baseline
 
-### 1.3 LLM抽出手法 (`scripts/run_llm_extraction.py`, `src/behavior_pattern_mining/llm/pattern_extractor.py`)
+| パラメータ | 値 |
+|---|---:|
+| 遷移確率閾値 | `0.2` |
+| 系列長 | `2`〜`4` |
+| 除外状態 | `その他` |
+| 同一状態の再訪 | 不許可 |
+| 出力上限 | `0`（上限なし） |
 
-| パラメータ | 値 | 説明 |
-|-----------|-----|------|
-| **モデル名** | gemini-2.5-pro | Google Gemini APIモデル |
-| **温度（Temperature）** | 0.2 | 出力の決定性（低いほど確定的） |
-| **時間帯別分析** | 有効 | 4つのモード別にPromptを実行 |
-| **入力形式** | JSON | 状態遷移ネットワークの構造化データ |
+閾値0.2はfrom状態内の相対遷移確率に対するアルゴリズム条件であり、複数日の反復を直接保証しない。過去の根拠表現は [KI-13](known_issues.md) として判断保留である。
 
-**Prompt仕様:**
-- タスク: 状態遷移グラフから生活行動パターンを抽出
-- 出力制約: 
-  - パターン長: 2〜4ノード
-  - 形式: 「パターン名」「ADL系列ラベル」「解釈の根拠」「遷移のパターン」を含むJSON
-  - 遷移確率20%以上のエッジを重点的に検討するが、硬い除外閾値にはしない
-  - 自己遷移、機械的な交互反復、生活文脈を説明できない系列を除外する
+### 3.2 頻度baseline
 
----
+| パラメータ | 値 |
+|---|---:|
+| 系列長 | `2`〜`4` |
+| 出力上限 | 上位`50`件 |
+| 連続同一状態 | 圧縮 |
 
-### 1.4 評価指標 (`scripts/run_evaluation.py`, `src/behavior_pattern_mining/evaluation/compare_patterns.py`)
+通常baselineは遷移確率と頻度の2種である。評価5のFP-Growth系baselineは評価5内部の比較手法であり、通常pipelineへ含めない。
 
-| パラメータ | 値 | 説明 |
-|-----------|-----|------|
-| **評価対象スコープ** | modes_only | 時間帯モード別の結果のみを評価 |
-| **ベースライン1（確率的）** | prob_threshold_sequences | 遷移確率0.2以上のパターン |
-| **ベースライン2（頻度ベース）** | state_sequence_counts | 状態遷移の頻出度による抽出 |
-| **LLM出力** | llm_sequences_modes | 4時間帯×LLM抽出の統合結果 |
-| **部分一致許可（ベース⊇LLM）** | False | 完全一致のみをTP判定 |
-| **部分一致許可（LLM⊇ベース）** | False | 完全一致のみをTP判定 |
+## 4. LLM抽出
 
-**評価指標:**
-- **Precision**: TP / (TP + FP) — LLMが提案したパターンがベースラインに存在する割合
-- **Recall**: TP / (TP + FN) — ベースラインが見つけた頻出パターンをLLMが拾い上げた割合
-- **F1-score**: 2 × Precision × Recall / (Precision + Recall) — バランス指標
+| パラメータ | 値 |
+|---|---|
+| provider | Google Gemini |
+| model | `gemini-2.5-pro` |
+| temperature | `0.2` |
+| 入力 | 4時間帯の状態遷移network JSON |
+| 出力系列長 | `2`〜`4` |
+| 通常run数 | `1` |
+| batch run数 | `5` |
+| 最大retry | runあたり`3` |
 
----
+提案手法は `prompts/pattern_extraction_prompt.md` を実行時に読み、JSON要素として `パターン名`, `ADL系列ラベル`, `解釈の根拠`, `遷移のパターン` を扱う。同じ遷移系列は統合し、時間帯固有の解釈を `time_band_interpretations` に保持する。prompt、model、temperature、API呼び出し条件は研究条件であり、別作業のついでに変更しない。
 
-## 2. 実験実行設定 (`scripts/run_llm_eval_batch.py`)
+5 runは安定性確認のための設定だが、現在のbatch処理ではrun 1のcheckpointを再利用し得る。独立5試行として扱えるかは [KI-02](known_issues.md) を参照する。
 
-| パラメータ | 値 | 説明 |
-|-----------|-----|------|
-| **実行回数** | 5 | LLM復数回実行による評価指標の安定性確認 |
-| **最大リトライ回数** | 3 | API失敗時（トークン上限等）の再試行上限 |
-| **実行間隔** | 0秒 | 試行間の待機時間 |
+## 5. 評価1〜3の共通比較条件
 
----
+| 項目 | 現在の条件 |
+|---|---|
+| scope | 時間帯mode結果 |
+| 比較対象 | 提案手法 vs 遷移確率baseline、提案手法 vs 頻度baseline |
+| 一致 | 完全一致。両方向の包含一致は無効 |
+| 指標 | Precision、Recall、F1 |
 
-## 3. 関連技術仕様
+- Precision = TP / (TP + FP)
+- Recall = TP / (TP + FN)
+- F1 = 2 × Precision × Recall / (Precision + Recall)
 
-### 3.1 状態ベクトル化
-- **形式**: 各センサーのON/OFF状態を1秒ごとに記録
-- **圧縮**: 連続する同じ状態ベクトルを除去し、遷移点のみ保持
-- **状態マッピング**: 採用条件はh=0であり、代表状態との完全一致がない状態は"その他"に分類
+評価2のExcelはrun別値と平均を出すが標準偏差を出さない。評価3の写像・条件伝播・Excel集計にも未解決差があるため、[KI-03](known_issues.md)、[KI-04](known_issues.md)、[KI-05](known_issues.md) を参照する。
 
-### 3.2 時間帯モード分析
-- 各モードについて個別に遷移確率行列を計算
-- モード外のイベントは評価対象外
-- JSONエクスポートは全体版＋4モード版＝5ファイル
+## 6. 現行の主要成果物名
 
-### 3.3 LLM統合
-- **入力**: 時刻帯別の状態遷移JSON（ノード＆エッジリスト）
-- **推論プロセス**: 
-  1. 主要状態（長滞在時間、特徴的センサー配置）の解釈
-  2. 遷移確率20%以上のエッジをたどる行動ストーリー抽出
-  3. JSONフォーマットで出力
-- **時間帯別解釈の保持**: 同じ遷移パターンは1つのグループにまとめるが、`time_band_interpretations` に時間帯別のパターン名・ADL系列ラベル・解釈根拠を保持する
+| 成果物 | パスパターン |
+|---|---|
+| 代表状態表 | `state/aruba_{K}_{h}_{days}days.txt` |
+| 全期間network | `picture/aruba_{K}_{h}_{days}days/state_transition_all.json` |
+| 時間帯network | `picture/aruba_{K}_{h}_{days}days/state_transition_{mode}.json` |
+| 遷移図 | `picture/aruba_{K}_{h}_{days}days/state_transition_{mode}.{png,eps}` |
+| timeline | `picture/aruba_{K}_{h}_{days}days/timeline_{mode}.png` |
+| 遷移確率baseline | `output/aruba_{K}_{h}_{days}days/prob_threshold_sequences_{K}_{h}_{days}days.json` |
+| 頻度baseline | `output/aruba_{K}_{h}_{days}days/state_sequence_counts_{K}_{h}_{days}days.json` |
+| 提案手法 | `output/aruba_{K}_{h}_{days}days/llm_sequences_modes_{K}_{h}_{days}days_{run}.json` |
+| run別比較レポート | `output/aruba_{K}_{h}_{days}days/evaluation_report_{K}_{h}_{days}days_{run}.txt` |
+| batch Excel | `output/aruba_{K}_{h}_{days}days/llm_eval_runs_{K}_{h}_{days}days.xlsx` |
 
----
+Excelのsheet名、列名、後段評価のCSV/JSONは実装と各評価文書を参照し、過去文書の表記を出力契約として推測しない。
 
-## 4. 出力ファイル構成
+## 7. 採用条件の位置付け
 
-### 4.1 ベースライン出力
-```
-output/
-├── prob_threshold_sequences_154days.json
-│   └── [{"states": [...], "probability": ...}, ...]
-└── state_sequence_counts_154days.json
-    └── [{"states": [...], "frequency": ...}, ...]
-```
+- K=15は、30日入力の候補条件を比較し、上位条件を5 runで評価した結果とnetworkの簡潔さを踏まえた採用値である。K=20との差は小さく、統計的に唯一の最適値とは位置付けない。詳細は [evaluation_7_parameter_sensitivity_adl_interpretation.md](evaluation_7_parameter_sensitivity_adl_interpretation.md) を参照する。
+- 系列長2〜4は、最小の遷移から短い行動シナリオまでを扱い、長すぎる系列の解釈困難を避ける条件である。
+- temperature 0.2は、パターン列挙で出力のばらつきを抑えるための設定である。
 
-### 4.2 LLM出力
-```
-output/
-├── llm_sequences_modes_154days.json
-│   └── [{"パターン名": "...", "遷移のパターン": [...]}, ...]
-└── batch_YYYYMMDD_HHMMSS/
-    ├── llm_sequences_modes_154days_1.json (Run 1)
-    ├── llm_sequences_modes_154days_2.json (Run 2)
-    ├── llm_sequences_modes_154days_3.json (Run 3)
-    ├── llm_sequences_modes_154days_4.json (Run 4)
-    ├── llm_sequences_modes_154days_5.json (Run 5)
-    ├── evaluation_report_154days_1.txt
-    ├── evaluation_report_154days_2.txt
-    └── llm_eval_runs_154days.xlsx
-        - Sheet: "Metrics"
-        - Columns: Run | Prob_Precision | Prob_Recall | Prob_F1 | State_Precision | State_Recall | State_F1
-        - Last Row: Average metrics across all runs
-```
+評価4〜8の正式条件、指標、分母、出力は次の個別文書に置く。
 
-### 4.3 可視化出力
-```
-picture/
-├── aruba_15_0_154days/
-│   ├── state_transition_all.json
-│   ├── state_transition_Morning.png
-│   ├── state_transition_Morning.json
-│   ├── state_transition_Daytime.png
-│   ├── state_transition_Daytime.json
-│   ├── state_transition_Night.png
-│   ├── state_transition_Night.json
-│   ├── state_transition_Midnight.png
-│   ├── state_transition_Midnight.json
-│   ├── timeline_Morning.png
-│   ├── timeline_Daytime.png
-│   ├── timeline_Night.png
-│   └── timeline_Midnight.png
-└── state/
-    └── state_state_aruba_15_0_154days.txt
-        - 代表状態の詳細（センサー配置）
-```
-
----
-
-## 5. 論文の「方法」セクションで推奨される記述
-
-### 5.1 参考テンプレート
-
-**「本研究では以下のパラメータ設定を採用した：」**
-
-1. **状態遷移ネットワーク構築:**
-   - 代表状態K=15（頻度上位）
-   - ハミング距離閾値=0
-   - サンプリング間隔1秒、遅延OFF窓幅5秒によるセンサーノイズ除去
-
-2. **ベースライン手法（確率的）:**
-   - 遷移確率20%以上のエッジを選定
-   - 系列長2〜4ノードの組み合わせを列挙
-   - 同一状態の再訪は禁止
-
-3. **LLM手法:**
-   - モデル: Gemini 2.5 Pro (温度0.2)
-   - 時間帯モード4分割での施行
-   - 遷移確率20%以上をPromptで咀嚼させる
-
-4. **評価:**
-   - Precision/Recall/F1スコアで比較
-   - 完全一致のみをTP判定
-   - 5回の試行で平均値を算出
-
----
-
-## 6. 補考：パラメータの根拠
-
-### なぜK=15か
-- 30日入力の候補条件比較で5試行平均のMulti-label F1が最も高かった
-- K=20との差は小さく、統計的に唯一の最適値とは位置付けない
-- 平均性能と状態遷移ネットワークの簡潔さを考慮した本実験条件での採用値
-
-### なぜ閾値0.2か
-- 20%以上の遷移確率 = 「複数日で繰り返されやすい」の目安
-- 1回限りの偶発的な遷移を除外
-
-### なぜパターン長2〜4か
-- 2: 最小の「意味を持つ行動」（A→B）
-- 4: 短期の「行動シナリオ」（A→B→C→D）
-- 5以上は単に長く、解釈が困難になるため
-
-### なぜ温度0.2か
-- 確定的な出力（低温度）で一貫性を確保
-- 創造性が不要なタスク（パターン列挙）に適切
-
----
-
-## 7. 改変履歴
-
-| 版 | 日付 | 変更内容 |
-|-----|------|---------|
-| 1.0 | 2026-04-28 | 初版テンプレート作成 |
+- [評価4](evaluation_4_labeled_casas_adl.md)
+- [評価5](evaluation_5_adl_correspondence.md)
+- [評価6](evaluation_6_adl_interpretation_set.md)
+- [評価7](evaluation_7_parameter_sensitivity_adl_interpretation.md)
+- [評価8](evaluation_8_frequency_stratified_adl_consistency.md)
