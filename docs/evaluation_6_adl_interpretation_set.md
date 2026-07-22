@@ -53,7 +53,7 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 |---|---|
 | `results/6_adl_match/15_0_14days/evaluation6_method_comparison.csv` | 提案手法とLLM単独ベースラインの主比較表。`--runs` が2以上の場合はrun平均と標準偏差。 |
 | `results/6_adl_match/15_0_14days/evaluation6_method_comparison_by_run.csv` | runごとの手法別summary。5回平均の元データ。 |
-| `results/6_adl_match/15_0_14days/evaluation6_llm_usage_comparison.csv` | 手法ごとの記録済み1 run合計トークン数・API応答時間。欠損runは0で補完せず、完全な記録があるrun数を併記する。 |
+| `results/6_adl_match/15_0_14days/evaluation6_llm_usage_comparison.csv` | 手法ごとの記録済み1 run合計トークン数・API応答時間。`prompt_tokens`、`response_tokens`、`total_tokens` はそれぞれGemini APIの `promptTokenCount`、`candidatesTokenCount`、`totalTokenCount` に対応する。欠損runは0で補完せず、完全な記録があるrun数を併記する。 |
 | `results/6_adl_match/15_0_14days/evaluation6_pattern_set_details_by_method.csv` | 手法別・パターン別詳細。4状態、raw/unknown予測ラベル、conditional/end-to-end指標、境界横断監査を含む。`num_occurrences` は評価8の監査前件数として保持する。 |
 | `results/6_adl_match/15_0_14days/evaluation6_by_pred_label_by_method.csv` | 手法別・予測ラベル別集計。 |
 | `results/6_adl_match/15_0_14days/evaluation6_by_true_label_by_method.csv` | 手法別・正解ラベル別集計。 |
@@ -309,6 +309,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 - `duration_sec` はGemini APIの応答待ち時間であり、前処理・プロンプト構築・ファイル保存を含む全工程時間ではない。
 - パース失敗などの失敗API呼び出しは既存メトリクスに含まれない。
 - 4時間帯のいずれか、または必要なメトリクス値が欠けたrunは0として補わず平均から除外し、`num_runs_with_complete_metrics` と `evaluation6_comparison_summary.json` の `missing_metrics` に記録する。
+- Gemini APIでは `totalTokenCount = promptTokenCount + thoughtsTokenCount + candidatesTokenCount` である。`cachedContentTokenCount` はキャッシュ部分の内数であり `promptTokenCount` に含まれる。本実験はツール呼出し、コンテキストキャッシュ、および `systemInstruction` を設定していない。プロンプト文面は `contents` として入力側に渡す。既存CSVは思考トークン列を保存していないため、既存結果については `total_tokens - prompt_tokens - response_tokens` を思考トークン数として復元する。したがって、`total_tokens` を入力と可視出力の単純和として扱わない。
 
 ### 提案手法LLM JSONの統合形式
 
