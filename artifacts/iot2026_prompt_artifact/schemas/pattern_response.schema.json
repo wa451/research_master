@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Normalized per-call pattern response",
+  "description": "Expected response contract stated in both experiment prompts and consumed after parser normalization. This schema was not passed to the Gemini API.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "パターン名",
+      "ADL系列ラベル",
+      "解釈の根拠",
+      "遷移のパターン"
+    ],
+    "properties": {
+      "パターン名": {
+        "type": "string"
+      },
+      "ADL系列ラベル": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string",
+          "enum": [
+            "Sleep",
+            "Wake-up",
+            "Meal",
+            "Relax",
+            "Outing",
+            "Hygiene",
+            "Toileting",
+            "Housework",
+            "Work",
+            "Other"
+          ]
+        }
+      },
+      "解釈の根拠": {
+        "type": "string"
+      },
+      "遷移のパターン": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 4,
+        "items": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

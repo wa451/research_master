@@ -1,0 +1,25 @@
+{
+  "nodes": [
+    {
+      "state_id": "状態1",
+      "active_sensors": [
+        "Bedroom"
+      ],
+      "avg_duration_minutes_per_day": 120.0
+    },
+    {
+      "state_id": "状態2",
+      "active_sensors": [
+        "Kitchen"
+      ],
+      "avg_duration_minutes_per_day": 45.0
+    }
+  ],
+  "edges": [
+    {
+      "from": "状態1",
+      "to": "状態2",
+      "probability": 0.35
+    }
+  ]
+}

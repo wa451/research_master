@@ -13,6 +13,10 @@
 2. Inspect the implementation, tests, configuration, and actual CLI definition. Run `--help` only after confirming the entry point uses `argparse` and exits safely.
 3. Treat code as evidence of current behavior, not automatic proof of research intent. If sources conflict, classify and report the conflict instead of guessing or legitimizing a suspected bug as specification.
 
+## 過去のエージェント履歴
+
+研究条件、評価定義、分母、データ期間、パラメータ、出力仕様、または過去の設計判断に関係する変更では、作業前に `ctx-agent-history-search` スキルを使用して現在のワークスペースの関連履歴を確認する。履歴は根拠として参照するが、現在のコード、`docs/`、CLI引数、および本ファイルの指示を優先する。
+
 ## Skills
 
 - Use `research-evaluation` for numbered evaluation logic, metrics, CLIs, or tests; `baseline-implementation` for comparison algorithms; and `streamlit-evaluation-dashboard` for `app/` changes.
