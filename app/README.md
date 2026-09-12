@@ -19,3 +19,7 @@ uv run streamlit run app/streamlit_app.py
 結果タブでは、各評価READMEの「結果の読み方」に沿って表示ファイルを並べ、CSVは表示するカラムを選択できます。
 
 詳細な使い方、評価ごとの設定項目、ステップ、ログ、結果比較は `docs/evaluation_streamlit_dashboard.md` を参照してください。
+
+## 評価9: Hestia合成ログ
+
+Hestiaは `master-research/Hestia/` に配置する。Webアプリの「評価9」または `uv run python scripts/evaluate_9_hestia.py` でログ生成から採点まで実行できる（既定はAPIなし）。配置・入力契約・指標・実行方法は [評価9のガイド](../docs/evaluation_9_hestia.md) を参照。

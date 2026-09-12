@@ -1,4 +1,4 @@
-"""Local Streamlit dashboard for Evaluation 4 through Evaluation 8."""
+"""Local Streamlit dashboard for Evaluation 4 through Evaluation 9."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from app.command_builder import (  # noqa: E402
     build_evaluation6_steps,
     build_evaluation7_steps,
     build_evaluation8_steps,
+    build_evaluation9_steps,
     command_preview,
     default_direct_path,
     default_proposed_path,
@@ -203,6 +204,19 @@ RESULT_FILE_ORDER: dict[str, list[str]] = {
 }
 
 
+RESULT_GUIDES["評価9"] = [
+    {
+        "files": "evaluation9_summary.csv",
+        "how_to_read": "condition・method別にcomplete/missing/invalidとcomplete_seedsを先に確認します。回収率、対象活動coverage、Other時間割合、ADL macro-F1の平均・標本標準偏差を読みます。1seedの標準偏差は空欄です。",
+    },
+    {
+        "files": "evaluation9_summary.json",
+        "how_to_read": "runsでseed・反復別のstatus、理由、指標・採点コードhashを確認します。欠落を0点にせず、不完全なseedを主集計から除外します。頻度対照のADL指標はnullです。",
+    },
+]
+RESULT_FILE_ORDER["評価9"] = ["evaluation9_summary.csv", "evaluation9_summary.json"]
+
+
 def parse_float_list(text: str) -> list[float]:
     values: list[float] = []
     for item in text.replace(",", " ").split():
@@ -229,7 +243,7 @@ def rel_default(path: Path) -> str:
 
 def common_sidebar() -> dict:
     st.sidebar.header("共通設定")
-    evaluation = st.sidebar.radio("評価を選択", ["評価4", "評価5", "評価6", "評価7", "評価8"], horizontal=True)
+    evaluation = st.sidebar.radio("評価を選択", ["評価4", "評価5", "評価6", "評価7", "評価8", "評価9"], horizontal=True)
     runner = st.sidebar.selectbox("Python実行方法", ["uv run python", "python"], index=0)
     run_name = st.sidebar.text_input("run名（ログ用）", "manual")
     smoothing_window_sec = st.sidebar.number_input(
@@ -238,13 +252,17 @@ def common_sidebar() -> dict:
         value=SMOOTHING_WINDOW_SEC,
         step=1,
         help="同じセンサの遅延OFF窓幅です。0で無効化します。",
+        disabled=evaluation == "評価9",
     )
     dry_run = st.sidebar.checkbox("dry-run（実行せずコマンドだけ記録）", value=False)
     st.sidebar.caption(
         "秒数を変更して既存条件を作り直す場合は「全ステップを再実行」を選んでください。"
         "現在の成果物名には秒数が含まれません。"
     )
-    st.sidebar.caption("seed / overwrite は既存CLI引数がないためUI化していません。")
+    if evaluation == "評価9":
+        st.sidebar.caption("評価9のseed・日数・平滑化は実験計画ファイルで指定します。共通の平滑化設定は評価9には適用しません。")
+    else:
+        st.sidebar.caption("seed / overwrite は既存CLI引数がないためUI化していません。")
     return {
         "evaluation": evaluation,
         "runner": runner,
@@ -815,6 +833,39 @@ def render_eval8_settings(common: dict) -> dict:
     }
 
 
+def render_eval9_settings(common: dict) -> dict:
+    st.subheader("評価9: Hestia合成ログによる系列回収・ADL意味対応")
+    st.caption("手順・指標: docs/evaluation_9_hestia.md。実Arubaの評価とは別に集計します。")
+    st.info("既定は4条件×1seed×4日のpilotです。平滑化・K・seed・日数は計画ファイルの値を使います。")
+    hestia_root = st.text_input("Hestiaディレクトリ", "Hestia")
+    plan = st.text_input(
+        "実験計画（JSON / YAML）", "Hestia/examples/experiments/noise_free_pilot.yaml"
+    )
+    experiment = st.text_input("生成ログ・中間成果物ディレクトリ", "output/9_hestia/pilot")
+    output_dir = st.text_input("評価9の集計先", "results/9_hestia/pilot")
+    method = st.selectbox("採点する手法", ["both", "frequency", "llm"])
+    allow_api = st.checkbox("LLM抽出のAPI呼出しを許可（費用が発生します）", value=False)
+    st.caption(
+        "既存のexperiment.jsonとruns/を持つ実験も指定できます。単体のStudio CSVはこの評価の入力契約とは異なります。"
+    )
+    st.caption(
+        "評価9は一括実行時も各段階のハッシュを検証します。完了済み生成・前処理・LLMは既存CLIが検証して再利用します。設定変更時は新しい出力先を指定してください。"
+    )
+    if allow_api:
+        st.warning(
+            "ステップ4または一括実行で有料APIを呼びます。先に許可OFFのステップ4でモデルと呼出し数を確認できます。"
+        )
+    return {
+        **common,
+        "hestia_root": hestia_root,
+        "plan": plan,
+        "experiment": experiment,
+        "output_dir": output_dir,
+        "method": method,
+        "allow_api": allow_api,
+    }
+
+
 def render_step(step: EvaluationStep, settings: dict) -> None:
     expanded = not (step.step_id.startswith("eval7_") and step.step_id != "eval7_evaluate")
     with st.expander(step.title, expanded=expanded):
@@ -871,6 +922,7 @@ FINAL_EVALUATION_STEP_IDS = {
     "eval5_evaluate",
     "eval6_compare",
     "eval7_evaluate",
+    "eval9_evaluate",
 }
 
 
@@ -893,13 +945,13 @@ def batch_target_steps(steps: list[EvaluationStep], mode: str) -> list[Evaluatio
         return [
             step
             for step in steps
-            if (is_batch_generation_step(step) and missing_expected_outputs(step))
+            if (is_batch_generation_step(step) and (step.verify_on_batch or missing_expected_outputs(step)))
             or is_final_evaluation_step(step)
         ]
     return [
         step
         for step in steps
-        if is_batch_generation_step(step) and missing_expected_outputs(step)
+        if is_batch_generation_step(step) and (step.verify_on_batch or missing_expected_outputs(step))
     ]
 
 
@@ -996,6 +1048,8 @@ def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
 
 def infer_evaluation_for_results(selected_dir: Path, files: list[Path], current_evaluation: str | None) -> str | None:
     names = {path.name for path in files}
+    if any(name.startswith("evaluation9_") for name in names):
+        return "評価9"
     if any(name.startswith("evaluation8_") for name in names):
         return "評価8"
     if any(name.startswith("evaluation7_") for name in names):
@@ -1185,7 +1239,7 @@ def default_result_dirs(settings: dict) -> list[Path]:
         return [PROJECT_ROOT / settings["output_dir"]]
     if evaluation == "評価7":
         return [PROJECT_ROOT / settings["output_dir"]]
-    if evaluation == "評価8":
+    if evaluation in ("評価8", "評価9"):
         return [PROJECT_ROOT / settings["output_dir"]]
     suffix = short_suffix(settings["n_states"], settings["hamming_threshold"], settings["days"])
     output_dir = PROJECT_ROOT / settings["output_dir"]
@@ -1213,9 +1267,12 @@ def main() -> None:
         elif common["evaluation"] == "評価7":
             settings = render_eval7_settings(common)
             steps = build_evaluation7_steps(settings)
-        else:
+        elif common["evaluation"] == "評価8":
             settings = render_eval8_settings(common)
             steps = build_evaluation8_steps(settings)
+        else:
+            settings = render_eval9_settings(common)
+            steps = build_evaluation9_steps(settings)
 
         st.markdown("### ステップ")
         render_batch_runner(steps, settings)

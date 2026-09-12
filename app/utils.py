@@ -127,6 +127,7 @@ def discover_result_files(base_dirs: Iterable[Path]) -> list[Path]:
 
 def discover_result_dirs() -> list[Path]:
     candidates = [
+        PROJECT_ROOT / "results" / "9_hestia",
         PROJECT_ROOT / "results" / "4_adl_detect",
         PROJECT_ROOT / "results" / "5_pattern_quality",
         PROJECT_ROOT / "results" / "5_pattern_quality_fixed",

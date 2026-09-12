@@ -1,13 +1,15 @@
 # Hestia生成データの統合手順
 
+Webアプリからの生成・提案手法の実行・正解ログによる採点は [評価9](evaluation_9_hestia.md) を参照する。本書は単体CASASログを従来の研究前処理へ渡す手順を扱う。
+
 ## 位置づけ
 
-`/Users/wataru/Desktop/Hestia`はHESTIA論文に着想を得た独立実装である。生成ログは既知scenarioとseedから再現可能なため、本研究パイプラインの機能試験、パラメータ感度確認、ADL対応関係のsanity checkに使える。一方、実Arubaのイベント点過程を統計的に代替するデータではない。
+`/Users/wataru/Desktop/master-research/Hestia`はHESTIA論文に着想を得た独立実装である。生成ログは既知scenarioとseedから再現可能なため、本研究パイプラインの機能試験、パラメータ感度確認、ADL対応関係のsanity checkに使える。一方、実Arubaのイベント点過程を統計的に代替するデータではない。
 
 ## 推奨入力
 
 ```bash
-cd /Users/wataru/Desktop/Hestia
+cd /Users/wataru/Desktop/master-research/Hestia
 uv sync --frozen
 uv run smart-home-sim simulate examples/aruba_single_resident.yaml \
   --days 7 --seed 42 --output outputs/hestia_aruba_7d_seed42
@@ -33,8 +35,8 @@ uv run smart-home-sim simulate examples/aruba_single_resident.yaml \
 ```bash
 cd /Users/wataru/Desktop/master-research
 uv run python scripts/run_build_network_from_labeled_casas.py \
-  --labeled-casas /Users/wataru/Desktop/Hestia/outputs/hestia_aruba_7d_seed42/casas_motion_door.txt \
-  --sensor-map /Users/wataru/Desktop/Hestia/outputs/hestia_aruba_7d_seed42/casas_sensor_map.json \
+  --labeled-casas /Users/wataru/Desktop/master-research/Hestia/outputs/hestia_aruba_7d_seed42/casas_motion_door.txt \
+  --sensor-map /Users/wataru/Desktop/master-research/Hestia/outputs/hestia_aruba_7d_seed42/casas_sensor_map.json \
   --keep-converted-csv /tmp/hestia_aruba_7d.csv \
   --days 7 --n-states 15 --hamming-threshold 0 --smoothing-window-sec 5
 ```
@@ -64,9 +66,9 @@ uv run python scripts/run_build_network_from_labeled_casas.py \
 
 ```bash
 uv run python scripts/evaluate_adl_labels.py \
-  --labeled-casas /Users/wataru/Desktop/Hestia/outputs/hestia_aruba_7d_seed42/casas_motion_door.txt \
+  --labeled-casas /Users/wataru/Desktop/master-research/Hestia/outputs/hestia_aruba_7d_seed42/casas_motion_door.txt \
   --state-table state/hestia_aruba_7d_15_0_7days.txt \
-  --sensor-map /Users/wataru/Desktop/Hestia/outputs/hestia_aruba_7d_seed42/casas_sensor_map.json \
+  --sensor-map /Users/wataru/Desktop/master-research/Hestia/outputs/hestia_aruba_7d_seed42/casas_sensor_map.json \
   --state-series-preprocessing network-equivalent \
   --smoothing-window-sec 5 --hamming-threshold 0 --state-series-days 7 \
   --write-state-series /tmp/hestia_aruba_7d_state_series.csv \

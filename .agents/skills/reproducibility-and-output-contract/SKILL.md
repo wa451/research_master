@@ -1,21 +1,12 @@
 ---
 name: reproducibility-and-output-contract
-description: Change repository-wide reproducibility, artifact placement, logging policy, or shared cross-pipeline CSV/JSON contracts. Excludes outputs local to one evaluation or baseline.
+description: Change repository-wide reproducibility, artifact placement, logging, or shared CSV/JSON contracts. Excludes evaluation-local outputs.
 ---
 
 # Reproducibility And Output Contract
 
-## Workflow
-
-1. Read `docs/artifact_policy.md`, `docs/experiment_reproduction.md`, `docs/known_issues.md`, and the relevant producer documentation.
-2. Inspect the producer, every downstream reader found with `rg`, tests, and representative existing headers or summary keys. Determine whether each artifact is an input, intermediate output, or paper-facing result.
-3. Preserve paths, field names, types, row grain, and defaults. Prefer additive fields; make a breaking migration only when explicitly requested and document compatibility impact.
-4. Keep reproduction metadata consistent with existing summaries, including the inputs and parameters needed to explain the run. Do not invent a universal schema when producers use different contracts.
-5. Never overwrite existing experiment artifacts during verification. Use a temporary or new output directory, do not add generated data to Git without explicit approval, and preserve any already tracked fixed artifacts.
-6. Update producer, consumers, documentation, and tests together.
-
-## Verification
-
-- Compare old and new CSV headers or JSON keys and test downstream readers.
-- Run a small deterministic fixture or dry run where available.
-- Report regenerated files, compatibility risks, and anything not reproducible locally.
+- Read relevant sections of [artifact_policy.md](../../../docs/artifact_policy.md), [experiment_reproduction.md](../../../docs/experiment_reproduction.md), [known_issues.md](../../../docs/known_issues.md), and the target producer's document.
+- Trace the changed path/field from producer to every reader with scoped `rg`; inspect tests and only representative headers/summary keys. Classify the artifact as input, intermediate, or paper result.
+- Preserve paths, names, types, row grain and defaults. Prefer additive fields; breaking migrations require an explicit request. Keep input/parameter metadata consistent with existing producer summaries rather than inventing a universal schema.
+- Update producer, consumers, docs and focused tests together. Verify headers/keys, downstream reading and deterministic fixture/dry-run behavior using temporary/new output; do not overwrite experiments or alter tracked fixed artifacts.
+- Report compatibility impact, regenerated files and anything not reproducible locally.

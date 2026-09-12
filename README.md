@@ -113,3 +113,7 @@ uv run python -m unittest discover -s tests
 - 文書と実装が異なる場合、実装は現在の挙動を示す証拠ですが、研究上の意図を自動的に確定しません。
 - 評価指標、閾値、分母、split、seed、run欠損処理、LLM設定、CSV/JSON契約を別作業のついでに変更しないでください。
 - 未解決事項を修正する場合は、[docs/known_issues.md](docs/known_issues.md) の影響範囲と過去結果の再評価要否を先に確認してください。
+
+## 評価9: Hestia合成ログ
+
+Hestiaは `master-research/Hestia/` に配置する。Webアプリの「評価9」または `uv run python scripts/evaluate_9_hestia.py` でログ生成から採点まで実行できる（既定はAPIなし）。配置・入力契約・指標・実行方法は [評価9のガイド](docs/evaluation_9_hestia.md) を参照。

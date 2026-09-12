@@ -23,3 +23,7 @@
 
 新しく実行する場合は、この `scripts/` 側を使ってください。
 CLI引数、正式評価条件、出力先は対応する `docs/evaluation_*.md` を参照し、共通既定値と論文採用値の差は `docs/known_issues.md` で確認してください。
+
+## 評価9: Hestia合成ログ
+
+Hestiaは `master-research/Hestia/` に配置する。Webアプリの「評価9」または `uv run python scripts/evaluate_9_hestia.py` でログ生成から採点まで実行できる（既定はAPIなし）。配置・入力契約・指標・実行方法は [評価9のガイド](../docs/evaluation_9_hestia.md) を参照。

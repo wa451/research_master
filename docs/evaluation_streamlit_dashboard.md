@@ -1,6 +1,6 @@
 # Streamlit Evaluation Dashboard
 
-Python + Streamlitで評価4、評価5、評価6、評価7、評価8をローカル実行するための薄いGUIラッパーです。既存の研究ロジックは変更せず、画面上で設定した値から既存CLIコマンドを組み立てて `subprocess` で実行します。
+Python + Streamlitで評価4、評価5、評価6、評価7、評価8、評価9をローカル実行するための薄いGUIラッパーです。既存の研究ロジックは変更せず、画面上で設定した値から既存CLIコマンドを組み立てて `subprocess` で実行します。
 
 ## 起動方法
 
@@ -32,6 +32,7 @@ uv run streamlit run app/streamlit_app.py
 | 評価5 | frequency / rule-filtered / FP-Growth / transition_probability / proposedを、Useful non-redundant rateとFragmentation rateで比較する。 |
 | 評価6 | proposedとdirect-log baselineのADL解釈ラベルset一致を比較する。 |
 | 評価7 | proposedのみについて、Kとハミング距離を変えたADL解釈ラベル精度を比較する。 |
+| 評価9 | Hestia合成ログの生成・提案手法抽出・系列回収とADL意味対応の採点。 |
 | 評価8 | 評価6詳細を出現頻度のLow / Middle / Highに分け、ADL整合性を後段比較する。 |
 
 サイドバーの `dry-run` が有効な場合、コマンドと履歴だけを保存し、実処理は実行しません。重いLLM処理を走らせる前にコマンド確認に使ってください。
@@ -192,3 +193,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py --help
 uv run python scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py --help
 uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py --help
 ```
+
+## 評価9のステップ
+
+[評価9の手順と指標](evaluation_9_hestia.md) を参照。`scripts/evaluate_9_hestia.py` で生成、前処理、頻度対照、LLM予算表示／抽出、採点を順に実行する。共通の平滑化設定は使わず、実験計画の設定を使う。API許可は既定OFF。評価9の一括実行は既存出力があっても各前段をCLIへ渡してhash検証・再利用する。結果は `results/9_hestia/<実験名>/evaluation9_summary.csv` と `.json`。

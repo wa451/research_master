@@ -28,6 +28,7 @@ class EvaluationStep:
     command: list[str]
     required_inputs: list[Path] = field(default_factory=list)
     expected_outputs: list[Path] = field(default_factory=list)
+    verify_on_batch: bool = False
 
 
 def as_path(value: str | Path | None) -> Path | None:
@@ -919,4 +920,75 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
             evaluation_outputs(final_output_dir),
         )
     )
+    return steps
+
+
+def build_evaluation9_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
+    hestia = as_path(settings.get("hestia_root", "Hestia"))
+    experiment = as_path(settings.get("experiment", "output/9_hestia/pilot"))
+    output_dir = as_path(settings.get("output_dir", "results/9_hestia/pilot"))
+    assert hestia is not None and experiment is not None and output_dir is not None
+    plan = as_path(settings.get("plan")) or hestia / "examples/experiments/noise_free_pilot.yaml"
+    allow_api = bool(settings.get("allow_api", False))
+    stages = [
+        (
+            "generate",
+            "1. Hestiaログを生成・検証",
+            "計画に従ってセンサー入力と正解ログを分離して生成します。",
+            [plan],
+            [experiment / "experiment.json"],
+        ),
+        (
+            "prepare",
+            "2. 代表状態・ネットワークを構築",
+            "前半だけで構築し、後半を固定した状態表で写像します。",
+            [experiment / "experiment.json", PROJECT_ROOT / ".venv/bin/python"],
+            [],
+        ),
+        (
+            "baseline",
+            "3. 頻度対照を生成",
+            "前半の連続状態系列だけから頻度上位候補を選びます。APIは使いません。",
+            [experiment / "experiment.json"],
+            [],
+        ),
+        (
+            "extract" if allow_api else "budget",
+            "4. LLM抽出" if allow_api else "4. LLM呼出し数を確認（APIなし）",
+            "モデル・残り反復数を表示します。実際のAPI呼出しは画面で許可した場合のみです。",
+            [experiment / "experiment.json"],
+            [],
+        ),
+        (
+            "evaluate",
+            "5. 評価9を採点・集計",
+            "系列回収とADL意味対応を後半で採点。LLM未実行はmissingとして記録します。",
+            [experiment / "experiment.json"],
+            [output_dir / "evaluation9_summary.csv", output_dir / "evaluation9_summary.json"],
+        ),
+    ]
+    steps = []
+    for stage, title, description, inputs, outputs in stages:
+        command = script_cmd(settings["runner"], "scripts/evaluate_9_hestia.py")
+        for flag, value in (
+            ("--stage", stage),
+            ("--hestia-root", hestia),
+            ("--plan", plan),
+            ("--experiment", experiment),
+            ("--output-dir", output_dir),
+            ("--method", settings.get("method", "both")),
+        ):
+            add_arg(command, flag, value)
+        add_flag(command, "--allow-api", stage == "extract" and allow_api)
+        steps.append(
+            EvaluationStep(
+                f"eval9_{stage}",
+                title,
+                description,
+                command,
+                [hestia / "src/smart_home_sim/experiments/cli.py", *inputs],
+                outputs,
+                verify_on_batch=True,
+            )
+        )
     return steps
