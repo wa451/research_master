@@ -64,6 +64,19 @@ uv run smart-home-sim studio --scenario examples/aruba_single_resident.yaml
 部屋・デバイスの画面上の位置は、シミュレーションに影響しない `editor_layout` として
 シナリオ内に保存されます。
 
+`master-research` のStreamlitダッシュボードでは、**Hestia Studio** タブからStudioを
+起動して画面内に表示できます。Studio内の住宅タブには評価9の compact / corridor /
+branched のbase住宅がすべて先読みされ、iframeを再読み込みせずに切り替えられます。
+住宅ごとの未保存編集はページを開いている間保持されます。部屋の接続と移動時間、センサー・
+デバイスの種類・所属部屋・表示位置を変更し、`scenarios/` にYAML保存できます。部屋内の
+アイコン座標は表示専用の `editor_layout` です。保存ファイルはカスタムシナリオであり、
+評価9の本実験planや生成処理を自動的には変更しません。
+
+間取り画面の **論文用SVG** / **論文用PNG** は、現在の編集状態から部屋、接続、移動時間、
+ドアセンサーID、センサー／デバイスID、凡例を白背景の図として書き出します。SVGはベクター、
+PNGは3200 × 2000 pxです。ホーム設定の表示名が図タイトルになります。これは配置を説明する
+図であり、評価9のground truthや採点入力には使用されません。
+
 用途別シナリオは次の3系列です。
 
 | 系列 | 用途 | 例 |

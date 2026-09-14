@@ -42,6 +42,7 @@ from smart_home_sim.experiments.plan import (
     ExperimentPlan,
     TargetActivity,
     default_conditions,
+    load_plan,
 )
 from smart_home_sim.experiments.research import extraction_budget
 from smart_home_sim.experiments.research_worker import main as research_worker_main
@@ -103,6 +104,44 @@ def test_matrix_is_one_factor_at_a_time() -> None:
                     )
                     == 1
                 )
+
+
+def test_full_evaluation_plan_has_only_base_and_large_variability() -> None:
+    examples = Path(__file__).resolve().parents[1] / "examples/experiments"
+    plan = load_plan(examples / "noise_free.yaml")
+    assert plan.train_days == plan.test_days == 7
+    assert plan.n_states == 15
+    assert plan.hamming_threshold == 0
+    assert plan.smoothing_window_sec == 0
+    assert plan.llm_runs == 3
+    assert plan.min_train_support == 2
+    assert plan.fragmentation_containment_threshold == 0.7
+    assert plan.seeds == [11, 22, 33]
+    assert [condition.id for condition in plan.conditions] == [
+        "compact_base",
+        "compact_variable",
+        "corridor_base",
+        "corridor_variable",
+        "branched_base",
+        "branched_variable",
+    ]
+    assert {
+        house: {condition.variability for condition in plan.conditions if condition.house == house}
+        for house in ("compact", "corridor", "branched")
+    } == {house: {"small", "large"} for house in ("compact", "corridor", "branched")}
+    assert len(plan.conditions) * len(plan.seeds) == 18
+
+    pilot = load_plan(examples / "noise_free_pilot.yaml")
+    assert (pilot.train_days, pilot.test_days, pilot.seeds, pilot.llm_runs) == (2, 2, [11], 1)
+    assert [condition.id for condition in pilot.conditions] == [
+        "compact_base",
+        "corridor_base",
+        "branched_base",
+        "compact_two",
+    ]
+    controlled = load_plan(examples / "controlled_gold_pilot.yaml")
+    assert (controlled.train_days, controlled.test_days, controlled.seeds) == (2, 2, [11])
+    assert [condition.id for condition in controlled.conditions] == ["compact_controlled"]
 
 
 @pytest.mark.parametrize(

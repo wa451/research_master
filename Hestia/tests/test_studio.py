@@ -72,6 +72,12 @@ def test_studio_serves_editor_and_validates_the_starter_scenario() -> None:
     assert 'id="run-pane"' in page.text
     assert 'id="save-yaml-button"' in page.text
     assert 'id="run-simulation-button"' in page.text
+    assert 'id="evaluation-house-switcher"' in page.text
+    assert 'data-evaluation-house="compact"' in page.text
+    assert 'data-evaluation-house="corridor"' in page.text
+    assert 'data-evaluation-house="branched"' in page.text
+    assert 'id="export-floorplan-svg-button"' in page.text
+    assert 'id="export-floorplan-png-button"' in page.text
     assert "rooms" in page.text
     assert "residents" in page.text
     assert "function renderLayout" in script.text
@@ -81,11 +87,55 @@ def test_studio_serves_editor_and_validates_the_starter_scenario() -> None:
     assert "function saveErrorFallback" in script.text
     assert "Studioを停止してから再起動してください。" in script.text
     assert "function runSimulation" in script.text
+    assert "function moveDeviceToRoom" in script.text
+    assert "function switchEvaluationHouse" in script.text
+    assert "evaluationHouseSessions" in script.text
+    assert "function buildFloorplanSvg" in script.text
+    assert "function exportFloorplanPng" in script.text
+    assert "FLOORPLAN_EXPORT_WIDTH * 2" in script.text
+    assert 'id="device-room-select"' in script.text
+    assert "evaluation_house" in script.text
     assert validation.json()["valid"] is True
     assert (
         validation.json()["scenario"]["editor_layout"]["room_positions"]["living_room"]["x"] == 10
     )
     assert initial.json()["source_filename"] is None
+
+
+@pytest.mark.parametrize(
+    ("house", "expected_rooms", "expected_connections"),
+    [("compact", 5, 4), ("corridor", 6, 5), ("branched", 7, 6)],
+)
+def test_studio_serves_editable_evaluation_house_presets(
+    house: str, expected_rooms: int, expected_connections: int
+) -> None:
+    app = create_studio_app()
+
+    response = _request(app, "GET", f"/api/initial?evaluation_house={house}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    scenario = Scenario.model_validate(payload["scenario"])
+    assert scenario.id == f"{house}_base"
+    assert len(scenario.rooms) == expected_rooms
+    assert len(scenario.connections) == expected_connections
+    assert scenario.editor_layout is not None
+    assert set(scenario.editor_layout.room_positions) == {room.id for room in scenario.rooms}
+    assert set(scenario.editor_layout.device_positions) == {
+        device.id for room in scenario.rooms for device in room.devices
+    }
+    assert any(
+        device.type.value == "MotionSensor" for room in scenario.rooms for device in room.devices
+    )
+    assert any(connection.door_sensor_id for connection in scenario.connections)
+    assert payload["source_filename"] == f"{house}_base.yaml"
+    assert payload["source_path"] is None
+
+
+def test_studio_rejects_an_unknown_evaluation_house() -> None:
+    response = _request(create_studio_app(), "GET", "/api/initial?evaluation_house=unknown")
+
+    assert response.status_code == 422
 
 
 def test_studio_exposes_only_the_source_basename() -> None:

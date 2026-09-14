@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from app.command_builder import build_evaluation9_steps
+from app.hestia_house_diagrams import house_rooms, house_topology_dot
 from scripts.evaluate_9_hestia import main
 from src.behavior_pattern_mining.evaluation.evaluation9_hestia import (
     build_commands,
@@ -102,6 +103,56 @@ class Evaluation9Tests(unittest.TestCase):
             infer_evaluation_for_results(path.parent, [path], "評価8"), "評価9"
         )
         self.assertEqual(result_file_rank("評価9", path)[0], 0)
+
+    def test_house_diagrams_match_hestia_topologies(self):
+        expected_rooms = {
+            "compact": {"bathroom", "bedroom", "kitchen", "living", "outside"},
+            "corridor": {
+                "bathroom",
+                "bedroom",
+                "hallway",
+                "kitchen",
+                "living",
+                "outside",
+            },
+            "branched": {
+                "bathroom",
+                "bedroom",
+                "hallway",
+                "kitchen",
+                "living",
+                "outside",
+                "study",
+            },
+        }
+        expected_edges = {
+            "compact": {
+                '"living" -- "bathroom" [label="D_bathroom / 10秒"]',
+                '"living" -- "bedroom" [label="D_bedroom / 10秒"]',
+                '"living" -- "kitchen" [label="D_kitchen / 10秒"]',
+                '"living" -- "outside" [label="D_outside / 10秒"]',
+            },
+            "corridor": {
+                '"hallway" -- "bathroom" [label="D_bathroom / 10秒"]',
+                '"hallway" -- "bedroom" [label="D_bedroom / 10秒"]',
+                '"hallway" -- "kitchen" [label="D_kitchen / 10秒"]',
+                '"hallway" -- "living" [label="D_living / 10秒"]',
+                '"hallway" -- "outside" [label="D_outside / 10秒"]',
+            },
+            "branched": {
+                '"hallway" -- "bathroom" [label="D_bathroom / 10秒"]',
+                '"hallway" -- "bedroom" [label="D_bedroom / 10秒"]',
+                '"hallway" -- "kitchen" [label="D_kitchen / 10秒"]',
+                '"hallway" -- "living" [label="D_living / 10秒"]',
+                '"hallway" -- "outside" [label="D_outside / 10秒"]',
+                '"living" -- "study" [label="D_study / 15秒"]',
+            },
+        }
+        for house, rooms in expected_rooms.items():
+            self.assertEqual(set(house_rooms(house)), rooms)
+            dot = house_topology_dot(house)
+            for edge in expected_edges[house]:
+                self.assertIn(edge, dot)
 
 
 if __name__ == "__main__":

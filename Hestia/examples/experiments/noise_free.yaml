@@ -1,4 +1,4 @@
-# 本実験の初期案。conditions省略時は3住宅 x 8条件の一因子変更デザイン。
+# 本実験: 3住宅 x 2条件（base / large variability）x 3seed = 18ログ。
 # generate/prepare/baseline/evaluateはAPIを呼ばない。
 schema_version: 1
 observation_noise: false
@@ -12,3 +12,10 @@ smoothing_window_sec: 0
 min_train_support: 2
 baseline_top_k: 20
 llm_runs: 3
+conditions:
+  - {id: compact_base, house: compact}
+  - {id: compact_variable, house: compact, variability: large}
+  - {id: corridor_base, house: corridor}
+  - {id: corridor_variable, house: corridor, variability: large}
+  - {id: branched_base, house: branched}
+  - {id: branched_variable, house: branched, variability: large}

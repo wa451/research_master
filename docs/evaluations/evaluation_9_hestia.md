@@ -8,15 +8,14 @@ Hestiaで生成したセンサーログに提案手法（代表状態 → 状態
 
 ## RQ
 
-- 住宅構造、住人数、生活習慣、反復頻度、行動の揺らぎを変えたとき、代表状態に投影された反復系列をどの程度回収できるか。
+- 住宅構造と行動の揺らぎ（base / large variability）を変えたとき、代表状態に投影された反復系列をどの程度回収できるか。
 - 抽出系列のADLラベル集合は、後半の正解活動区間とどの程度一致するか。
 - 回収できない原因として、代表状態に含まれないOtherや活動の観測可能性がどの程度関係するか。
 
 ## 配置とセットアップ
 
-Hestiaの実体は `master-research/Hestia/` に置く。移動前の `/Users/wataru/Desktop/Hestia` は使用しない。
-Hestiaの `.git`、未コミット変更、既存ログを保持し、親リポジトリでは `/Hestia/` をignoreする。
-親repoのcloneだけではHestiaは取得されないため、別環境でも同じ独立実装をこの位置へ配置する必要がある。元のHESTIAソースを取得する手順ではない。
+Hestiaの実体は `master-research/Hestia/` に置かれ、`master-research` の親リポジトリでGit管理されている。親repoをcloneすれば、Hestiaのソース・設定・テスト・文書も同じ `Hestia/` 配下に取得される。
+したがって、移動前の `/Users/wataru/Desktop/Hestia` は使用せず、別途Hestiaをcloneまたは配置する必要もない。Hestia単体のGit管理ではなく、親リポジトリの履歴として変更を記録する。
 
 master-research直下で実行する。
 
@@ -66,7 +65,7 @@ fragment包含率、活動観測可能件数、ADLのmicro・ラベル別指標�
 |---|---|
 | `Hestia/examples/experiments/noise_free_pilot.yaml` | 4条件 × 1seed × 4日、LLM各1反復の動作確認計画。前半2日・後半2日。 |
 | `Hestia/examples/experiments/controlled_gold_pilot.yaml` | 1人・2 target・4日・固定seed/揺らぎなしのAPI不要gold契約pilot。 |
-| `Hestia/examples/experiments/noise_free.yaml` | 本実験の初期案。24条件 × 3seed × 14日、LLM各3反復。 |
+| `Hestia/examples/experiments/noise_free.yaml` | 本実験。3住宅 × 2条件（base / large variability）× 3seed = 18ログ。各ログ14日（train 7日/test 7日）、LLM各3反復。 |
 | `output/9_hestia/pilot/experiment.json` | 確定した計画snapshot。 |
 | `output/9_hestia/pilot/runs/<condition>/seed_<seed>/` | 元ログ、正解、学習入力、代表状態・network、抽出結果、個別採点、再現用hash。 |
 | `results/9_hestia/pilot/evaluation9_summary.csv` | 条件・手法別の集計。最初に読むファイル。 |
@@ -81,11 +80,12 @@ Studioの `events.csv` / `casas_motion_door.txt` 単体には本評価が要求�
 ## Webアプリでの実行手順
 
 1. 左サイドバーで **評価9** を選ぶ。
-2. 計画、生成ログ・中間成果物ディレクトリ、集計先を設定する。既定はpilot。K・seed・日数・平滑化は計画ファイルで変更する。サイドバーの共通平滑化は評価9には適用しない。
-3. 必要なら共通の **dry-run** でコマンドだけ記録する。実処理・API呼出しは行わない。
-4. **不足ファイル生成 + 評価本体** で一括実行する。API許可OFFでは、生成 → 前処理 → 頻度対照 → LLM予算表示 → 採点まで実行する。LLMはmissing、頻度対照は採点済みになる。
-5. 提案手法も採点する場合は、ステップ4のモデル・呼出し数を確認し、**LLM抽出のAPI呼出しを許可** をONにしてステップ4を実行し、続いてステップ5を実行する。master-researchの既存認証設定を使う。
-6. **結果比較** タブで `results/9_hestia/pilot` を選び、CSVとJSONを確認する。
+2. **3住宅のつながり** で compact / corridor / branched の部屋、接続、ドアセンサー、移動時間を確認し、計画、生成ログ・中間成果物ディレクトリ、集計先を設定する。base / large variability は同じ住宅構造を使う。既定はpilot。K・seed・日数・平滑化は計画ファイルで変更する。サイドバーの共通平滑化は評価9には適用しない。
+3. 詳細な配置を確認・変更する場合は **Hestia Studio** タブでStudioを起動し、Studio内の compact / corridor / branched タブを切り替える。各住宅の未保存編集はページを開いている間保持される。編集は `Hestia/scenarios/` にYAML保存できるが、評価9の本実験planへは自動反映されない。**論文用SVG** / **論文用PNG** では部屋・接続・センサー／デバイス配置を論文向け画像として保存できる。この画像は住宅構造の説明用であり、ground truthや検出器入力には使用しない。
+4. 必要なら共通の **dry-run** でコマンドだけ記録する。実処理・API呼出しは行わない。
+5. **不足ファイル生成 + 評価本体** で一括実行する。API許可OFFでは、生成 → 前処理 → 頻度対照 → LLM予算表示 → 採点まで実行する。LLMはmissing、頻度対照は採点済みになる。
+6. 提案手法も採点する場合は、ステップ4のモデル・呼出し数を確認し、**LLM抽出のAPI呼出しを許可** をONにしてステップ4を実行し、続いてステップ5を実行する。master-researchの既存認証設定を使う。
+7. **結果比較** タブで `results/9_hestia/pilot` を選び、CSVとJSONを確認する。
 
 評価9は一括実行の各前段を毎回CLIに渡して、既存成果物のhashを検証する。ファイルの存在だけで前段を飛ばさない。完了済みの生成・前処理・LLM反復は既存CLIが検証して再利用する。「全ステップを再実行」も強制上書きではない。計画・コードの変更や不完全な生成が検出された場合は停止するため、新しい実験ディレクトリと集計先を指定する。
 
@@ -132,7 +132,13 @@ uv run python scripts/evaluate_9_hestia.py \
   --output-dir results/9_hestia/full
 ```
 
-このコマンドもAPIなし。本実験の新規モード抽出は全4時間帯がある場合最大864回で、通信・解析retryによってAPIリクエストが増える場合がある。続きの個別ステップでも同じ `--experiment` と `--output-dir` を指定する。
+本実験の6 conditionは `compact_base`, `compact_variable`, `corridor_base`,
+`corridor_variable`, `branched_base`, `branched_variable` である。baseは基準性能の確認、
+large variability（`*_variable`）は開始時刻±45分、活動・step時間±30%という大きな揺らぎに
+対する提案手法の頑健性確認のために採用する。2 residents / late / home / low / high / fixedは
+Hestiaの汎用条件として維持するが、この本実験planには含めない。
+
+このコマンドもAPIなし。本実験の新規モード抽出は全4時間帯がある場合最大216回で、通信・解析retryによってAPIリクエストが増える場合がある。続きの個別ステップでも同じ `--experiment` と `--output-dir` を指定する。
 
 ## 比較と内部処理
 

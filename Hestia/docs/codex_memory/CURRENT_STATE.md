@@ -1,10 +1,9 @@
 # 現在のチェックポイント
 
-更新: 2026-09-09。確認基点: `5106374`＋未コミットの追加評価実装。
+更新: 2026-09-14。未コミットの評価9追加実装を確認基点とする。
 
-- **実装済み**: `smart-home-sim experiment` のplan/generate/prepare/baseline/extract/evaluate。3住宅×8条件、観測ノイズ無効、前半固定表で後半を写像、系列回収と住人別真値による家全体ADL採点。詳細・場所は[追加評価ガイド](../noise_free_evaluation.md)。
-- **既存コード**: Hestiaのengine/schemaおよび外部`master-research`は未変更。CLI登録・READMEのみ既存追跡ファイルを変更。開始時からの`AGENTS.md`と`paper_writeup_plan.md`の作業を保存。
-- **確認済み**: 24条件の生成、完全出力ディレクトリの独立seed一致、正解漏洩防止、境界マッチ、重複住人ラベル、欠落run、APIデフォルト無効をテスト。必須5チェック成功、109 tests passed。
-- **接続確認**: `outputs/noise_free_smoke/` に3住宅単身＋compact2人の各4日を生成。既存研究コードでprepare、頻度対照と採点、API dry-run、完了済み生成/準備の再利用を確認。LLM実呼出しは0回。
-- **残る確認**: 有料LLM実行と本実験は未実施。まずガイドの呼出し数確認後、必要時のみ`extract --allow-api`。K=15でOtherが多い住宅があるので、前半側の表現診断と検出精度を分ける。共有micro-device検証の一般的問題は[KNOWN_ISSUES](KNOWN_ISSUES.md)。
-- **次**: 実験規模・K等を確定して別出力で本評価を実行。過去の論文計画は履歴として残し、新実験の指標定義はガイドを正本とする。
+- **実装済み**: `smart-home-sim experiment` のplan/generate/prepare/baseline/extract/evaluate、明示target、代表状態空間のcanonical gold、exact P/R/F1、gold基準fragmentation。定義と配置は[追加評価ガイド](../noise_free_evaluation.md)。
+- **本実験plan**: compact / corridor / branchedごとにbaseとlarge variabilityだけを明示。3住宅×2条件×seed 11/22/33 = 18ログ、各train 7日/test 7日、LLM 3反復。汎用`default_conditions()`の24条件と2種類のpilotは維持。
+- **確認済み**: plan parseで6 condition・18 run、pilotファイルhash不変。format/lint、`src`・`tests`の型検査、Hestia 115 tests、親repo評価9 7 testsが成功。controlled pilotのAPIなし接続確認済みで、LLM実呼出しは0回。
+- **残る確認**: 有料LLM実行と18ログの本実験生成・評価は未実施。実行前にガイドの最大216モード呼出しと費用を確認し、必要時のみ`extract --allow-api`を使う。K=15のOther比率と検出精度は分けて読む。共有micro-deviceの一般的問題は[KNOWN_ISSUES](KNOWN_ISSUES.md)。
+- **次**: 新しい実験ディレクトリで本実験を実行する。過去の論文計画は履歴として残し、現行の条件・指標定義はガイドを正本とする。

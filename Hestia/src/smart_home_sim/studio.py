@@ -20,7 +20,9 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from smart_home_sim.config import load_scenario
 from smart_home_sim.engine import SimulationEngine
 from smart_home_sim.errors import OutputValidationError, ScenarioError, SimulationInvariantError
-from smart_home_sim.schema import Scenario, Weekday
+from smart_home_sim.experiments.plan import Condition, ExperimentPlan, House
+from smart_home_sim.experiments.scenarios import build_scenario
+from smart_home_sim.schema import EditorLayout, Scenario, Weekday
 
 _STATIC_DIR = Path(__file__).with_name("studio_static")
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -124,6 +126,69 @@ def default_scenario() -> Scenario:
                     "M_OUTSIDE": {"x": 50, "y": 50},
                 },
             },
+        }
+    )
+
+
+_EVALUATION_HOUSE_ROOM_POSITIONS = {
+    "compact": {
+        "bathroom": (4, 5, 25, 30),
+        "bedroom": (4, 55, 25, 35),
+        "living": (36, 28, 28, 44),
+        "kitchen": (71, 5, 25, 30),
+        "outside": (71, 55, 25, 35),
+    },
+    "corridor": {
+        "bathroom": (4, 4, 27, 24),
+        "bedroom": (4, 38, 27, 24),
+        "kitchen": (4, 72, 27, 24),
+        "hallway": (39, 8, 22, 84),
+        "living": (69, 4, 27, 24),
+        "outside": (69, 38, 27, 24),
+    },
+    "branched": {
+        "bathroom": (3, 4, 27, 24),
+        "bedroom": (3, 38, 27, 24),
+        "kitchen": (3, 72, 27, 24),
+        "hallway": (39, 7, 20, 86),
+        "outside": (70, 4, 27, 24),
+        "living": (68, 38, 25, 24),
+        "study": (70, 72, 27, 24),
+    },
+}
+
+
+def evaluation_house_scenario(house: House) -> Scenario:
+    """Build an editable Studio view of an evaluation-9 base house."""
+    condition = Condition(id=f"{house}_base", house=house)
+    plan = ExperimentPlan(conditions=[condition])
+    scenario = build_scenario(condition, plan)
+    room_positions = {
+        room_id: {"x": x, "y": y, "width": width, "height": height}
+        for room_id, (x, y, width, height) in _EVALUATION_HOUSE_ROOM_POSITIONS[house].items()
+    }
+    device_positions = {}
+    position_grid = (
+        (20, 35),
+        (50, 35),
+        (80, 35),
+        (20, 68),
+        (50, 68),
+        (80, 68),
+        (35, 84),
+        (65, 84),
+    )
+    for room in scenario.rooms:
+        for index, device in enumerate(room.devices):
+            x, y = position_grid[index % len(position_grid)]
+            device_positions[device.id] = {"x": x, "y": y}
+    layout = EditorLayout.model_validate(
+        {"room_positions": room_positions, "device_positions": device_positions}
+    )
+    return scenario.model_copy(
+        update={
+            "name": f"Evaluation 9 {house} base (Studio preset)",
+            "editor_layout": layout,
         }
     )
 
@@ -278,7 +343,14 @@ def create_studio_app(
     reserved_output_paths: set[Path] = set()
 
     @app.get("/api/initial")
-    def get_initial() -> dict[str, Any]:
+    def get_initial(evaluation_house: House | None = None) -> dict[str, Any]:
+        if evaluation_house is not None:
+            preset = evaluation_house_scenario(evaluation_house)
+            return {
+                "scenario": scenario_data(preset),
+                "source_filename": f"{evaluation_house}_base.yaml",
+                "source_path": None,
+            }
         return {
             "scenario": scenario_data(initial),
             "source_filename": initial_filename,

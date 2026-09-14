@@ -208,3 +208,15 @@ uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py --help
 ## 評価9のステップ
 
 [評価9の手順と指標](../evaluations/evaluation_9_hestia.md) を参照。`scripts/evaluate_9_hestia.py` で生成、前処理、頻度対照、LLM予算表示／抽出、採点を順に実行する。共通の平滑化設定は使わず、実験計画の設定を使う。API許可は既定OFF。評価9の一括実行は既存出力があっても各前段をCLIへ渡してhash検証・再利用する。結果は `results/9_hestia/<実験名>/evaluation9_summary.csv` と `.json`。
+
+設定画面の **3住宅のつながり** では、compact / corridor / branched の部屋と接続を横並びで確認できる。線のラベルはHestiaが生成するドアセンサーIDと移動時間を表す。base / large variability は住宅構造を変えず、行動の揺らぎだけを変える。
+
+## Hestia Studio
+
+上部の **Hestia Studio** タブでは、`Hestia/.venv` の既存Studioサーバーをローカルホスト上で起動し、ダッシュボード内へ埋め込む。初回だけ `Hestia/` で `uv sync` を実行する。Studio内の住宅タブで compact / corridor / branched の評価9 base住宅を切り替える。3住宅は起動時に先読みされるためiframeは差し替えず、住宅ごとの未保存編集はページを開いている間保持される。ブラウザまたはStreamlitページを再読み込みする前にはYAML保存する。
+
+Studio内では、部屋のドラッグ・リサイズ、接続の追加・削除と移動時間、センサー／デバイスの追加・削除・所属部屋・表示位置を編集できる。所属部屋や種類はシミュレーション設定、部屋内のアイコン座標は表示専用の `editor_layout` である。編集内容はStudio上部の **YAML保存** から `Hestia/scenarios/` に保存する。
+
+間取り画面の **論文用SVG** / **論文用PNG** から、現在の住宅を白背景の図として保存できる。図には部屋、接続、移動時間、ドアセンサーID、センサー／デバイスID、凡例を含み、ホーム設定の表示名を図タイトルに使う。SVGは拡大可能なベクター、PNGは3200 × 2000 pxである。図は論文で住宅構造を説明するための可視化であり、評価9のground truthや検出器入力ではない。
+
+Studio保存ファイルは通常のHestiaカスタムシナリオであり、評価9の `noise_free.yaml` やexperiment生成処理へ自動的には組み込まれない。評価9の研究条件・gold・train/test分離を意図せず変更しないための分離である。Studioサーバーのログは `output/logs/evaluation_dashboard/Hestia_Studio/` に保存する。

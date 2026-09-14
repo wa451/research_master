@@ -100,10 +100,26 @@
                 <div>
                   <h1>間取り</h1>
                   <p>部屋やデバイスをドラッグして、直感的に配置を調整できます。</p>
+                  <div
+                    class="evaluation-house-switcher"
+                    id="evaluation-house-switcher"
+                    aria-label="評価9住宅"
+                    hidden
+                  >
+                    <span>評価9住宅</span>
+                    <div class="house-tabs" role="tablist" aria-label="住宅を切り替える">
+                      <button class="house-tab" data-evaluation-house="compact" role="tab" type="button">compact</button>
+                      <button class="house-tab" data-evaluation-house="corridor" role="tab" type="button">corridor</button>
+                      <button class="house-tab" data-evaluation-house="branched" role="tab" type="button">branched</button>
+                    </div>
+                  </div>
                 </div>
                 <div class="canvas-actions">
                   <button class="button outline" id="add-room-canvas-button" type="button">＋ 部屋を追加</button>
                   <button class="button outline" id="fit-layout-button" type="button">整列</button>
+                  <span class="canvas-action-divider" aria-hidden="true"></span>
+                  <button class="button outline" id="export-floorplan-svg-button" type="button">論文用SVG</button>
+                  <button class="button outline" id="export-floorplan-png-button" type="button">論文用PNG</button>
                 </div>
               </div>
               <div class="floorplan-frame">
@@ -126,6 +142,7 @@
                 <span><i class="legend-device"></i>デバイス</span>
                 <span><i class="legend-path"></i>移動経路</span>
                 <span class="canvas-tip">ヒント: 接続モードでは、2つの部屋を順番に選択します。</span>
+                <span class="paper-export-tip">ホーム設定の表示名を図タイトルにし、部屋・接続・センサー／デバイスID・凡例を白背景で出力します。</span>
               </div>
             </section>
 

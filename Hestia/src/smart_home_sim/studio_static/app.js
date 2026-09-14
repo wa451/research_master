@@ -30,6 +30,10 @@ const DEVICE_ICONS = {
   CoffeeMachine: "☕",
 };
 
+const EVALUATION_HOUSES = ["compact", "corridor", "branched"];
+const FLOORPLAN_EXPORT_WIDTH = 1600;
+const FLOORPLAN_EXPORT_HEIGHT = 1000;
+
 const dom = {
   workspace: document.querySelector("#workspace"),
   visualEditor: document.querySelector("#visual-editor"),
@@ -73,6 +77,9 @@ const dom = {
   connectionLayer: document.querySelector("#connection-layer"),
   floorplan: document.querySelector("#floorplan"),
   floorplanEmpty: document.querySelector("#floorplan-empty"),
+  evaluationHouseSwitcher: document.querySelector("#evaluation-house-switcher"),
+  exportFloorplanSvgButton: document.querySelector("#export-floorplan-svg-button"),
+  exportFloorplanPngButton: document.querySelector("#export-floorplan-png-button"),
   personGrid: document.querySelector("#person-grid"),
   activityGrid: document.querySelector("#activity-grid"),
   inspectorTitle: document.querySelector("#inspector-title"),
@@ -91,6 +98,8 @@ const state = {
   scenario: null,
   selected: { type: "home", id: null },
   sourceFileName: null,
+  evaluationHouse: null,
+  evaluationHouseSessions: {},
   project: {
     dirty: true,
     error: false,
@@ -425,6 +434,101 @@ function resetProjectScenario(sourcePath, dirty) {
   state.run.message = "";
   state.run.outputNameAutomatic = true;
   refreshAutomaticOutputName();
+}
+
+function createEvaluationHouseSession(body) {
+  return {
+    scenario: deepClone(body.scenario),
+    sourceFileName: body.source_filename || null,
+    sourcePath: body.source_path || "",
+    projectFileName: body.source_filename || "",
+    projectDirty: !body.source_path || !body.scenario.editor_layout,
+    projectMessage: "",
+    projectSelectedPath: body.source_path || "",
+    run: null,
+    code: null,
+  };
+}
+
+function saveCurrentEvaluationHouseSession() {
+  if (!state.evaluationHouse || !state.scenario) {
+    return;
+  }
+  state.evaluationHouseSessions[state.evaluationHouse] = {
+    scenario: deepClone(state.scenario),
+    sourceFileName: state.sourceFileName,
+    sourcePath: "",
+    projectFileName: state.project.fileName,
+    projectDirty: state.project.dirty,
+    projectMessage: state.project.message,
+    projectSelectedPath: state.project.selectedPath,
+    run: deepClone(state.run),
+    code: deepClone(state.code),
+  };
+}
+
+function activateEvaluationHouseSession(house) {
+  const session = state.evaluationHouseSessions[house];
+  if (!session) {
+    return false;
+  }
+  state.evaluationHouse = house;
+  state.scenario = deepClone(session.scenario);
+  state.sourceFileName = session.sourceFileName;
+  state.selected = { type: "home", id: null };
+  state.activeTab = "layout";
+  state.connectingFrom = null;
+  state.validation = { kind: "neutral", errors: [] };
+  resetProjectScenario(session.projectSelectedPath || session.sourcePath, session.projectDirty);
+  state.project.fileName = session.projectFileName || exportFileName("yaml");
+  state.project.message = session.projectMessage || (session.projectDirty
+    ? "現在の編集はまだプロジェクトへ保存されていません。"
+    : "");
+  if (session.run) {
+    state.run = deepClone(session.run);
+    state.run.running = false;
+  }
+  if (session.code) {
+    state.code = deepClone(session.code);
+    state.code.loading = false;
+  } else {
+    resetCodeDraft();
+  }
+  ensureLayout();
+  return true;
+}
+
+function renderEvaluationHouseSwitcher() {
+  const enabled = Boolean(state.evaluationHouse);
+  dom.evaluationHouseSwitcher.hidden = !enabled;
+  document.querySelectorAll("[data-evaluation-house]").forEach(function (button) {
+    const active = button.dataset.evaluationHouse === state.evaluationHouse;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+    button.disabled = state.project.saving || state.project.loading || state.run.running
+      || state.code.loading;
+  });
+}
+
+async function switchEvaluationHouse(house) {
+  if (!EVALUATION_HOUSES.includes(house) || house === state.evaluationHouse) {
+    return;
+  }
+  if (state.project.saving || state.project.loading || state.run.running || state.code.loading) {
+    showToast("処理が完了してから住宅を切り替えてください。", true);
+    return;
+  }
+  saveCurrentEvaluationHouseSession();
+  if (!activateEvaluationHouseSession(house)) {
+    showToast("住宅設定を読み込めませんでした。", true);
+    return;
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.set("evaluation_house", house);
+  window.history.replaceState({}, "", url);
+  render();
+  await loadProjectScenarios(state.project.selectedPath);
+  showToast(house + " に切り替えました。未保存編集は住宅ごとに保持されます。");
 }
 
 function showToast(message, isError) {
@@ -998,6 +1102,9 @@ function renderDeviceInspector(entry) {
   const device = entry.device;
   const room = entry.room;
   dom.inspectorTitle.textContent = device.name;
+  const roomOptions = state.scenario.rooms.map(function (candidate) {
+    return { value: candidate.id, label: candidate.name + " (" + candidate.id + ")" };
+  });
   const initialStateOptions = ["", "ON", "OFF"];
   if (["DoorSensor", "ContactSensor"].includes(device.type)) {
     initialStateOptions.splice(1, 2, "OPEN", "CLOSE");
@@ -1025,8 +1132,10 @@ function renderDeviceInspector(entry) {
     "照明の明るさやテレビの音量など、初期の追加属性を指定できます。",
   ) + section(
     "配置",
-    '<p class="form-section-description">間取りタブでこのアイコンをドラッグすると配置を調整できます。</p>'
+    selectField("所属部屋", 'id="device-room-select"', roomOptions, room.id, false)
+    + '<p class="form-section-description">所属部屋を変更するか、間取りタブでアイコンをドラッグして部屋内の表示位置を調整できます。</p>'
     + '<button class="button outline full-width" id="focus-device-room-button" type="button">間取りで表示</button>',
+    "所属部屋を変えた場合は、行動や接続からの参照も検証してください。",
   ) + section(
     "削除",
     '<button class="button danger full-width" id="delete-device-button" type="button">このデバイスを削除</button>',
@@ -1081,6 +1190,9 @@ function renderDeviceInspector(entry) {
       jsonInput.classList.add("invalid");
       showToast(error.message || "JSONの形式を確認してください。", true);
     }
+  });
+  dom.inspectorContent.querySelector("#device-room-select").addEventListener("change", function (event) {
+    moveDeviceToRoom(device.id, event.target.value);
   });
   dom.inspectorContent.querySelector("#focus-device-room-button").addEventListener("click", function () {
     selectItem("room", room.id, "layout");
@@ -1667,6 +1779,7 @@ async function runSimulation() {
 function render() {
   ensureLayout();
   renderStatus();
+  renderEvaluationHouseSwitcher();
   renderEditorMode();
   renderSidebar();
   renderTabState();
@@ -1711,6 +1824,32 @@ function addDevice(roomId) {
   state.scenario.editor_layout.device_positions[id] = defaultDevicePosition(room.devices.length - 1);
   markDirty();
   selectItem("device", id, "layout");
+}
+
+function moveDeviceToRoom(deviceId, targetRoomId) {
+  const entry = allDevices().find(function (candidate) {
+    return candidate.device.id === deviceId;
+  });
+  const target = state.scenario.rooms.find(function (candidate) {
+    return candidate.id === targetRoomId;
+  });
+  if (!entry || !target || entry.room.id === target.id) {
+    render();
+    return;
+  }
+  entry.room.devices = entry.room.devices.filter(function (candidate) {
+    return candidate.id !== deviceId;
+  });
+  target.devices.push(entry.device);
+  const targetZoneIds = new Set((target.zones || []).map(function (zone) { return zone.id; }));
+  if (entry.device.zone_id && !targetZoneIds.has(entry.device.zone_id)) {
+    delete entry.device.zone_id;
+  }
+  state.scenario.editor_layout.device_positions[deviceId] = defaultDevicePosition(
+    target.devices.length - 1,
+  );
+  markDirty();
+  selectItem("device", deviceId, "layout");
 }
 
 function addResident() {
@@ -2414,6 +2553,185 @@ async function validateScenario() {
   }
 }
 
+function floorplanExportFileName(extension) {
+  const fallback = state.scenario && state.scenario.id ? state.scenario.id : "scenario";
+  const stem = String(fallback).replace(/[^A-Za-z0-9_.-]+/g, "_") || "scenario";
+  return stem + "_floorplan." + extension;
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function svgEscape(value) {
+  return escapeHtml(value).replaceAll("&#039;", "&apos;");
+}
+
+function buildFloorplanSvg() {
+  if (!state.scenario) {
+    return "";
+  }
+  ensureLayout();
+  const plot = { x: 80, y: 120, width: 1440, height: 750 };
+  const roomPositions = state.scenario.editor_layout.room_positions;
+  const devicePositions = state.scenario.editor_layout.device_positions;
+  const connectionLabels = [];
+  const roomBox = function (roomId) {
+    const position = roomPositions[roomId];
+    if (!position) {
+      return null;
+    }
+    return {
+      x: plot.x + plot.width * position.x / 100,
+      y: plot.y + plot.height * position.y / 100,
+      width: plot.width * position.width / 100,
+      height: plot.height * position.height / 100,
+    };
+  };
+  const parts = [
+    '<svg xmlns="http://www.w3.org/2000/svg" width="' + FLOORPLAN_EXPORT_WIDTH
+      + '" height="' + FLOORPLAN_EXPORT_HEIGHT + '" viewBox="0 0 '
+      + FLOORPLAN_EXPORT_WIDTH + " " + FLOORPLAN_EXPORT_HEIGHT + '">',
+    "<title>" + svgEscape(state.scenario.name || state.scenario.id) + " floorplan</title>",
+    "<desc>Room connectivity and sensor/device placement exported from Hestia Studio.</desc>",
+    '<rect width="1600" height="1000" fill="#ffffff"/>',
+    '<text x="80" y="58" fill="#172326" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700">'
+      + svgEscape(state.scenario.name || state.scenario.id) + "</text>",
+    '<text x="80" y="88" fill="#526168" font-family="Arial, Helvetica, sans-serif" font-size="16">'
+      + "Room connectivity and sensor/device placement · " + svgEscape(state.scenario.id) + "</text>",
+  ];
+
+  state.scenario.connections.forEach(function (connection) {
+    const source = roomBox(connection.source);
+    const target = roomBox(connection.target);
+    if (!source || !target) {
+      return;
+    }
+    const x1 = source.x + source.width / 2;
+    const y1 = source.y + source.height / 2;
+    const x2 = target.x + target.width / 2;
+    const y2 = target.y + target.height / 2;
+    const middleX = (x1 + x2) / 2;
+    const middleY = (y1 + y2) / 2;
+    const label = asNumber(connection.travel_seconds, 0) + " s"
+      + (connection.door_sensor_id ? " · " + connection.door_sensor_id : "");
+    const labelWidth = Math.max(64, label.length * 7.1 + 18);
+    parts.push(
+      '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2
+        + '" stroke="#65737a" stroke-width="5" stroke-linecap="round"/>',
+    );
+    connectionLabels.push(
+      '<rect x="' + (middleX - labelWidth / 2) + '" y="' + (middleY - 13)
+        + '" width="' + labelWidth + '" height="26" rx="6" fill="#ffffff" stroke="#cbd3d4"/>',
+      '<text x="' + middleX + '" y="' + (middleY + 5)
+        + '" text-anchor="middle" fill="#33434a" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600">'
+        + svgEscape(label) + "</text>",
+    );
+  });
+
+  state.scenario.rooms.forEach(function (room) {
+    const box = roomBox(room.id);
+    if (!box) {
+      return;
+    }
+    const dash = room.is_outside ? ' stroke-dasharray="10 7"' : "";
+    const fill = room.is_outside ? "#f8faf9" : "#ffffff";
+    parts.push(
+      '<rect x="' + box.x + '" y="' + box.y + '" width="' + box.width
+        + '" height="' + box.height + '" rx="12" fill="' + fill
+        + '" stroke="#35464a" stroke-width="2.5"' + dash + "/>",
+      '<text x="' + (box.x + 15) + '" y="' + (box.y + 27)
+        + '" fill="#172326" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">'
+        + svgEscape(room.name) + "</text>",
+      '<text x="' + (box.x + 15) + '" y="' + (box.y + 48)
+        + '" fill="#607077" font-family="Arial, Helvetica, sans-serif" font-size="12">'
+        + svgEscape(room.id) + (room.is_outside ? " · outside" : "") + "</text>",
+    );
+    room.devices.forEach(function (device) {
+      const position = devicePositions[device.id] || { x: 50, y: 60 };
+      const x = box.x + box.width * position.x / 100;
+      const y = box.y + box.height * position.y / 100;
+      const isSensor = ["MotionSensor", "ContactSensor", "DoorSensor"].includes(device.type);
+      const color = isSensor ? "#147d78" : "#d06a24";
+      parts.push(
+        '<circle cx="' + x + '" cy="' + y + '" r="7" fill="' + color
+          + '" stroke="#ffffff" stroke-width="2"/>',
+        '<text x="' + (x + 12) + '" y="' + (y + 4)
+          + '" fill="#27373d" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="600">'
+          + svgEscape(device.id) + "</text>",
+      );
+    });
+  });
+
+  parts.push(...connectionLabels);
+  parts.push(
+    '<line x1="80" y1="914" x2="111" y2="914" stroke="#65737a" stroke-width="5" stroke-linecap="round"/>',
+    '<text x="122" y="919" fill="#405158" font-family="Arial, Helvetica, sans-serif" font-size="14">connection (travel time · door sensor)</text>',
+    '<circle cx="552" cy="914" r="7" fill="#147d78"/>',
+    '<text x="568" y="919" fill="#405158" font-family="Arial, Helvetica, sans-serif" font-size="14">sensor</text>',
+    '<circle cx="670" cy="914" r="7" fill="#d06a24"/>',
+    '<text x="686" y="919" fill="#405158" font-family="Arial, Helvetica, sans-serif" font-size="14">device / actuator</text>',
+    '<rect x="873" y="903" width="30" height="22" rx="4" fill="#f8faf9" stroke="#35464a" stroke-width="2" stroke-dasharray="6 4"/>',
+    '<text x="914" y="919" fill="#405158" font-family="Arial, Helvetica, sans-serif" font-size="14">outside</text>',
+    '<text x="1520" y="968" text-anchor="end" fill="#7a878c" font-family="Arial, Helvetica, sans-serif" font-size="12">Exported from Hestia Studio</text>',
+    "</svg>",
+  );
+  return parts.join("");
+}
+
+function exportFloorplanSvg() {
+  const svg = buildFloorplanSvg();
+  if (!svg) {
+    showToast("間取りを読み込んでから書き出してください。", true);
+    return;
+  }
+  downloadBlob(
+    new Blob([svg], { type: "image/svg+xml;charset=utf-8" }),
+    floorplanExportFileName("svg"),
+  );
+  showToast("論文用SVGを書き出しました。");
+}
+
+function exportFloorplanPng() {
+  const svg = buildFloorplanSvg();
+  if (!svg) {
+    showToast("間取りを読み込んでから書き出してください。", true);
+    return;
+  }
+  const image = new Image();
+  const sourceUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+  image.onload = function () {
+    const canvas = document.createElement("canvas");
+    canvas.width = FLOORPLAN_EXPORT_WIDTH * 2;
+    canvas.height = FLOORPLAN_EXPORT_HEIGHT * 2;
+    const context = canvas.getContext("2d");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(sourceUrl);
+    canvas.toBlob(function (blob) {
+      if (!blob) {
+        showToast("PNGを書き出せませんでした。", true);
+        return;
+      }
+      downloadBlob(blob, floorplanExportFileName("png"));
+      showToast("論文用PNG（3200 × 2000 px）を書き出しました。");
+    }, "image/png");
+  };
+  image.onerror = function () {
+    URL.revokeObjectURL(sourceUrl);
+    showToast("PNGを書き出せませんでした。", true);
+  };
+  image.src = sourceUrl;
+}
+
 async function exportScenario(format) {
   if (state.editorMode === "code" && state.code.dirty) {
     const applied = await applyCode(false);
@@ -2595,6 +2913,13 @@ function bindEvents() {
   document.querySelector("#add-activity-button").addEventListener("click", addActivity);
   document.querySelector("#add-activity-pane-button").addEventListener("click", addActivity);
   document.querySelector("#fit-layout-button").addEventListener("click", arrangeRooms);
+  dom.exportFloorplanSvgButton.addEventListener("click", exportFloorplanSvg);
+  dom.exportFloorplanPngButton.addEventListener("click", exportFloorplanPng);
+  document.querySelectorAll("[data-evaluation-house]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      switchEvaluationHouse(button.dataset.evaluationHouse);
+    });
+  });
   document.querySelector("#connect-button").addEventListener("click", function () {
     state.connectingFrom = state.connectingFrom === null ? "" : null;
     renderSidebar();
@@ -2620,7 +2945,32 @@ function bindEvents() {
 async function initialize() {
   bindEvents();
   try {
-    const result = await request("/api/initial");
+    const parameters = new URLSearchParams(window.location.search);
+    const evaluationHouse = parameters.get("evaluation_house");
+    if (EVALUATION_HOUSES.includes(evaluationHouse)) {
+      const results = await Promise.all(EVALUATION_HOUSES.map(function (house) {
+        return request("/api/initial?evaluation_house=" + encodeURIComponent(house));
+      }));
+      results.forEach(function (result, index) {
+        if (!result.response.ok || !result.body.scenario) {
+          throw new Error("evaluation house preload failed");
+        }
+        state.evaluationHouseSessions[EVALUATION_HOUSES[index]] = createEvaluationHouseSession(
+          result.body,
+        );
+      });
+      activateEvaluationHouseSession(evaluationHouse);
+      render();
+      await loadProjectScenarios(state.project.selectedPath);
+      return;
+    }
+    const initialEndpoint = evaluationHouse
+      ? "/api/initial?evaluation_house=" + encodeURIComponent(evaluationHouse)
+      : "/api/initial";
+    const result = await request(initialEndpoint);
+    if (!result.response.ok || !result.body.scenario) {
+      throw new Error("initial scenario failed");
+    }
     state.scenario = result.body.scenario;
     state.sourceFileName = result.body.source_filename || null;
     const hadEditorLayout = Boolean(state.scenario.editor_layout);
