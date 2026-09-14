@@ -21,11 +21,10 @@ master-research直下で実行する。
 
 ```bash
 uv sync
-uv sync --project Hestia
 uv run streamlit run app/streamlit_app.py
 ```
 
-HestiaはPython 3.11以上を使う。依存環境はmaster-researchとHestiaで分離する。CLIは `uv run --project <Hestiaの絶対パス> --frozen smart-home-sim experiment ...` を呼び、Hestiaのworkerはmaster-researchの `.venv/bin/python` で既存研究コードを実行する。
+Webアプリはrootのeditable path dependencyとしてHestiaを直接importし、Hestia Studio用の別環境・別サーバーを起動しない。HestiaはPython 3.11以上を使う。評価9 CLIは再現性のため、従来どおり `uv run --project <Hestiaの絶対パス> --frozen smart-home-sim experiment ...` を呼び、Hestiaのworkerはmaster-researchの `.venv/bin/python` で既存研究コードを実行する。Hestia単体の開発・テスト時だけ `uv sync --project Hestia` を使う。
 
 仮想環境ごと手動移動した場合、実行スクリプトに旧絶対パスが残ることがある。その場合は `uv sync --project Hestia --reinstall` で修復する。
 
@@ -81,7 +80,7 @@ Studioの `events.csv` / `casas_motion_door.txt` 単体には本評価が要求�
 
 1. 左サイドバーで **評価9** を選ぶ。
 2. **3住宅のつながり** で compact / corridor / branched の部屋、接続、ドアセンサー、移動時間を確認し、計画、生成ログ・中間成果物ディレクトリ、集計先を設定する。base / large variability は同じ住宅構造を使う。既定はpilot。K・seed・日数・平滑化は計画ファイルで変更する。サイドバーの共通平滑化は評価9には適用しない。
-3. 詳細な配置を確認・変更する場合は **Hestia Studio** タブでStudioを起動し、Studio内の compact / corridor / branched タブを切り替える。各住宅の未保存編集はページを開いている間保持される。編集は `Hestia/scenarios/` にYAML保存できるが、評価9の本実験planへは自動反映されない。**論文用SVG** / **論文用PNG** では部屋・接続・センサー／デバイス配置を論文向け画像として保存できる。この画像は住宅構造の説明用であり、ground truthや検出器入力には使用しない。
+3. 詳細な配置を確認・変更する場合は **Hestia Studio** タブを開き、Studio内の compact / corridor / branched タブを切り替える。各住宅の未保存編集はページを開いている間保持される。編集は `Hestia/scenarios/` にYAML保存できるが、評価9の本実験planへは自動反映されない。**論文用SVG** / **論文用PNG** では部屋・接続・センサー／デバイス配置を論文向け画像として保存できる。この画像は住宅構造の説明用であり、ground truthや検出器入力には使用しない。
 4. 必要なら共通の **dry-run** でコマンドだけ記録する。実処理・API呼出しは行わない。
 5. **不足ファイル生成 + 評価本体** で一括実行する。API許可OFFでは、生成 → 前処理 → 頻度対照 → LLM予算表示 → 採点まで実行する。LLMはmissing、頻度対照は採点済みになる。
 6. 提案手法も採点する場合は、ステップ4のモデル・呼出し数を確認し、**LLM抽出のAPI呼出しを許可** をONにしてステップ4を実行し、続いてステップ5を実行する。master-researchの既存認証設定を使う。

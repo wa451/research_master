@@ -17,6 +17,7 @@ from smart_home_sim.config import load_scenario
 from smart_home_sim.engine import SimulationEngine
 from smart_home_sim.schema import Scenario
 from smart_home_sim.studio import create_studio_app, default_scenario, scenario_data
+from smart_home_sim.studio_service import StudioService
 
 
 async def _request_async(
@@ -85,7 +86,7 @@ def test_studio_serves_editor_and_validates_the_starter_scenario() -> None:
     assert "function applyCode" in script.text
     assert "function saveCurrentYaml" in script.text
     assert "function saveErrorFallback" in script.text
-    assert "Studioを停止してから再起動してください。" in script.text
+    assert "保存処理が見つかりません。アプリを再読み込みしてください。" in script.text
     assert "function runSimulation" in script.text
     assert "function moveDeviceToRoom" in script.text
     assert "function switchEvaluationHouse" in script.text
@@ -100,6 +101,24 @@ def test_studio_serves_editor_and_validates_the_starter_scenario() -> None:
         validation.json()["scenario"]["editor_layout"]["room_positions"]["living_room"]["x"] == 10
     )
     assert initial.json()["source_filename"] is None
+
+
+def test_studio_service_supports_non_http_frontends(tmp_path: Path) -> None:
+    service = StudioService(project_root=tmp_path)
+    initial = service.initial("compact")
+    assert isinstance(initial.body, dict)
+    scenario = initial.body["scenario"]
+
+    validation = service.validate_scenario(scenario)
+    saved = service.save_project_scenario(scenario, "component_home.yaml")
+    listed = service.list_project_scenarios()
+
+    assert validation.ok is True
+    assert saved.ok is True
+    assert isinstance(saved.body, dict)
+    assert saved.body["scenario_path"] == "scenarios/component_home.yaml"
+    assert isinstance(listed.body, dict)
+    assert listed.body["files"][0]["path"] == "scenarios/component_home.yaml"
 
 
 @pytest.mark.parametrize(

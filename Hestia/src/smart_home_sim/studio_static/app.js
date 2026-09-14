@@ -34,60 +34,76 @@ const EVALUATION_HOUSES = ["compact", "corridor", "branched"];
 const FLOORPLAN_EXPORT_WIDTH = 1600;
 const FLOORPLAN_EXPORT_HEIGHT = 1000;
 
-const dom = {
-  workspace: document.querySelector("#workspace"),
-  visualEditor: document.querySelector("#visual-editor"),
-  codePane: document.querySelector("#code-pane"),
-  guiModeButton: document.querySelector("#gui-mode-button"),
-  codeModeButton: document.querySelector("#code-mode-button"),
-  codeFormatYaml: document.querySelector("#code-format-yaml"),
-  codeFormatJson: document.querySelector("#code-format-json"),
-  codeFormatButton: document.querySelector("#code-format-button"),
-  codeValidateButton: document.querySelector("#code-validate-button"),
-  codeApplyButton: document.querySelector("#code-apply-button"),
-  codeEditor: document.querySelector("#code-editor"),
-  codeFormatLabel: document.querySelector("#code-format-label"),
-  sourceFileName: document.querySelector("#source-file-name"),
-  exportFileName: document.querySelector("#export-file-name"),
-  exportYamlButton: document.querySelector("#export-yaml-button"),
-  codeStatus: document.querySelector("#code-status"),
-  codeValidation: document.querySelector("#code-validation"),
-  saveFileName: document.querySelector("#save-file-name"),
-  saveYamlButton: document.querySelector("#save-yaml-button"),
-  saveStatus: document.querySelector("#save-status"),
-  refreshScenariosButton: document.querySelector("#refresh-scenarios-button"),
-  runScenarioSelect: document.querySelector("#run-scenario-select"),
-  runDays: document.querySelector("#run-days"),
-  runSeed: document.querySelector("#run-seed"),
-  runOutputName: document.querySelector("#run-output-name"),
-  runOutputPreview: document.querySelector("#run-output-preview"),
-  runSimulationButton: document.querySelector("#run-simulation-button"),
-  runStatus: document.querySelector("#run-status"),
-  runResult: document.querySelector("#run-result"),
-  scenarioName: document.querySelector("#scenario-name"),
-  validationButton: document.querySelector("#validation-button"),
-  validationStatus: document.querySelector("#validation-status"),
-  roomList: document.querySelector("#room-list"),
-  residentList: document.querySelector("#resident-list"),
-  activityList: document.querySelector("#activity-list"),
-  homeSummary: document.querySelector("#home-summary"),
-  connectButton: document.querySelector("#connect-button"),
-  connectionHint: document.querySelector("#connection-hint"),
-  roomLayer: document.querySelector("#room-layer"),
-  connectionLayer: document.querySelector("#connection-layer"),
-  floorplan: document.querySelector("#floorplan"),
-  floorplanEmpty: document.querySelector("#floorplan-empty"),
-  evaluationHouseSwitcher: document.querySelector("#evaluation-house-switcher"),
-  exportFloorplanSvgButton: document.querySelector("#export-floorplan-svg-button"),
-  exportFloorplanPngButton: document.querySelector("#export-floorplan-png-button"),
-  personGrid: document.querySelector("#person-grid"),
-  activityGrid: document.querySelector("#activity-grid"),
-  inspectorTitle: document.querySelector("#inspector-title"),
-  inspectorContent: document.querySelector("#inspector-content"),
-  validationReport: document.querySelector("#validation-report"),
-  toast: document.querySelector("#toast"),
-  importInput: document.querySelector("#import-input"),
-};
+let uiRoot = document;
+let componentBridge = null;
+let componentBootstrap = null;
+let componentInitialized = false;
+let componentResponseId = null;
+let componentRequestSequence = 0;
+let componentSyncTimer = null;
+let boundEventDocument = null;
+const componentRequests = new Map();
+const dom = {};
+
+function bindDom(root) {
+  const selectors = {
+    workspace: "#workspace",
+    visualEditor: "#visual-editor",
+    codePane: "#code-pane",
+    guiModeButton: "#gui-mode-button",
+    codeModeButton: "#code-mode-button",
+    codeFormatYaml: "#code-format-yaml",
+    codeFormatJson: "#code-format-json",
+    codeFormatButton: "#code-format-button",
+    codeValidateButton: "#code-validate-button",
+    codeApplyButton: "#code-apply-button",
+    codeEditor: "#code-editor",
+    codeFormatLabel: "#code-format-label",
+    sourceFileName: "#source-file-name",
+    exportFileName: "#export-file-name",
+    exportYamlButton: "#export-yaml-button",
+    codeStatus: "#code-status",
+    codeValidation: "#code-validation",
+    saveFileName: "#save-file-name",
+    saveYamlButton: "#save-yaml-button",
+    saveStatus: "#save-status",
+    refreshScenariosButton: "#refresh-scenarios-button",
+    runScenarioSelect: "#run-scenario-select",
+    runDays: "#run-days",
+    runSeed: "#run-seed",
+    runOutputName: "#run-output-name",
+    runOutputPreview: "#run-output-preview",
+    runSimulationButton: "#run-simulation-button",
+    runStatus: "#run-status",
+    runResult: "#run-result",
+    scenarioName: "#scenario-name",
+    validationButton: "#validation-button",
+    validationStatus: "#validation-status",
+    roomList: "#room-list",
+    residentList: "#resident-list",
+    activityList: "#activity-list",
+    homeSummary: "#home-summary",
+    connectButton: "#connect-button",
+    connectionHint: "#connection-hint",
+    roomLayer: "#room-layer",
+    connectionLayer: "#connection-layer",
+    floorplan: "#floorplan",
+    floorplanEmpty: "#floorplan-empty",
+    evaluationHouseSwitcher: "#evaluation-house-switcher",
+    exportFloorplanSvgButton: "#export-floorplan-svg-button",
+    exportFloorplanPngButton: "#export-floorplan-png-button",
+    personGrid: "#person-grid",
+    activityGrid: "#activity-grid",
+    inspectorTitle: "#inspector-title",
+    inspectorContent: "#inspector-content",
+    validationReport: "#validation-report",
+    toast: "#toast",
+    importInput: "#import-input",
+  };
+  Object.entries(selectors).forEach(function (entry) {
+    dom[entry[0]] = root.querySelector(entry[1]);
+  });
+}
 
 const state = {
   activeTab: "layout",
@@ -147,6 +163,72 @@ function escapeHtml(value) {
 
 function deepClone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function componentWorkspaceSnapshot() {
+  saveCurrentEvaluationHouseSession();
+  return deepClone({
+    activeTab: state.activeTab,
+    connectingFrom: state.connectingFrom,
+    editorMode: state.editorMode,
+    routineDays: state.routineDays,
+    scenario: state.scenario,
+    selected: state.selected,
+    sourceFileName: state.sourceFileName,
+    evaluationHouse: state.evaluationHouse,
+    evaluationHouseSessions: state.evaluationHouseSessions,
+    project: Object.assign({}, state.project, { loading: false, saving: false }),
+    run: Object.assign({}, state.run, { running: false }),
+    validation: state.validation,
+    code: Object.assign({}, state.code, { loading: false }),
+  });
+}
+
+function syncComponentWorkspace() {
+  if (!componentBridge || !state.scenario) {
+    return;
+  }
+  componentBridge.setStateValue("workspace", componentWorkspaceSnapshot());
+}
+
+function scheduleComponentWorkspaceSync() {
+  if (!componentBridge) {
+    return;
+  }
+  window.clearTimeout(componentSyncTimer);
+  componentSyncTimer = window.setTimeout(syncComponentWorkspace, 800);
+}
+
+function restoreComponentWorkspace(workspace, bootstrap) {
+  const restored = deepClone(workspace);
+  [
+    "activeTab",
+    "connectingFrom",
+    "editorMode",
+    "routineDays",
+    "scenario",
+    "selected",
+    "sourceFileName",
+    "evaluationHouse",
+    "evaluationHouseSessions",
+    "project",
+    "run",
+    "validation",
+    "code",
+  ].forEach(function (key) {
+    if (restored[key] !== undefined) {
+      state[key] = restored[key];
+    }
+  });
+  state.drag = null;
+  state.project.loading = false;
+  state.project.saving = false;
+  state.run.running = false;
+  state.code.loading = false;
+  if (bootstrap && Array.isArray(bootstrap.files)) {
+    state.project.files = deepClone(bootstrap.files);
+  }
+  ensureLayout();
 }
 
 function asNumber(value, fallback) {
@@ -384,6 +466,7 @@ function markDirty() {
   renderStatus();
   renderValidationReport();
   renderRunPane();
+  scheduleComponentWorkspaceSync();
 }
 
 function resetCodeDraft() {
@@ -501,7 +584,7 @@ function activateEvaluationHouseSession(house) {
 function renderEvaluationHouseSwitcher() {
   const enabled = Boolean(state.evaluationHouse);
   dom.evaluationHouseSwitcher.hidden = !enabled;
-  document.querySelectorAll("[data-evaluation-house]").forEach(function (button) {
+  uiRoot.querySelectorAll("[data-evaluation-house]").forEach(function (button) {
     const active = button.dataset.evaluationHouse === state.evaluationHouse;
     button.classList.toggle("active", active);
     button.setAttribute("aria-selected", String(active));
@@ -523,11 +606,14 @@ async function switchEvaluationHouse(house) {
     showToast("住宅設定を読み込めませんでした。", true);
     return;
   }
-  const url = new URL(window.location.href);
-  url.searchParams.set("evaluation_house", house);
-  window.history.replaceState({}, "", url);
+  if (!componentBridge) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("evaluation_house", house);
+    window.history.replaceState({}, "", url);
+  }
   render();
   await loadProjectScenarios(state.project.selectedPath);
+  scheduleComponentWorkspaceSync();
   showToast(house + " に切り替えました。未保存編集は住宅ごとに保持されます。");
 }
 
@@ -542,10 +628,50 @@ function showToast(message, isError) {
 }
 
 function request(path, options) {
+  if (componentBridge) {
+    const requestId = "studio-" + Date.now() + "-" + (++componentRequestSequence);
+    let body = null;
+    if (options && options.body) {
+      try {
+        body = JSON.parse(options.body);
+      } catch (error) {
+        body = options.body;
+      }
+    }
+    syncComponentWorkspace();
+    return new Promise(function (resolve, reject) {
+      componentRequests.set(requestId, { resolve: resolve, reject: reject });
+      componentBridge.setTriggerValue("request", {
+        id: requestId,
+        path: path,
+        method: options && options.method ? options.method : "GET",
+        body: body,
+      });
+    });
+  }
   return fetch(path, options).then(async function (response) {
     const contentType = response.headers.get("content-type") || "";
     const body = contentType.includes("application/json") ? await response.json() : await response.text();
     return { response: response, body: body };
+  });
+}
+
+function handleComponentResponse(response) {
+  if (!response || !response.id || response.id === componentResponseId) {
+    return;
+  }
+  componentResponseId = response.id;
+  const pending = componentRequests.get(response.id);
+  if (!pending) {
+    return;
+  }
+  componentRequests.delete(response.id);
+  pending.resolve({
+    response: {
+      ok: Boolean(response.ok),
+      status: Number(response.status || 500),
+    },
+    body: response.body,
   });
 }
 
@@ -558,7 +684,7 @@ function errorsFromResponse(body, fallback) {
 
 function saveErrorFallback(response) {
   if (response && response.status === 404) {
-    return "保存APIが見つかりません。Studioを停止してから再起動してください。";
+    return "保存処理が見つかりません。アプリを再読み込みしてください。";
   }
   return "YAMLを保存できませんでした。";
 }
@@ -572,22 +698,15 @@ async function importScenarioText(text, format) {
 }
 
 async function exportScenarioText(scenario, format) {
-  const response = await fetch("/api/export", {
+  const result = await request("/api/export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ scenario: scenario, format: format }),
   });
-  const text = await response.text();
-  if (response.ok) {
-    return { ok: true, text: text };
+  if (result.response.ok) {
+    return { ok: true, text: result.body };
   }
-  let body;
-  try {
-    body = JSON.parse(text);
-  } catch (error) {
-    body = null;
-  }
-  return { ok: false, errors: errorsFromResponse(body) };
+  return { ok: false, errors: errorsFromResponse(result.body) };
 }
 
 function selectItem(type, id, tab) {
@@ -610,13 +729,13 @@ function focusDuringDrag(type, id) {
 }
 
 function updateSelectionClasses() {
-  document.querySelectorAll(".room").forEach(function (element) {
+  uiRoot.querySelectorAll(".room").forEach(function (element) {
     element.classList.toggle(
       "selected",
       state.selected.type === "room" && element.dataset.roomId === state.selected.id,
     );
   });
-  document.querySelectorAll(".device").forEach(function (element) {
+  uiRoot.querySelectorAll(".device").forEach(function (element) {
     element.classList.toggle(
       "selected",
       state.selected.type === "device" && element.dataset.deviceId === state.selected.id,
@@ -688,10 +807,10 @@ function renderEditorMode() {
 }
 
 function renderTabState() {
-  document.querySelectorAll(".tab").forEach(function (tab) {
+  uiRoot.querySelectorAll(".tab").forEach(function (tab) {
     tab.classList.toggle("active", tab.dataset.tab === state.activeTab);
   });
-  document.querySelectorAll(".tab-pane").forEach(function (pane) {
+  uiRoot.querySelectorAll(".tab-pane").forEach(function (pane) {
     pane.classList.toggle("active", pane.id === state.activeTab + "-pane");
   });
 }
@@ -711,7 +830,7 @@ function renderSidebar() {
   }
   dom.scenarioName.textContent = state.scenario.name || state.scenario.id;
   dom.homeSummary.textContent = state.scenario.id;
-  document.querySelector(".home-card").classList.toggle("selected", state.selected.type === "home");
+  uiRoot.querySelector(".home-card").classList.toggle("selected", state.selected.type === "home");
   dom.roomList.innerHTML = state.scenario.rooms.map(function (room) {
     const suffix = room.is_outside ? "屋外" : "定員 " + room.capacity;
     return sidebarItem("room", room.id, "⌂", room.name, suffix);
@@ -742,7 +861,7 @@ function renderSidebar() {
       "activity",
     );
   }).join("");
-  document.querySelectorAll("[data-select-type]").forEach(function (button) {
+  uiRoot.querySelectorAll("[data-select-type]").forEach(function (button) {
     button.addEventListener("click", function () {
       const type = button.dataset.selectType;
       if (type === "home") {
@@ -1661,6 +1780,7 @@ async function loadProjectScenarios(preferredPath) {
   } finally {
     state.project.loading = false;
     renderRunPane();
+    scheduleComponentWorkspaceSync();
   }
 }
 
@@ -1733,6 +1853,7 @@ async function saveCurrentYaml() {
   } finally {
     state.project.saving = false;
     render();
+    scheduleComponentWorkspaceSync();
   }
 }
 
@@ -1773,6 +1894,7 @@ async function runSimulation() {
   } finally {
     state.run.running = false;
     renderRunPane();
+    scheduleComponentWorkspaceSync();
   }
 }
 
@@ -2380,6 +2502,7 @@ async function populateCodeFromScenario(format) {
     renderStatus();
     renderEditorMode();
     renderValidationReport();
+    scheduleComponentWorkspaceSync();
   }
 }
 
@@ -2439,6 +2562,7 @@ async function validateCode() {
     renderStatus();
     renderEditorMode();
     renderValidationReport();
+    scheduleComponentWorkspaceSync();
   }
 }
 
@@ -2483,6 +2607,7 @@ async function applyCode(returnToGui) {
   } finally {
     state.code.loading = false;
     render();
+    scheduleComponentWorkspaceSync();
   }
 }
 
@@ -2527,6 +2652,7 @@ async function formatCode(targetFormat) {
     renderStatus();
     renderEditorMode();
     renderValidationReport();
+    scheduleComponentWorkspaceSync();
   }
 }
 
@@ -2548,8 +2674,9 @@ async function validateScenario() {
       showToast("検証で " + state.validation.errors.length + " 件の修正項目が見つかりました。", true);
     }
     render();
+    scheduleComponentWorkspaceSync();
   } catch (error) {
-    showToast("検証に失敗しました。サーバーが起動しているか確認してください。", true);
+    showToast("検証処理を完了できませんでした。", true);
   }
 }
 
@@ -2740,20 +2867,19 @@ async function exportScenario(format) {
     }
   }
   try {
-    const response = await fetch("/api/export", {
+    const result = await request("/api/export", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ scenario: state.scenario, format: format }),
     });
-    if (!response.ok) {
-      const errorBody = await response.json();
-      state.validation = { kind: "invalid", errors: errorBody.errors || [] };
+    if (!result.response.ok) {
+      state.validation = { kind: "invalid", errors: result.body.errors || [] };
       renderStatus();
       renderValidationReport();
       showToast("書き出す前に修正が必要です。", true);
       return;
     }
-    const content = await response.text();
+    const content = result.body;
     const blob = new Blob([content], {
       type: format === "yaml" ? "application/yaml" : "application/json",
     });
@@ -2800,6 +2926,7 @@ async function importFile(file) {
     resetProjectScenario(result.body.source_path || null, true);
     ensureLayout();
     render();
+    scheduleComponentWorkspaceSync();
     showToast("「" + state.scenario.name + "」を読み込みました。");
   } catch (error) {
     showToast("読み込みに失敗しました。", true);
@@ -2822,6 +2949,7 @@ async function newScenario() {
     resetProjectScenario(result.body.source_path || null, true);
     ensureLayout();
     render();
+    scheduleComponentWorkspaceSync();
     showToast("新しいシナリオを作成しました。");
   } catch (error) {
     showToast("新規シナリオの作成に失敗しました。", true);
@@ -2829,11 +2957,11 @@ async function newScenario() {
 }
 
 function bindEvents() {
-  document.querySelector("#new-button").addEventListener("click", newScenario);
-  document.querySelector("#export-json-button").addEventListener("click", function () {
+  uiRoot.querySelector("#new-button").addEventListener("click", newScenario);
+  uiRoot.querySelector("#export-json-button").addEventListener("click", function () {
     exportScenario("json");
   });
-  document.querySelector("#export-yaml-button").addEventListener("click", function () {
+  uiRoot.querySelector("#export-yaml-button").addEventListener("click", function () {
     saveCurrentYaml();
   });
   dom.saveYamlButton.addEventListener("click", saveCurrentYaml);
@@ -2906,29 +3034,29 @@ function bindEvents() {
     }
     dom.importInput.value = "";
   });
-  document.querySelector("#add-room-button").addEventListener("click", addRoom);
-  document.querySelector("#add-room-canvas-button").addEventListener("click", addRoom);
-  document.querySelector("#add-resident-button").addEventListener("click", addResident);
-  document.querySelector("#add-resident-pane-button").addEventListener("click", addResident);
-  document.querySelector("#add-activity-button").addEventListener("click", addActivity);
-  document.querySelector("#add-activity-pane-button").addEventListener("click", addActivity);
-  document.querySelector("#fit-layout-button").addEventListener("click", arrangeRooms);
+  uiRoot.querySelector("#add-room-button").addEventListener("click", addRoom);
+  uiRoot.querySelector("#add-room-canvas-button").addEventListener("click", addRoom);
+  uiRoot.querySelector("#add-resident-button").addEventListener("click", addResident);
+  uiRoot.querySelector("#add-resident-pane-button").addEventListener("click", addResident);
+  uiRoot.querySelector("#add-activity-button").addEventListener("click", addActivity);
+  uiRoot.querySelector("#add-activity-pane-button").addEventListener("click", addActivity);
+  uiRoot.querySelector("#fit-layout-button").addEventListener("click", arrangeRooms);
   dom.exportFloorplanSvgButton.addEventListener("click", exportFloorplanSvg);
   dom.exportFloorplanPngButton.addEventListener("click", exportFloorplanPng);
-  document.querySelectorAll("[data-evaluation-house]").forEach(function (button) {
+  uiRoot.querySelectorAll("[data-evaluation-house]").forEach(function (button) {
     button.addEventListener("click", function () {
       switchEvaluationHouse(button.dataset.evaluationHouse);
     });
   });
-  document.querySelector("#connect-button").addEventListener("click", function () {
+  uiRoot.querySelector("#connect-button").addEventListener("click", function () {
     state.connectingFrom = state.connectingFrom === null ? "" : null;
     renderSidebar();
     renderLayout();
   });
-  document.querySelector("#close-selection-button").addEventListener("click", function () {
+  uiRoot.querySelector("#close-selection-button").addEventListener("click", function () {
     selectItem("home", null, state.activeTab);
   });
-  document.querySelectorAll(".tab").forEach(function (tab) {
+  uiRoot.querySelectorAll(".tab").forEach(function (tab) {
     tab.addEventListener("click", function () {
       state.activeTab = tab.dataset.tab;
       renderTabState();
@@ -2937,9 +3065,34 @@ function bindEvents() {
       }
     });
   });
-  document.addEventListener("pointermove", onPointerMove);
-  document.addEventListener("pointerup", onPointerUp);
+  if (boundEventDocument) {
+    boundEventDocument.removeEventListener("pointermove", onPointerMove);
+    boundEventDocument.removeEventListener("pointerup", onPointerUp);
+  }
+  boundEventDocument = uiRoot.ownerDocument || uiRoot;
+  boundEventDocument.addEventListener("pointermove", onPointerMove);
+  boundEventDocument.addEventListener("pointerup", onPointerUp);
+  window.removeEventListener("resize", renderConnections);
   window.addEventListener("resize", renderConnections);
+}
+
+function initializeFromComponent(data) {
+  componentBootstrap = data.bootstrap;
+  if (!componentBootstrap || !componentBootstrap.houses) {
+    throw new Error("component bootstrap is missing");
+  }
+  if (data.workspace && data.workspace.scenario) {
+    restoreComponentWorkspace(data.workspace, componentBootstrap);
+  } else {
+    EVALUATION_HOUSES.forEach(function (house) {
+      state.evaluationHouseSessions[house] = createEvaluationHouseSession(
+        componentBootstrap.houses[house],
+      );
+    });
+    activateEvaluationHouseSession(componentBootstrap.initial_house || "compact");
+    state.project.files = deepClone(componentBootstrap.files || []);
+  }
+  render();
 }
 
 async function initialize() {
@@ -2984,4 +3137,22 @@ async function initialize() {
   }
 }
 
-initialize();
+export default function renderHestiaStudioComponent(component) {
+  componentBridge = component;
+  const rootChanged = uiRoot !== component.parentElement;
+  if (rootChanged || !componentInitialized) {
+    uiRoot = component.parentElement;
+    bindDom(uiRoot);
+    bindEvents();
+    initializeFromComponent(component.data || {});
+    componentInitialized = true;
+  } else if (component.data && component.data.bootstrap) {
+    componentBootstrap = component.data.bootstrap;
+  }
+  handleComponentResponse(component.data && component.data.response);
+}
+
+if (document.querySelector("#workspace")) {
+  bindDom(document);
+  initialize();
+}

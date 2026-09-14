@@ -15,7 +15,8 @@ JSON/YAML (+ extends)
   -> outputs.py                  CSV、状態ベクトル、CASAS、対応表
   -> validation.py               真値の時系列・空間・活動・機器不変条件
   -> cli.py                      非対話CLI
-  -> studio.py                   ローカルWeb GUI（config.py/schema.pyを直接呼び出す薄い層）
+  -> studio_service.py           Studio共通サービス（検証・保存・変換・実行）
+  -> studio.py                   単体起動用FastAPIアダプタ
 ```
 
 シミュレーション中の可変状態は`SimulationEngine`内に閉じ、モジュール乱数は使いません。
@@ -66,13 +67,16 @@ zone modeでは`zone_occupants`を別に持ち、退出元の最後の住人で�
 
 ## Hestia Studio（Webフロントエンド）
 
-`studio.py`はCLIと並ぶもう一つのフロントエンドで、シミュレーション本体（`engine.py`以下）
-には手を加えず、`config.py`の`load_scenario`と`schema.py`の`Scenario`を直接呼び出す薄い
-FastAPI層です。バックエンドの入出力契約はCLIと同一で、Studio固有の分岐はエンジン内部に
-存在しません。
+`studio_service.py`は、シミュレーション本体（`engine.py`以下）へ手を加えず、
+`config.py`の`load_scenario`、`schema.py`の`Scenario`、`SimulationEngine`を呼び出す
+transport非依存のサービス層です。master-researchのStreamlit Components v2はこの層を直接
+呼び出します。`studio.py`はHestia単体CLIとの互換性を保つ任意のFastAPIアダプタです。
+どちらも入出力契約は共通で、Studio固有の分岐はエンジン内部に存在しません。
 
-- **状態**：サーバー側にセッション状態を持たず、ブラウザから送られたシナリオJSONをその場で
-  `Scenario.model_validate`するだけです。検証済みシナリオだけがGUIへ反映されます。
+- **状態**：ドラッグ・リサイズ・入力途中はブラウザ内だけで処理します。Streamlit統合では
+  Components v2のstateに住宅ごとの編集状態を保持し、検証・保存・import/export・実行だけを
+  triggerでPythonへ渡します。Python側は受け取ったシナリオJSONをその場で
+  `Scenario.model_validate`し、検証済みシナリオだけをGUIへ反映します。
 - **ファイルアクセスの境界**：`_allowed_scenario_files`がプロジェクトroot配下の`scenarios/`と
   `examples/`だけを一覧・実行対象にし、`_is_within`で全ての読み書きパスがrootの外に出ないこと
   を都度検証します。`load_scenario(..., allowed_root=root)`により、`extends`継承チェーンも
@@ -82,7 +86,7 @@ FastAPI層です。バックエンドの入出力契約はCLIと同一で、Stud
   `Scenario`の一部ですが、エンジンとバリデーションは一切参照しません。GUIでの配置変更が
   乱数消費や生成イベントに影響しないことは`test_editor_layout_does_not_change_complete_simulation_outputs`
   で保証しています。
-- **実行**：`/api/simulations/run`はStudioから選べる保存済みYAMLのみを対象に
+- **実行**：`StudioService.run_simulation`はStudioから選べる保存済みYAMLのみを対象に
   `SimulationEngine`をCLIと同じ経路で呼び出し、一時ディレクトリへ出力してから原子的に
   `outputs/studio/<run-name>/`へ配置します。同名ディレクトリは上書きしません。
 

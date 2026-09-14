@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 import json
 import sys
-import time
 
 import pandas as pd
 import streamlit as st
@@ -36,17 +35,7 @@ from app.hestia_house_diagrams import (  # noqa: E402
     HOUSE_TITLES,
     house_topology_dot,
 )
-from app.hestia_studio_integration import (  # noqa: E402
-    HestiaStudioProcess,
-    hestia_studio_base_url,
-    hestia_studio_command,
-    hestia_studio_url,
-    is_hestia_studio_ready,
-    is_port_in_use,
-    start_hestia_studio,
-    stop_hestia_studio,
-    studio_log_tail,
-)
+from app.hestia_studio_component import render_hestia_studio_component  # noqa: E402
 from app.utils import (  # noqa: E402
     append_history,
     discover_result_dirs,
@@ -984,127 +973,18 @@ def render_eval10_settings(common: dict) -> dict:
     }
 
 
-def render_hestia_studio_frame(studio_url: str) -> None:
-    """Embed Studio using only arguments supported by the active Streamlit API."""
-    st.iframe(studio_url, height=980)
-
-
-def render_hestia_studio(common: dict) -> None:
-    """Launch and embed Hestia's existing visual scenario editor."""
+def render_hestia_studio(_common: dict) -> None:
+    """Mount Hestia's visual scenario editor as a Components v2 component."""
     st.subheader("Hestia Studio")
     st.caption(
-        "評価9の3住宅を読み込み、部屋・接続・センサー／デバイスを画面上で確認・編集できます。"
+        "Hestia StudioはこのStreamlitプロセス内で動作します。別サーバーやポートは使用しません。"
     )
-    st.warning(
+    st.info(
         "Studio内の住宅タブを切り替えても、各住宅の未保存編集はページを開いている間保持されます。"
         "ページを再読み込みする前に、必要な編集を「YAML保存」でHestia/scenarios/へ保存してください。"
         "保存したカスタムシナリオは評価9の本実験planへ自動反映されません。"
     )
-    managed = st.session_state.get("hestia_studio_process")
-    if isinstance(managed, HestiaStudioProcess) and not managed.running:
-        st.session_state.pop("hestia_studio_process", None)
-        managed = None
-
-    controls = st.columns([3, 1])
-    with controls[0]:
-        hestia_root_text = st.text_input(
-            "Studioで使用するHestiaディレクトリ",
-            "Hestia",
-            key="hestia_studio_root",
-            disabled=isinstance(managed, HestiaStudioProcess),
-        )
-    with controls[1]:
-        requested_port = st.number_input(
-            "Studioポート",
-            min_value=1024,
-            max_value=65535,
-            value=8765,
-            step=1,
-            key="hestia_studio_port",
-            disabled=isinstance(managed, HestiaStudioProcess),
-        )
-
-    hestia_root = Path(hestia_root_text).expanduser()
-    if not hestia_root.is_absolute():
-        hestia_root = PROJECT_ROOT / hestia_root
-    port = managed.port if isinstance(managed, HestiaStudioProcess) else int(requested_port)
-    ready = is_hestia_studio_ready(port)
-    try:
-        command = hestia_studio_command(hestia_root, port)
-    except (FileNotFoundError, ValueError):
-        command = None
-
-    button_columns = st.columns([1, 1, 3])
-    with button_columns[0]:
-        start_clicked = st.button(
-            "Studioを起動",
-            type="primary",
-            disabled=ready or isinstance(managed, HestiaStudioProcess),
-            width="stretch",
-        )
-    with button_columns[1]:
-        stop_clicked = st.button(
-            "Studioを停止",
-            disabled=not isinstance(managed, HestiaStudioProcess),
-            width="stretch",
-        )
-
-    if stop_clicked and isinstance(managed, HestiaStudioProcess):
-        stop_hestia_studio(managed)
-        st.session_state.pop("hestia_studio_process", None)
-        st.rerun()
-
-    if start_clicked:
-        if is_port_in_use(port):
-            st.error(f"ポート{port}は別のプロセスが使用しています。別のポートを指定してください。")
-        else:
-            try:
-                log_dir = ensure_log_dir(
-                    LOG_ROOT, "Hestia_Studio", f"{common['run_name']}_{port}"
-                )
-                managed = start_hestia_studio(
-                    hestia_root, port, log_path=log_dir / "studio.log"
-                )
-                st.session_state["hestia_studio_process"] = managed
-                with st.spinner("Hestia Studioを起動しています..."):
-                    for _ in range(50):
-                        if is_hestia_studio_ready(port):
-                            ready = True
-                            break
-                        if not managed.running:
-                            break
-                        time.sleep(0.1)
-                if not ready:
-                    st.error("Hestia Studioを起動できませんでした。ログを確認してください。")
-                    log_tail = studio_log_tail(managed)
-                    if log_tail:
-                        st.code(log_tail)
-                else:
-                    st.success("Hestia Studioを起動しました。")
-                    st.rerun()
-            except (FileNotFoundError, OSError, ValueError) as error:
-                st.error(str(error))
-                command = None
-
-    if command is not None:
-        with st.expander("Studio起動コマンド", expanded=False):
-            st.code(command_preview(command), language="bash")
-
-    if ready:
-        studio_url = hestia_studio_url(port, "compact")
-        status_columns = st.columns([3, 1])
-        with status_columns[0]:
-            owner = (
-                "この画面から起動"
-                if isinstance(managed, HestiaStudioProcess)
-                else "既存プロセスへ接続"
-            )
-            st.success(f"接続中: {hestia_studio_base_url(port)}（{owner}）")
-        with status_columns[1]:
-            st.link_button("別タブで開く", studio_url, width="stretch")
-        render_hestia_studio_frame(studio_url)
-    elif not start_clicked:
-        st.info("「Studioを起動」を押すと、ここに編集画面が表示されます。")
+    render_hestia_studio_component()
 
 
 def render_step(step: EvaluationStep, settings: dict) -> None:
@@ -1495,7 +1375,7 @@ def default_result_dirs(settings: dict) -> list[Path]:
 def main() -> None:
     st.set_page_config(page_title="研究評価ダッシュボード", layout="wide")
     st.title("研究評価ダッシュボード")
-    st.caption("既存CLIを呼び出すローカル実行用の薄いStreamlitラッパーです。")
+    st.caption("評価4〜10とHestia Studioを1つにまとめたローカル研究Webアプリです。")
 
     common = common_sidebar()
     run_tab, studio_tab, result_tab, log_tab = st.tabs(

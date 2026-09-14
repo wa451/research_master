@@ -1,6 +1,6 @@
 # Evaluation Dashboard
 
-評価4〜10をローカルGUIから実行するStreamlitアプリです。既存CLIコマンドを画面上で組み立てて実行します。
+評価4〜10とHestia StudioをローカルGUIから利用するStreamlitアプリです。評価は既存CLIコマンドを画面上で組み立てて実行し、Studioは同一プロセス内でHestiaを直接利用します。
 
 ## 起動
 
@@ -22,7 +22,7 @@ uv run streamlit run app/streamlit_app.py
 
 ## 評価9: Hestia合成ログ
 
-Hestiaは `master-research/Hestia/` に配置する。Webアプリの「評価9」では、compact / corridor / branched の部屋と接続を図で確認できる。さらに **Hestia Studio** タブから既存Studioを起動・埋め込み表示し、Studio内の3住宅タブを再読み込みなしで切り替えながら、接続、センサー、デバイスの所属・配置を編集して `Hestia/scenarios/` にYAML保存できる。間取りは論文用SVGまたは3200 × 2000 pxのPNGとして書き出せる。保存したカスタムシナリオと画像は評価9の本実験planへ自動反映されない。同画面または `uv run python scripts/evaluate_9_hestia.py` でログ生成から採点まで実行できる（既定はAPIなし）。配置・入力契約・指標・実行方法は [評価9のガイド](../docs/evaluations/evaluation_9_hestia.md) を参照。
+Hestiaは `master-research/Hestia/` に配置する。Webアプリの「評価9」では、compact / corridor / branched の部屋と接続を図で確認できる。**Hestia Studio** はComponents v2で同じStreamlitページへ直接統合され、別サーバー・別ポート・iframeなしで、3住宅を切り替えながら接続、センサー、デバイスの所属・配置を編集して `Hestia/scenarios/` にYAML保存できる。間取りは論文用SVGまたは3200 × 2000 pxのPNGとして書き出せる。保存したカスタムシナリオと画像は評価9の本実験planへ自動反映されない。同画面または `uv run python scripts/evaluate_9_hestia.py` でログ生成から採点まで実行できる（既定はAPIなし）。配置・入力契約・指標・実行方法は [評価9のガイド](../docs/evaluations/evaluation_9_hestia.md) を参照。
 
 ## 評価10: SwitchBot実宅ログ
 
