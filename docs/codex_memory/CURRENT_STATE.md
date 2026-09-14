@@ -1,9 +1,8 @@
 # 現在のチェックポイント
 
-更新日: 2026-09-09。今回の対象はCodex作業案内の改善。リポジトリ全体の進捗ではない。
+更新日: 2026-09-12。今回の対象はSwitchBot実宅ログを使う評価10。リポジトリ全体の進捗ではない。
 
-- **完了**: AGENTSの選択読込・探索範囲を整理。[CODEBASE_MAP](CODEBASE_MAP.md) を目的別に更新し、評価1〜9の文書/入口/実装/テストを [EVALUATION_ROUTES](EVALUATION_ROUTES.md) へ分離。既存5skillsを短縮し、[メモ保守skill](../../.agents/skills/codex-memory-maintenance/SKILL.md) と参照検査を追加。
-- **既存の別作業**: 開始時から評価9/Hestia・Web等の未コミット変更あり。親側の入口は索引に反映したが、外部Hestia実験や別作業全体の完了は未検証。
-- **確認**: 6skillsの形式検査、ローカルリンク/アンカー検査、検査スクリプトの構文・help・一時fixture（正常/参照切れ/アンカー欠落/repo外参照/節の長さ）、主要索引シンボル、差分の空白検査に合格。研究コード・データ・成果物は本作業で変更せず、研究CLI・API・全回帰テストは実行していない。
-- **読込量の目安**: 既存5skills計8,508→6,874文字（19.2%減、新skillは別）。評価6の索引取得は638文字、以前の地図全体は3,515文字。これらは文字数であり、実タスクのトークン削減量は未測定。
-- **次回**: 依頼の評価番号または目的から直接参照する。メモ整備の残作業なし。研究上の未解決事項は [KNOWN_ISSUES](KNOWN_ISSUES.md) から正本へ。CIへの参照検査追加や既存全ファイル台帳の自動化は未実施の提案。
+- **完了**: train期間だけで代表状態・時間帯別network・frequency/任意LLM系列を生成し、固定写像したtest期間で再出現を測る評価10を追加。仕様・入口・実装・テストは [eval10ルート](EVALUATION_ROUTES.md#eval10-switchbot実宅ログ) から辿る。
+- **再現性**: SwitchBot Loggerのmanifest schema、期間、CSV行数、入力hashを検証。test-onlyセンサーはtrain表現から除外し、LLM checkpointは入力・split・条件・network fingerprint別に分離する。
+- **確認**: 評価10の8テスト、全141テスト、CLI help、Streamlit import、Python構文、ローカルリンク、`git diff --check` に合格。実宅スナップショットは未配置のため未実行、Gemini APIも未呼出し。
+- **既存の別作業**: 開始時から文書再配置、評価9/Hestia、Web等の未コミット変更あり。その全体の完了は推測・検証していない。

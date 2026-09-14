@@ -1,0 +1,491 @@
+schema_version: 1
+id: realistic_aruba_single_resident
+name: Realistic calibrated single-resident smart home
+start_datetime: 2025-01-06T00:00:00+09:00
+
+rooms:
+  - id: bedroom
+    name: Bedroom
+    capacity: 2
+    motion_mode: zone
+    default_zone_id: bedroom_bed
+    zones:
+      - {id: bedroom_entrance, name: BedroomEntrance}
+      - {id: bedroom_bed, name: BedArea}
+      - {id: bedroom_closet, name: ClosetArea}
+      - {id: bedroom_nightstand, name: NightstandArea}
+    zone_connections:
+      - {source: bedroom_entrance, target: bedroom_bed, travel_seconds: 2}
+      - {source: bedroom_bed, target: bedroom_closet, travel_seconds: 3}
+      - {source: bedroom_bed, target: bedroom_nightstand, travel_seconds: 1}
+    devices:
+      - {id: M_BED_ENT, type: MotionSensor, name: Bedroom entrance motion, zone_id: bedroom_entrance}
+      - {id: M_BED, type: MotionSensor, name: Bed area motion, zone_id: bedroom_bed}
+      - {id: M_CLOSET, type: MotionSensor, name: Closet motion, zone_id: bedroom_closet}
+      - {id: M_NIGHT, type: MotionSensor, name: Nightstand motion, zone_id: bedroom_nightstand}
+      - {id: L_BED, type: Light, name: Bedroom light}
+      - {id: L_NIGHT, type: Light, name: Night light}
+  - id: bathroom
+    name: Bathroom
+    capacity: 1
+    motion_mode: zone
+    default_zone_id: bath_entrance
+    zones:
+      - {id: bath_entrance, name: BathroomEntrance}
+      - {id: bath_toilet, name: ToiletArea}
+      - {id: bath_sink, name: SinkArea}
+      - {id: bath_shower, name: ShowerArea}
+    zone_connections:
+      - {source: bath_entrance, target: bath_toilet, travel_seconds: 1}
+      - {source: bath_entrance, target: bath_sink, travel_seconds: 1}
+      - {source: bath_sink, target: bath_shower, travel_seconds: 2}
+    devices:
+      - {id: M_BATH_ENT, type: MotionSensor, name: Bathroom entrance motion, zone_id: bath_entrance}
+      - {id: M_TOILET, type: MotionSensor, name: Toilet motion, zone_id: bath_toilet}
+      - {id: M_SINK, type: MotionSensor, name: Bathroom sink motion, zone_id: bath_sink}
+      - {id: M_SHOWER, type: MotionSensor, name: Shower motion, zone_id: bath_shower}
+      - {id: L_BATH, type: Light, name: Bathroom light}
+      - {id: P_FAN, type: SmartPlug, name: Bathroom ventilation}
+  - id: kitchen
+    name: Kitchen
+    capacity: 2
+    motion_mode: zone
+    default_zone_id: kitchen_entrance
+    zones:
+      - {id: kitchen_entrance, name: KitchenEntrance}
+      - {id: kitchen_fridge, name: RefrigeratorArea}
+      - {id: kitchen_counter, name: CounterArea}
+      - {id: kitchen_sink, name: SinkArea}
+      - {id: kitchen_boundary, name: DiningBoundary}
+    zone_connections:
+      - {source: kitchen_entrance, target: kitchen_fridge, travel_seconds: 2}
+      - {source: kitchen_entrance, target: kitchen_counter, travel_seconds: 2}
+      - {source: kitchen_counter, target: kitchen_sink, travel_seconds: 2}
+      - {source: kitchen_counter, target: kitchen_boundary, travel_seconds: 2}
+      - {source: kitchen_fridge, target: kitchen_counter, travel_seconds: 2}
+    devices:
+      - {id: M_KITCH_ENT, type: MotionSensor, name: Kitchen entrance motion, zone_id: kitchen_entrance}
+      - {id: M_FRIDGE, type: MotionSensor, name: Refrigerator area motion, zone_id: kitchen_fridge}
+      - {id: M_COUNTER, type: MotionSensor, name: Counter motion, zone_id: kitchen_counter}
+      - {id: M_KITCH_SINK, type: MotionSensor, name: Kitchen sink motion, zone_id: kitchen_sink}
+      - {id: M_KITCH_BOUND, type: MotionSensor, name: Dining boundary motion, zone_id: kitchen_boundary}
+      - {id: L_KITCH, type: Light, name: Kitchen light}
+      - {id: C_FRIDGE, type: ContactSensor, name: Refrigerator contact, zone_id: kitchen_fridge}
+      - {id: C_COFFEE, type: CoffeeMachine, name: Coffee machine, zone_id: kitchen_counter}
+      - {id: P_KETTLE, type: SmartPlug, name: Kettle smart plug, zone_id: kitchen_counter}
+  - id: dining_room
+    name: DiningRoom
+    capacity: 3
+    motion_mode: zone
+    default_zone_id: dining_entry
+    zones:
+      - {id: dining_entry, name: DiningEntrance}
+      - {id: dining_table, name: DiningTable}
+    zone_connections:
+      - {source: dining_entry, target: dining_table, travel_seconds: 2}
+    devices:
+      - {id: M_DINING_ENT, type: MotionSensor, name: Dining entrance motion, zone_id: dining_entry}
+      - {id: M_TABLE, type: MotionSensor, name: Dining table motion, zone_id: dining_table}
+      - {id: L_DINING, type: Light, name: Dining light}
+  - id: living_room
+    name: LivingRoom
+    capacity: 3
+    motion_mode: zone
+    default_zone_id: living_entrance
+    zones:
+      - {id: living_entrance, name: LivingEntrance}
+      - {id: living_sofa, name: SofaArea}
+      - {id: living_window, name: WindowArea}
+      - {id: living_shelf, name: ShelfArea}
+    zone_connections:
+      - {source: living_entrance, target: living_sofa, travel_seconds: 2}
+      - {source: living_sofa, target: living_window, travel_seconds: 3}
+      - {source: living_sofa, target: living_shelf, travel_seconds: 2}
+    devices:
+      - {id: M_LIVING_ENT, type: MotionSensor, name: Living entrance motion, zone_id: living_entrance}
+      - {id: M_SOFA, type: MotionSensor, name: Sofa motion, zone_id: living_sofa}
+      - {id: M_WINDOW, type: MotionSensor, name: Window motion, zone_id: living_window}
+      - {id: M_SHELF, type: MotionSensor, name: Shelf motion, zone_id: living_shelf}
+      - {id: L_LIVING, type: Light, name: Living light}
+      - {id: T_LIVING, type: Television, name: Living television}
+      - {id: P_VAC, type: SmartPlug, name: Vacuum smart plug}
+      - {id: AC_LIVING, type: AirConditioner, name: Living air conditioner}
+  - id: hallway
+    name: Hallway
+    capacity: 3
+    motion_mode: zone
+    default_zone_id: hall_bed
+    zones:
+      - {id: hall_bed, name: BedroomSideHall}
+      - {id: hall_center, name: CenterHall}
+      - {id: hall_entrance, name: EntranceSideHall}
+    zone_connections:
+      - {source: hall_bed, target: hall_center, travel_seconds: 2}
+      - {source: hall_center, target: hall_entrance, travel_seconds: 2}
+    devices:
+      - {id: M_HALL_BED, type: MotionSensor, name: Bedroom-side hall motion, zone_id: hall_bed}
+      - {id: M_HALL_CENTER, type: MotionSensor, name: Center hall motion, zone_id: hall_center}
+      - {id: M_HALL_ENT, type: MotionSensor, name: Entrance-side hall motion, zone_id: hall_entrance}
+      - {id: D_BED_HALL, type: DoorSensor, name: Bedroom door}
+      - {id: D_BATH_HALL, type: DoorSensor, name: Bathroom door}
+      - {id: D_KITCH_HALL, type: DoorSensor, name: Kitchen door}
+      - {id: D_DINING_HALL, type: DoorSensor, name: Dining door}
+      - {id: D_LIVING_HALL, type: DoorSensor, name: Living door}
+      - {id: D_HALL_ENT, type: DoorSensor, name: Hall entrance door}
+  - id: entrance
+    name: Entrance
+    capacity: 2
+    motion_mode: zone
+    default_zone_id: entrance_inside
+    zones:
+      - {id: entrance_inside, name: EntranceInside}
+      - {id: entrance_door, name: FrontDoorArea}
+    zone_connections:
+      - {source: entrance_inside, target: entrance_door, travel_seconds: 2}
+    devices:
+      - {id: M_ENT_INSIDE, type: MotionSensor, name: Entrance inside motion, zone_id: entrance_inside}
+      - {id: M_FRONT, type: MotionSensor, name: Front door motion, zone_id: entrance_door}
+      - {id: L_ENT, type: Light, name: Entrance light}
+      - {id: D_FRONT, type: DoorSensor, name: Front door}
+      - {id: C_FRONT, type: ContactSensor, name: Front contact, zone_id: entrance_door}
+  - id: outside
+    name: Outside
+    capacity: 10
+    is_outside: true
+    motion_mode: zone
+    default_zone_id: outside_area
+    zones:
+      - {id: outside_area, name: OutsideArea}
+    devices:
+      - {id: M_OUT, type: MotionSensor, name: Outside motion, zone_id: outside_area}
+
+connections:
+  - {source: bedroom, target: hallway, travel_seconds: 4, door_sensor_id: D_BED_HALL}
+  - {source: bathroom, target: hallway, travel_seconds: 3, door_sensor_id: D_BATH_HALL}
+  - {source: kitchen, target: hallway, travel_seconds: 4, door_sensor_id: D_KITCH_HALL}
+  - {source: dining_room, target: hallway, travel_seconds: 3, door_sensor_id: D_DINING_HALL}
+  - {source: living_room, target: hallway, travel_seconds: 3, door_sensor_id: D_LIVING_HALL}
+  - {source: hallway, target: entrance, travel_seconds: 3, door_sensor_id: D_HALL_ENT}
+  - {source: entrance, target: outside, travel_seconds: 5, door_sensor_id: D_FRONT}
+
+activities:
+  - id: sleeping
+    name: Sleeping
+    room_id: bedroom
+    zone_id: bedroom_bed
+    base_duration_minutes: 410
+    duration_distribution: {kind: normal, mean: 410, standard_deviation: 28, clip_min: 350, clip_max: 470}
+    min_duration_minutes: 340
+    max_duration_minutes: 480
+    micro_action_templates:
+      - id: quiet_sleep
+        weight: 0.68
+        steps:
+          - {id: settle, zone_id: bedroom_nightstand, dwell_minutes: {kind: uniform, low: 1, high: 4}}
+          - {id: sleep_block, zone_id: bedroom_bed, dwell_minutes: {kind: normal, mean: 385, standard_deviation: 20, clip_min: 330, clip_max: 440}}
+      - id: sleep_with_night_toilet
+        weight: 0.32
+        steps:
+          - {id: first_sleep, zone_id: bedroom_bed, dwell_minutes: {kind: normal, mean: 230, standard_deviation: 25, clip_min: 170, clip_max: 285}}
+          - id: nightstand_light
+            zone_id: bedroom_nightstand
+            dwell_minutes: {kind: uniform, low: 0.4, high: 1.2}
+            device_actions: [{device_id: L_NIGHT, state: "ON", attributes: {brightness: 18, color_temperature: 2500}}]
+            reason: night_navigation_light
+          - {id: night_bath_entry, room_id: bathroom, zone_id: bath_entrance, dwell_minutes: {kind: fixed, value: 0.3}, reason: nighttime_toilet_trip}
+          - {id: night_toilet, room_id: bathroom, zone_id: bath_toilet, dwell_minutes: {kind: uniform, low: 3, high: 7}, reason: nighttime_toilet_trip}
+          - {id: night_sink, room_id: bathroom, zone_id: bath_sink, dwell_minutes: {kind: uniform, low: 0.5, high: 1.5}, optional_probability: 0.85, reason: nighttime_handwashing}
+          - {id: return_bed, room_id: bedroom, zone_id: bedroom_bed, dwell_minutes: {kind: normal, mean: 135, standard_deviation: 20, clip_min: 90, clip_max: 180}, reason: return_to_sleep}
+    adl_label: Sleeping
+  - id: personal_hygiene
+    name: PersonalHygiene
+    room_id: bathroom
+    zone_id: bath_entrance
+    base_duration_minutes: 38
+    duration_distribution: {kind: lognormal, mu: 3.55, sigma: 0.25, clip_min: 22, clip_max: 58}
+    min_duration_minutes: 20
+    max_duration_minutes: 60
+    device_actions:
+      - {device_id: L_BATH, state: "ON", attributes: {brightness: 82, color_temperature: 4000}}
+      - {device_id: P_FAN, state: "ON"}
+    micro_action_templates:
+      - id: shower_hygiene
+        weight: 0.72
+        steps:
+          - {id: toilet_optional, zone_id: bath_toilet, dwell_minutes: {kind: uniform, low: 2, high: 5}, optional_probability: 0.55}
+          - {id: pre_shower_sink, zone_id: bath_sink, dwell_minutes: {kind: uniform, low: 2, high: 5}}
+          - {id: shower, zone_id: bath_shower, dwell_minutes: {kind: normal, mean: 14, standard_deviation: 4, clip_min: 7, clip_max: 23}}
+          - {id: grooming_sink, zone_id: bath_sink, dwell_minutes: {kind: uniform, low: 5, high: 10}, repeat_count: {kind: weighted, choices: [{value: 1, weight: 0.75}, {value: 2, weight: 0.25}]}}
+          - {id: finish_hygiene, zone_id: bath_entrance, dwell_minutes: {kind: uniform, low: 1, high: 3}}
+      - id: sink_hygiene
+        weight: 0.28
+        steps:
+          - {id: quick_toilet, zone_id: bath_toilet, dwell_minutes: {kind: uniform, low: 3, high: 6}, optional_probability: 0.4}
+          - {id: wash_and_groom, zone_id: bath_sink, dwell_minutes: {kind: normal, mean: 12, standard_deviation: 3, clip_min: 7, clip_max: 18}}
+          - {id: leave_bathroom, zone_id: bath_entrance, dwell_minutes: {kind: uniform, low: 1, high: 2}}
+    adl_label: Personal_Hygiene
+  - id: meal_preparation
+    name: MealPreparation
+    room_id: kitchen
+    zone_id: kitchen_entrance
+    base_duration_minutes: 55
+    duration_distribution: {kind: normal, mean: 55, standard_deviation: 12, clip_min: 32, clip_max: 82}
+    min_duration_minutes: 30
+    max_duration_minutes: 85
+    device_actions:
+      - {device_id: L_KITCH, state: "ON", attributes: {brightness: 90, color_temperature: 4200}}
+    micro_action_templates:
+      - id: cooked_meal
+        weight: 0.58
+        steps:
+          - id: open_fridge
+            zone_id: kitchen_fridge
+            dwell_minutes: {kind: uniform, low: 0.2, high: 0.8}
+            device_actions: [{device_id: C_FRIDGE, state: OPEN}]
+            reason: retrieve_ingredients
+          - {id: stage_ingredients, zone_id: kitchen_counter, dwell_minutes: {kind: uniform, low: 4, high: 8}}
+          - {id: rinse_ingredients, zone_id: kitchen_sink, dwell_minutes: {kind: uniform, low: 2, high: 5}}
+          - {id: prepare_ingredients, zone_id: kitchen_counter, dwell_minutes: {kind: normal, mean: 9, standard_deviation: 3, clip_min: 4, clip_max: 15}}
+          - {id: wash_utensil, zone_id: kitchen_sink, dwell_minutes: {kind: uniform, low: 1, high: 3}, optional_probability: 0.7}
+          - id: heat_kettle
+            zone_id: kitchen_counter
+            dwell_minutes: {kind: uniform, low: 2, high: 5}
+            device_actions: [{device_id: P_KETTLE, state: "ON"}]
+            optional_probability: 0.55
+            reason: heat_water
+          - {id: check_fridge_again, zone_id: kitchen_fridge, dwell_minutes: {kind: uniform, low: 0.2, high: 0.7}, optional_probability: 0.45}
+          - {id: final_cooking, zone_id: kitchen_counter, dwell_minutes: {kind: normal, mean: 14, standard_deviation: 4, clip_min: 7, clip_max: 22}}
+          - {id: plate_meal, zone_id: kitchen_boundary, dwell_minutes: {kind: uniform, low: 2, high: 5}}
+      - id: coffee_and_light_meal
+        weight: 0.42
+        steps:
+          - id: breakfast_fridge
+            zone_id: kitchen_fridge
+            dwell_minutes: {kind: uniform, low: 0.2, high: 0.8}
+            device_actions: [{device_id: C_FRIDGE, state: OPEN}]
+            reason: retrieve_breakfast
+          - {id: breakfast_counter, zone_id: kitchen_counter, dwell_minutes: {kind: uniform, low: 3, high: 7}}
+          - {id: rinse_cup, zone_id: kitchen_sink, dwell_minutes: {kind: uniform, low: 1, high: 3}}
+          - id: brew_coffee
+            zone_id: kitchen_counter
+            dwell_minutes: {kind: normal, mean: 4, standard_deviation: 1, clip_min: 2, clip_max: 7}
+            device_actions: [{device_id: C_COFFEE, state: "ON"}]
+            optional_probability: 0.72
+            reason: prepare_beverage
+          - {id: return_fridge, zone_id: kitchen_fridge, dwell_minutes: {kind: uniform, low: 0.2, high: 0.7}, optional_probability: 0.35}
+          - {id: assemble_light_meal, zone_id: kitchen_counter, dwell_minutes: {kind: uniform, low: 6, high: 12}}
+          - {id: carry_to_table, zone_id: kitchen_boundary, dwell_minutes: {kind: uniform, low: 1, high: 3}}
+    adl_label: Meal_Preparation
+  - id: eating
+    name: Eating
+    room_id: dining_room
+    zone_id: dining_table
+    base_duration_minutes: 32
+    duration_distribution: {kind: lognormal, mu: 3.4, sigma: 0.28, clip_min: 15, clip_max: 50}
+    min_duration_minutes: 14
+    max_duration_minutes: 55
+    device_actions:
+      - {device_id: L_DINING, state: "ON", attributes: {brightness: 68, color_temperature: 3500}}
+    micro_action_templates:
+      - id: uninterrupted_meal
+        weight: 0.62
+        steps:
+          - {id: sit_at_table, zone_id: dining_table, dwell_minutes: {kind: normal, mean: 23, standard_deviation: 5, clip_min: 12, clip_max: 35}}
+          - {id: clear_table, zone_id: dining_entry, dwell_minutes: {kind: uniform, low: 2, high: 5}}
+          - {id: sit_again, zone_id: dining_table, dwell_minutes: {kind: uniform, low: 1, high: 4}, optional_probability: 0.35}
+      - id: meal_with_kitchen_return
+        weight: 0.38
+        steps:
+          - {id: first_course, zone_id: dining_table, dwell_minutes: {kind: uniform, low: 8, high: 15}}
+          - {id: retrieve_item, room_id: kitchen, zone_id: kitchen_boundary, dwell_minutes: {kind: uniform, low: 1, high: 3}, reason: retrieve_missing_item}
+          - {id: finish_meal, room_id: dining_room, zone_id: dining_table, dwell_minutes: {kind: uniform, low: 8, high: 16}}
+          - {id: leave_table, zone_id: dining_entry, dwell_minutes: {kind: uniform, low: 1, high: 3}}
+    adl_label: Eating
+  - id: bathroom_break
+    name: BathroomBreak
+    room_id: bathroom
+    zone_id: bath_toilet
+    base_duration_minutes: 6
+    duration_distribution: {kind: lognormal, mu: 1.7, sigma: 0.3, clip_min: 3, clip_max: 11}
+    device_actions:
+      - {device_id: L_BATH, state: "ON", attributes: {brightness: 48, color_temperature: 3100}}
+    micro_action_templates:
+      - id: toilet_and_sink
+        steps:
+          - {id: use_toilet, zone_id: bath_toilet, dwell_minutes: {kind: uniform, low: 2, high: 5}}
+          - {id: wash_hands, zone_id: bath_sink, dwell_minutes: {kind: uniform, low: 0.5, high: 1.5}}
+          - {id: bath_exit, zone_id: bath_entrance, dwell_minutes: {kind: uniform, low: 0.2, high: 0.8}}
+    adl_label: Toileting
+  - id: drink_water
+    name: DrinkWater
+    room_id: kitchen
+    zone_id: kitchen_sink
+    base_duration_minutes: 4
+    duration_distribution: {kind: uniform, low: 2, high: 6}
+    micro_action_templates:
+      - id: water_from_sink
+        weight: 0.65
+        steps:
+          - {id: get_glass, zone_id: kitchen_counter, dwell_minutes: {kind: uniform, low: 0.3, high: 0.8}}
+          - {id: fill_glass, zone_id: kitchen_sink, dwell_minutes: {kind: uniform, low: 0.4, high: 1.0}}
+      - id: bottled_water
+        weight: 0.35
+        steps:
+          - id: water_fridge
+            zone_id: kitchen_fridge
+            dwell_minutes: {kind: uniform, low: 0.2, high: 0.7}
+            device_actions: [{device_id: C_FRIDGE, state: OPEN}]
+            reason: retrieve_water
+          - {id: drink_at_counter, zone_id: kitchen_counter, dwell_minutes: {kind: uniform, low: 0.5, high: 1.5}}
+    adl_label: Meal_Preparation
+  - id: check_entrance
+    name: CheckEntrance
+    room_id: entrance
+    zone_id: entrance_door
+    base_duration_minutes: 4
+    duration_distribution: {kind: uniform, low: 2, high: 6}
+    device_actions:
+      - {device_id: L_ENT, state: "ON", attributes: {brightness: 60, color_temperature: 3400}}
+    micro_action_templates:
+      - id: retrieve_delivery
+        steps:
+          - {id: approach_front_door, zone_id: entrance_door, dwell_minutes: {kind: uniform, low: 1, high: 3}, reason: retrieve_delivery}
+          - {id: return_inside, zone_id: entrance_inside, dwell_minutes: {kind: uniform, low: 0.3, high: 1}}
+    adl_label: Enter_Home
+  - id: relaxing
+    name: Relaxing
+    room_id: living_room
+    zone_id: living_sofa
+    base_duration_minutes: 170
+    duration_distribution: {kind: normal, mean: 170, standard_deviation: 28, clip_min: 105, clip_max: 225}
+    min_duration_minutes: 90
+    max_duration_minutes: 235
+    device_actions:
+      - {device_id: L_LIVING, state: "ON", attributes: {brightness: 52, color_temperature: 3000}}
+      - {device_id: T_LIVING, state: "ON", attributes: {volume: 17}}
+      - {device_id: AC_LIVING, state: "ON", attributes: {temperature: 24, mode: auto}}
+    secondary_activities:
+      - {activity_id: drink_water, probability: 0.16, block_minutes: 15, cooldown_minutes: 55, max_occurrences: 2, reason: hydration_break}
+      - {activity_id: bathroom_break, probability: 0.12, block_minutes: 15, cooldown_minutes: 75, max_occurrences: 2, reason: toilet_break}
+      - {activity_id: check_entrance, probability: 0.025, block_minutes: 15, cooldown_minutes: 180, max_occurrences: 1, allowed_start_hour: 8, allowed_end_hour: 22, reason: delivery_or_door_sound}
+    micro_action_templates:
+      - id: television_evening
+        weight: 0.62
+        steps:
+          - {id: settle_sofa, zone_id: living_sofa, dwell_minutes: {kind: uniform, low: 12, high: 25}}
+          - {id: check_window, zone_id: living_window, dwell_minutes: {kind: uniform, low: 1, high: 4}, optional_probability: 0.45}
+          - {id: return_sofa, zone_id: living_sofa, dwell_minutes: {kind: uniform, low: 8, high: 18}}
+          - {id: fetch_book, zone_id: living_shelf, dwell_minutes: {kind: uniform, low: 1, high: 3}, optional_probability: 0.35}
+          - {id: sofa_after_book, zone_id: living_sofa, dwell_minutes: {kind: uniform, low: 6, high: 15}}
+      - id: reading_evening
+        weight: 0.38
+        steps:
+          - {id: choose_book, zone_id: living_shelf, dwell_minutes: {kind: uniform, low: 1, high: 4}}
+          - {id: read_sofa, zone_id: living_sofa, dwell_minutes: {kind: normal, mean: 24, standard_deviation: 7, clip_min: 12, clip_max: 38}}
+          - {id: adjust_window, zone_id: living_window, dwell_minutes: {kind: uniform, low: 1, high: 3}, optional_probability: 0.5}
+          - {id: continue_reading, zone_id: living_sofa, dwell_minutes: {kind: uniform, low: 8, high: 18}}
+    adl_label: Relax
+  - id: housekeeping
+    name: Housekeeping
+    room_id: living_room
+    zone_id: living_entrance
+    base_duration_minutes: 72
+    duration_distribution: {kind: lognormal, mu: 4.25, sigma: 0.28, clip_min: 42, clip_max: 105}
+    min_duration_minutes: 38
+    max_duration_minutes: 110
+    micro_action_templates:
+      - id: whole_home_clean
+        weight: 0.58
+        steps:
+          - id: vacuum_living
+            zone_id: living_sofa
+            dwell_minutes: {kind: uniform, low: 7, high: 13}
+            device_actions: [{device_id: P_VAC, state: "ON"}]
+            reason: vacuum_living_room
+          - {id: clean_living_window, zone_id: living_window, dwell_minutes: {kind: uniform, low: 3, high: 7}}
+          - {id: wipe_kitchen, room_id: kitchen, zone_id: kitchen_counter, dwell_minutes: {kind: uniform, low: 7, high: 13}}
+          - {id: clean_kitchen_sink, room_id: kitchen, zone_id: kitchen_sink, dwell_minutes: {kind: uniform, low: 4, high: 8}}
+          - {id: traverse_hall, room_id: hallway, zone_id: hall_center, dwell_minutes: {kind: uniform, low: 1, high: 3}}
+          - {id: tidy_bed, room_id: bedroom, zone_id: bedroom_bed, dwell_minutes: {kind: uniform, low: 6, high: 12}}
+          - {id: tidy_closet, room_id: bedroom, zone_id: bedroom_closet, dwell_minutes: {kind: uniform, low: 3, high: 7}, optional_probability: 0.55}
+          - {id: inspect_bathroom, room_id: bathroom, zone_id: bath_sink, dwell_minutes: {kind: uniform, low: 4, high: 8}}
+          - {id: return_cleaning_base, room_id: living_room, zone_id: living_entrance, dwell_minutes: {kind: uniform, low: 1, high: 3}}
+      - id: focused_clean
+        weight: 0.42
+        steps:
+          - id: focused_vacuum
+            zone_id: living_sofa
+            dwell_minutes: {kind: uniform, low: 8, high: 15}
+            device_actions: [{device_id: P_VAC, state: "ON"}]
+            reason: focused_vacuuming
+          - {id: dust_shelf, zone_id: living_shelf, dwell_minutes: {kind: uniform, low: 4, high: 9}}
+          - {id: clean_dining_table, room_id: dining_room, zone_id: dining_table, dwell_minutes: {kind: uniform, low: 6, high: 12}}
+          - {id: kitchen_put_away, room_id: kitchen, zone_id: kitchen_fridge, dwell_minutes: {kind: uniform, low: 3, high: 7}}
+          - {id: finish_at_entry, room_id: living_room, zone_id: living_entrance, dwell_minutes: {kind: uniform, low: 1, high: 3}}
+    adl_label: Housekeeping
+  - id: leaving_home
+    name: LeavingHome
+    room_id: outside
+    zone_id: outside_area
+    base_duration_minutes: 250
+    duration_distribution: {kind: lognormal, mu: 5.48, sigma: 0.32, clip_min: 120, clip_max: 420}
+    min_duration_minutes: 90
+    max_duration_minutes: 450
+    adl_label: Leave_Home
+  - id: entering_home
+    name: EnteringHome
+    room_id: entrance
+    zone_id: entrance_inside
+    base_duration_minutes: 8
+    duration_distribution: {kind: uniform, low: 5, high: 12}
+    device_actions:
+      - {device_id: L_ENT, state: "ON", attributes: {brightness: 72, color_temperature: 3600}}
+    micro_action_templates:
+      - id: arrive_and_settle
+        steps:
+          - {id: front_door_area, zone_id: entrance_door, dwell_minutes: {kind: uniform, low: 0.5, high: 1.5}}
+          - {id: remove_shoes, zone_id: entrance_inside, dwell_minutes: {kind: uniform, low: 2, high: 5}}
+    adl_label: Enter_Home
+
+residents:
+  - id: resident_1
+    name: Haruko
+    initial_room_id: bedroom
+    initial_zone_id: bedroom_bed
+    priority: 10
+    duration_multiplier: 1.0
+    secondary_activity_factor: 1.0
+    preferences:
+      L_LIVING: {brightness: 48, color_temperature: 2900}
+      T_LIVING: {volume: 15}
+      AC_LIVING: {temperature: 23, mode: auto}
+    weekly_routine:
+      monday: &weekday
+        - {activity_id: sleeping, scheduled_start_minute: 0, start_jitter_minutes: {kind: normal, mean: 0, standard_deviation: 5, clip_min: -8, clip_max: 8}}
+        - {activity_id: personal_hygiene, scheduled_start_minute: 420, start_jitter_minutes: {kind: normal, mean: 0, standard_deviation: 12, clip_min: -25, clip_max: 25}}
+        - {activity_id: meal_preparation, scheduled_start_minute: 465, start_jitter_minutes: {kind: normal, mean: 0, standard_deviation: 10, clip_min: -20, clip_max: 20}}
+        - {activity_id: eating, scheduled_start_minute: 525, start_jitter_minutes: {kind: normal, mean: 0, standard_deviation: 8, clip_min: -15, clip_max: 15}}
+        - {activity_id: housekeeping, scheduled_start_minute: 585, inclusion_probability: 0.45, gap_before_minutes: {kind: uniform, low: 2, high: 12}}
+        - {activity_id: leaving_home, scheduled_start_minute: 675, inclusion_probability: 0.78, start_jitter_minutes: {kind: normal, mean: 0, standard_deviation: 25, clip_min: -45, clip_max: 45}}
+        - {activity_id: entering_home, scheduled_start_minute: 975, inclusion_probability: 0.78}
+        - {activity_id: meal_preparation, scheduled_start_minute: 1050, start_jitter_minutes: {kind: normal, mean: 0, standard_deviation: 18, clip_min: -35, clip_max: 35}}
+        - {activity_id: eating, scheduled_start_minute: 1125, gap_before_minutes: {kind: uniform, low: 1, high: 8}}
+        - {activity_id: relaxing, scheduled_start_minute: 1170, start_jitter_minutes: {kind: normal, mean: 0, standard_deviation: 20, clip_min: -35, clip_max: 35}}
+        - {activity_id: personal_hygiene, scheduled_start_minute: 1335, inclusion_probability: 0.7}
+      tuesday: *weekday
+      wednesday: *weekday
+      thursday: *weekday
+      friday: *weekday
+      saturday: &weekend
+        - {activity_id: sleeping, scheduled_start_minute: 0, start_jitter_minutes: {kind: normal, mean: 18, standard_deviation: 10, clip_min: 0, clip_max: 35}}
+        - {activity_id: personal_hygiene, scheduled_start_minute: 465, start_jitter_minutes: {kind: normal, mean: 0, standard_deviation: 18, clip_min: -30, clip_max: 35}}
+        - {activity_id: meal_preparation, scheduled_start_minute: 520}
+        - {activity_id: eating, scheduled_start_minute: 585}
+        - {activity_id: housekeeping, scheduled_start_minute: 650, inclusion_probability: 0.82}
+        - {activity_id: relaxing, scheduled_start_minute: 760}
+        - {activity_id: leaving_home, scheduled_start_minute: 930, inclusion_probability: 0.42}
+        - {activity_id: entering_home, scheduled_start_minute: 1110, inclusion_probability: 0.42}
+        - {activity_id: meal_preparation, scheduled_start_minute: 1120}
+        - {activity_id: eating, scheduled_start_minute: 1190}
+        - {activity_id: relaxing, scheduled_start_minute: 1235}
+      sunday: *weekend

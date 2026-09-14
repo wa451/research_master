@@ -1,0 +1,18 @@
+# 接続・採点の動作確認用。本実験の統計的結論には使わない。
+schema_version: 1
+observation_noise: false
+start_datetime: 2025-01-06T00:00:00+09:00
+train_days: 2
+test_days: 2
+seeds: [11]
+n_states: 15
+hamming_threshold: 0
+smoothing_window_sec: 0
+min_train_support: 2
+baseline_top_k: 20
+llm_runs: 1
+conditions:
+  - {id: compact_base, house: compact}
+  - {id: corridor_base, house: corridor}
+  - {id: branched_base, house: branched}
+  - {id: compact_two, house: compact, residents: 2}

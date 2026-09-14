@@ -11,7 +11,7 @@
 - `run_llm_extraction.py`: 提案手法のLLM抽出のみ実行。評価6では `--days 14` を使い、条件変更時は `--n-states` と `--hamming-threshold`、5回分を作る場合は `--runs 5` を追加する。特定runだけを追加生成する場合は `--run-ids 2 3` を使う。
 - `run_evaluation7_top_condition_repeats.py`: 評価7の初回summaryから上位条件を選び、初回run 1を含む合計run数まで不足するLLM出力だけを生成して条件manifestを保存する。
 - `run_llm_eval_batch.py`: 提案手法を複数回実行し、評価をExcelに集計。
-- `run_direct_log_baseline.py`: ラベル付きCASAS txt由来の代表状態系列を、ネットワーク化せず直接LLMへ入力するベースラインと評価を実行。代表状態の最終写像には未解決の条件差があるため `docs/known_issues.md` のKI-04を参照する。評価6では `--log-days 14 --extract-only` を使い、条件変更時は `--n-states` と `--hamming-threshold`、5回分を作る場合は `--runs 5` を追加する。
+- `run_direct_log_baseline.py`: ラベル付きCASAS txt由来の代表状態系列を、ネットワーク化せず直接LLMへ入力するベースラインと評価を実行。代表状態の最終写像には未解決の条件差があるため `docs/research/known_issues.md` のKI-04を参照する。評価6では `--log-days 14 --extract-only` を使い、条件変更時は `--n-states` と `--hamming-threshold`、5回分を作る場合は `--runs 5` を追加する。
 - `run_evaluation.py`: 既存LLM出力に対するベースライン比較評価。
 - `run_groundedness.py`: Groundedness評価。
 - `evaluate_condition_metrics.py`: 条件ベース評価。
@@ -20,10 +20,15 @@
 - `evaluate_6_compare_adl_interpretation_set.py`: 評価6について、先頭14日を入力とする提案手法とLLM単独ベースラインを、14日条件の代表状態定義で写像した同じ全220日状態系列上で比較する。`--runs 5` でset一致指標に加え、1 run合計のトークン数・API応答時間の5回平均も出力する。
 - `evaluate_7_parameter_sensitivity_adl_interpretation.py`: 評価7について、K・ハミング距離の条件別にADL解釈ラベルset指標を集計する。
 - `evaluate_8_frequency_stratified_adl_consistency.py`: 評価8について、own-IDの一意な物理出現数から頻度帯を再構築し、ADL整合性を後段集計する。
+- `evaluate_10_switchbot.py`: SwitchBotの固定スナップショットを前半train/後半testへ分け、trainだけでパターンを生成してtest再出現を評価する。LLM APIは `--allow-api` の明示時だけ呼ぶ。
 
 新しく実行する場合は、この `scripts/` 側を使ってください。
-CLI引数、正式評価条件、出力先は対応する `docs/evaluation_*.md` を参照し、共通既定値と論文採用値の差は `docs/known_issues.md` で確認してください。
+CLI引数、正式評価条件、出力先は対応する `docs/evaluation_*.md` を参照し、共通既定値と論文採用値の差は `docs/research/known_issues.md` で確認してください。
 
 ## 評価9: Hestia合成ログ
 
-Hestiaは `master-research/Hestia/` に配置する。Webアプリの「評価9」または `uv run python scripts/evaluate_9_hestia.py` でログ生成から採点まで実行できる（既定はAPIなし）。配置・入力契約・指標・実行方法は [評価9のガイド](../docs/evaluation_9_hestia.md) を参照。
+Hestiaは `master-research/Hestia/` に配置する。Webアプリの「評価9」または `uv run python scripts/evaluate_9_hestia.py` でログ生成から採点まで実行できる（既定はAPIなし）。配置・入力契約・指標・実行方法は [評価9のガイド](../docs/evaluations/evaluation_9_hestia.md) を参照。
+
+## 評価10: SwitchBot実宅ログ
+
+`uv run python scripts/evaluate_10_switchbot.py --snapshot data/switchbot/<取得期間>` で、入力検証、frequencyパターン生成、後半ホールドアウト評価を実行する。詳細は [評価10のガイド](../docs/evaluations/evaluation_10_switchbot_holdout.md) を参照。

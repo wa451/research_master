@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Hestia smart-home scenario editor for rooms, devices, and residents."
+    />
+    <title>Hestia Studio</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand" aria-label="Hestia Studio">
+          <span class="brand-mark" aria-hidden="true">H</span>
+          <div>
+            <strong>Hestia Studio</strong>
+            <span>スマートホーム・シナリオエディタ</span>
+          </div>
+        </div>
+        <div class="topbar-center">
+          <span class="scenario-name" id="scenario-name">読み込み中…</span>
+          <button class="validation-status neutral" id="validation-button" type="button">
+            <span class="status-dot"></span><span id="validation-status">未検証</span>
+          </button>
+          <div class="editor-mode-toggle" role="group" aria-label="編集方法">
+            <button class="mode-button active" id="gui-mode-button" type="button">GUI</button>
+            <button class="mode-button" id="code-mode-button" type="button">コード</button>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="button quiet" id="new-button" type="button">新規</button>
+          <label class="button quiet import-button" for="import-input">
+            読み込む
+            <input id="import-input" type="file" accept=".json,.yaml,.yml" />
+          </label>
+          <button class="button quiet" id="export-json-button" type="button">JSON書出し</button>
+          <button class="button primary" id="export-yaml-button" type="button" disabled>YAML保存</button>
+        </div>
+      </header>
+
+      <div class="workspace" id="workspace">
+        <aside class="sidebar" aria-label="シナリオ構成">
+          <div class="sidebar-scroll">
+            <section class="sidebar-section home-section">
+              <button class="home-card selectable" data-select-type="home" type="button">
+                <span class="home-card-icon" aria-hidden="true">⌂</span>
+                <span>
+                  <strong>ホーム設定</strong>
+                  <small id="home-summary">シナリオ</small>
+                </span>
+              </button>
+            </section>
+
+            <section class="sidebar-section">
+              <div class="section-title">
+                <span>部屋</span>
+                <button class="icon-button" id="add-room-button" type="button" title="部屋を追加">＋</button>
+              </div>
+              <div class="item-list" id="room-list"></div>
+            </section>
+
+            <section class="sidebar-section">
+              <div class="section-title">
+                <span>人物</span>
+                <button class="icon-button" id="add-resident-button" type="button" title="人物を追加">＋</button>
+              </div>
+              <div class="item-list" id="resident-list"></div>
+            </section>
+
+            <section class="sidebar-section">
+              <div class="section-title">
+                <span>行動</span>
+                <button class="icon-button" id="add-activity-button" type="button" title="行動を追加">＋</button>
+              </div>
+              <div class="item-list" id="activity-list"></div>
+            </section>
+          </div>
+          <div class="sidebar-footer">
+            <button class="button outline full-width" id="connect-button" type="button">
+              <span aria-hidden="true">⌁</span> 部屋をつなぐ
+            </button>
+            <p id="connection-hint">部屋間の移動経路を設定できます。</p>
+          </div>
+        </aside>
+
+        <main class="main-panel">
+          <div id="visual-editor">
+            <nav class="tabbar" aria-label="編集タブ">
+              <button class="tab active" data-tab="layout" type="button">間取りとデバイス</button>
+              <button class="tab" data-tab="people" type="button">人物とルーティン</button>
+              <button class="tab" data-tab="activities" type="button">行動</button>
+              <button class="tab" data-tab="run" type="button">実行</button>
+            </nav>
+
+            <section class="tab-pane active" id="layout-pane">
+              <div class="canvas-toolbar">
+                <div>
+                  <h1>間取り</h1>
+                  <p>部屋やデバイスをドラッグして、直感的に配置を調整できます。</p>
+                </div>
+                <div class="canvas-actions">
+                  <button class="button outline" id="add-room-canvas-button" type="button">＋ 部屋を追加</button>
+                  <button class="button outline" id="fit-layout-button" type="button">整列</button>
+                </div>
+              </div>
+              <div class="floorplan-frame">
+                <div
+                  class="floorplan"
+                  id="floorplan"
+                  aria-label="編集可能な住宅間取り。部屋、デバイス、接続を選択できます。"
+                >
+                  <svg id="connection-layer" aria-hidden="true" preserveAspectRatio="none" viewBox="0 0 100 100"></svg>
+                  <div id="room-layer"></div>
+                  <div class="floorplan-empty" id="floorplan-empty" hidden>
+                    <span>＋</span>
+                    <strong>最初の部屋を追加</strong>
+                    <small>左上の「部屋を追加」から始められます。</small>
+                  </div>
+                </div>
+              </div>
+              <div class="canvas-legend">
+                <span><i class="legend-room"></i>部屋</span>
+                <span><i class="legend-device"></i>デバイス</span>
+                <span><i class="legend-path"></i>移動経路</span>
+                <span class="canvas-tip">ヒント: 接続モードでは、2つの部屋を順番に選択します。</span>
+              </div>
+            </section>
+
+            <section class="tab-pane" id="people-pane">
+              <div class="content-header">
+                <div>
+                  <h1>人物と日課</h1>
+                  <p>住人ごとの初期位置、行動の速さ、好み、曜日別のルーティンを編集します。</p>
+                </div>
+                <button class="button primary" id="add-resident-pane-button" type="button">＋ 人物を追加</button>
+              </div>
+              <div class="person-grid" id="person-grid"></div>
+            </section>
+
+            <section class="tab-pane" id="activities-pane">
+              <div class="content-header">
+                <div>
+                  <h1>行動</h1>
+                  <p>人物のルーティンで使う行動と、その場所・デバイス操作を設定します。</p>
+                </div>
+                <button class="button primary" id="add-activity-pane-button" type="button">＋ 行動を追加</button>
+              </div>
+              <div class="activity-grid" id="activity-grid"></div>
+            </section>
+
+            <section class="tab-pane" id="run-pane">
+              <div class="content-header">
+                <div>
+                  <h1>ログ生成</h1>
+                  <p>プロジェクト内へ保存したYAMLを選び、日数・seed・出力先を指定してシミュレーションを実行します。</p>
+                </div>
+                <button class="button outline" id="refresh-scenarios-button" type="button">↻ YAML一覧を更新</button>
+              </div>
+              <div class="run-grid">
+                <section class="run-card">
+                  <div class="run-card-heading">
+                    <span class="run-step" aria-hidden="true">1</span>
+                    <div>
+                      <h2>現在の設定をYAML保存</h2>
+                      <p><code>scenarios/</code> 内に保存します。既存ファイルを上書きする場合は確認します。</p>
+                    </div>
+                  </div>
+                  <div class="run-save-controls">
+                    <div class="field">
+                      <label for="save-file-name">YAMLファイル名</label>
+                      <input id="save-file-name" type="text" autocomplete="off" />
+                      <p class="helper-text">`.yaml` は省略できます。</p>
+                    </div>
+                    <button class="button primary" id="save-yaml-button" type="button" disabled>プロジェクトへ保存</button>
+                  </div>
+                  <p class="run-message" id="save-status" aria-live="polite"></p>
+                </section>
+
+                <section class="run-card">
+                  <div class="run-card-heading">
+                    <span class="run-step" aria-hidden="true">2</span>
+                    <div>
+                      <h2>YAMLを選んで実行</h2>
+                      <p>保存済みYAMLまたは <code>examples/</code> 内のYAMLを実行できます。</p>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label for="run-scenario-select">実行するYAML</label>
+                    <select id="run-scenario-select"></select>
+                  </div>
+                  <div class="field-grid run-options">
+                    <div class="field">
+                      <label for="run-days">シミュレーション日数</label>
+                      <input id="run-days" type="number" min="1" max="365" value="7" />
+                    </div>
+                    <div class="field">
+                      <label for="run-seed">乱数seed</label>
+                      <input id="run-seed" type="number" value="42" />
+                    </div>
+                    <div class="field span-two">
+                      <label for="run-output-name">出力フォルダ名</label>
+                      <input id="run-output-name" type="text" autocomplete="off" />
+                      <p class="helper-text">保存先: <code id="run-output-preview">outputs/studio/</code></p>
+                    </div>
+                  </div>
+                  <button class="button primary full-width" id="run-simulation-button" type="button">▶ ログを生成</button>
+                  <p class="run-message" id="run-status" aria-live="polite"></p>
+                </section>
+              </div>
+              <section class="run-result" id="run-result" aria-live="polite" hidden></section>
+            </section>
+          </div>
+
+          <section class="code-pane" id="code-pane" hidden>
+            <div class="code-pane-header">
+              <div>
+                <span class="eyebrow">コード編集</span>
+                <h1>シナリオを直接編集</h1>
+                <p>YAML/JSONで、GUIにない高度な設定も編集できます。適用前に既存スキーマで検証されます。</p>
+              </div>
+              <div class="code-actions">
+                <div class="code-format-toggle" role="group" aria-label="コード形式">
+                  <button class="format-button active" id="code-format-yaml" type="button">YAML</button>
+                  <button class="format-button" id="code-format-json" type="button">JSON</button>
+                </div>
+                <button class="button outline" id="code-format-button" type="button">整形</button>
+                <button class="button outline" id="code-validate-button" type="button">検証</button>
+                <button class="button primary" id="code-apply-button" type="button">GUIに適用</button>
+              </div>
+            </div>
+            <div class="code-editor-shell">
+              <div class="code-editor-meta">
+                <div class="code-file-details">
+                  <span class="code-file-detail"><span>読み込み元</span><strong id="source-file-name">未保存のシナリオ</strong></span>
+                  <span class="code-file-detail"><span>YAML保存名</span><strong id="export-file-name">my_home.yaml</strong></span>
+                  <span id="code-format-label">YAML</span>
+                </div>
+                <span id="code-status">GUIの内容を読み込み中…</span>
+              </div>
+              <textarea
+                id="code-editor"
+                aria-label="シナリオのYAMLまたはJSON"
+                autocapitalize="off"
+                autocomplete="off"
+                autocorrect="off"
+                spellcheck="false"
+              ></textarea>
+            </div>
+            <div class="code-validation" id="code-validation" hidden></div>
+            <p class="code-footnote">部屋（<code>rooms</code>）と人物（<code>residents</code>）は別ファイルではなく、この同一シナリオファイルのセクションです。YAMLの <code>ON</code>、<code>OFF</code>、<code>yes</code>、<code>no</code> を文字列として使う場合は引用符で囲んでください。<code>extends</code> はStudio内のコード編集では使えません。</p>
+          </section>
+        </main>
+
+        <aside class="inspector" aria-label="プロパティインスペクタ">
+          <div class="inspector-heading">
+            <div>
+              <span class="eyebrow">プロパティ</span>
+              <h2 id="inspector-title">ホーム設定</h2>
+            </div>
+            <button class="icon-button" id="close-selection-button" type="button" title="選択を解除">×</button>
+          </div>
+          <div class="inspector-scroll" id="inspector-content"></div>
+          <div class="validation-report" id="validation-report" hidden></div>
+        </aside>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/assets/app.js"></script>
+  </body>
+</html>

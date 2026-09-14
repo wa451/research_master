@@ -5,7 +5,7 @@ description: Edit evaluation Markdown wording, structure, tables, or execution-s
 
 # Evaluation README Formatting
 
-- Read the target document first. Use [EVALUATION_ROUTES.md](../../../docs/codex_memory/EVALUATION_ROUTES.md) only if its implementation is unclear; check relevant [known issues](../../../docs/known_issues.md).
+- Read the target document first. Use [EVALUATION_ROUTES.md](../../../docs/codex_memory/EVALUATION_ROUTES.md) only if its implementation is unclear; check relevant [known issues](../../../docs/research/known_issues.md).
 - Preserve research claims, metrics, conditions, results and command semantics. Verify referenced scripts, options, paths, outputs and evaluation numbers against producer code/argparse; use `--help` only after checking it exits safely.
 - Classify discrepancies as documentation fixes, observed behavior, or unresolved research issues. Do not turn suspected bugs into specifications.
 - Follow the document's structure. For full normalization, prefer summary → RQ → metrics → inputs/outputs → interpretation → execution → comparisons → procedure → parameters → cautions; omit unsupported sections.

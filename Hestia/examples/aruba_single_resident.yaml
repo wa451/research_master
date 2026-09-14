@@ -1,0 +1,180 @@
+schema_version: 1
+id: aruba_single_resident
+name: Aruba-style single senior resident
+start_datetime: 2025-01-06T00:00:00+09:00
+
+rooms:
+  - id: bedroom
+    name: Bedroom
+    capacity: 2
+    devices:
+      - {id: M001, type: MotionSensor, name: Bedroom motion}
+      - id: L001
+        type: Light
+        name: Bedroom light
+        initial_attributes: {brightness: 40, color_temperature: 3000}
+  - id: bathroom
+    name: Bathroom
+    capacity: 1
+    devices:
+      - {id: M002, type: MotionSensor, name: Bathroom motion}
+      - {id: L002, type: Light, name: Bathroom light}
+  - id: kitchen
+    name: Kitchen
+    capacity: 2
+    devices:
+      - {id: M003, type: MotionSensor, name: Kitchen motion}
+      - {id: L003, type: Light, name: Kitchen light}
+      - {id: P001, type: SmartPlug, name: Kettle smart plug}
+      - {id: C001, type: CoffeeMachine, name: Coffee machine}
+  - id: living_room
+    name: LivingRoom
+    capacity: 3
+    devices:
+      - {id: M004, type: MotionSensor, name: Living room motion}
+      - {id: L004, type: Light, name: Living room light}
+      - {id: T001, type: Television, name: Living room television}
+      - {id: P002, type: SmartPlug, name: Fan smart plug}
+  - id: dining_room
+    name: DiningRoom
+    capacity: 3
+    devices:
+      - {id: M005, type: MotionSensor, name: Dining room motion}
+      - {id: L005, type: Light, name: Dining room light}
+  - id: hallway
+    name: Hallway
+    capacity: 3
+    devices:
+      - {id: M006, type: MotionSensor, name: Hallway motion}
+      - {id: D_BED_HALL, type: DoorSensor, name: Bedroom door}
+      - {id: D_BATH_HALL, type: DoorSensor, name: Bathroom door}
+      - {id: D_KITCHEN_HALL, type: DoorSensor, name: Kitchen door}
+      - {id: D_LIVING_HALL, type: DoorSensor, name: Living room door}
+      - {id: D_DINING_HALL, type: DoorSensor, name: Dining room door}
+      - {id: D_HALL_ENTRANCE, type: DoorSensor, name: Hallway entrance door}
+  - id: entrance
+    name: Entrance
+    capacity: 2
+    devices:
+      - {id: M007, type: MotionSensor, name: Entrance motion}
+      - {id: D_FRONT, type: DoorSensor, name: Front door}
+      - {id: C_FRONT, type: ContactSensor, name: Front contact}
+  - id: outside
+    name: Outside
+    capacity: 10
+    is_outside: true
+    devices:
+      - {id: M008, type: MotionSensor, name: Outside motion}
+
+connections:
+  - {source: bedroom, target: hallway, travel_seconds: 4, door_sensor_id: D_BED_HALL}
+  - {source: bathroom, target: hallway, travel_seconds: 3, door_sensor_id: D_BATH_HALL}
+  - {source: kitchen, target: hallway, travel_seconds: 4, door_sensor_id: D_KITCHEN_HALL}
+  - {source: living_room, target: hallway, travel_seconds: 3, door_sensor_id: D_LIVING_HALL}
+  - {source: dining_room, target: hallway, travel_seconds: 3, door_sensor_id: D_DINING_HALL}
+  - {source: hallway, target: entrance, travel_seconds: 3, door_sensor_id: D_HALL_ENTRANCE}
+  - {source: entrance, target: outside, travel_seconds: 5, door_sensor_id: D_FRONT}
+
+activities:
+  - id: sleeping
+    name: Sleeping
+    room_id: bedroom
+    base_duration_minutes: 420
+    variation_fraction: 0.02
+    adl_label: Sleeping
+  - id: bed_to_toilet
+    name: BedToToilet
+    room_id: bathroom
+    base_duration_minutes: 10
+    variation_fraction: 0.1
+    device_actions:
+      - {device_id: L002, state: "ON", attributes: {brightness: 35, color_temperature: 3000}}
+    adl_label: Bed_Toilet_Transition
+  - id: personal_hygiene
+    name: PersonalHygiene
+    room_id: bathroom
+    base_duration_minutes: 30
+    variation_fraction: 0.1
+    device_actions:
+      - {device_id: L002, state: "ON", attributes: {brightness: 80, color_temperature: 4000}}
+    adl_label: Personal_Hygiene
+  - id: meal_preparation
+    name: MealPreparation
+    room_id: kitchen
+    base_duration_minutes: 40
+    variation_fraction: 0.15
+    device_actions:
+      - {device_id: L003, state: "ON", attributes: {brightness: 90, color_temperature: 4200}}
+      - {device_id: P001, state: "ON"}
+      - {device_id: C001, state: "ON"}
+    adl_label: Meal_Preparation
+  - id: eating
+    name: Eating
+    room_id: dining_room
+    base_duration_minutes: 30
+    variation_fraction: 0.1
+    device_actions:
+      - {device_id: L005, state: "ON", attributes: {brightness: 70, color_temperature: 3500}}
+    adl_label: Eating
+  - id: bathroom_break
+    name: BathroomBreak
+    room_id: bathroom
+    base_duration_minutes: 5
+    variation_fraction: 0.2
+    device_actions:
+      - {device_id: L002, state: "ON", attributes: {brightness: 50, color_temperature: 3200}}
+    adl_label: Toileting
+  - id: relaxing
+    name: Relaxing
+    room_id: living_room
+    base_duration_minutes: 180
+    variation_fraction: 0.1
+    device_actions:
+      - {device_id: L004, state: "ON", attributes: {brightness: 55, color_temperature: 3000}}
+      - {device_id: T001, state: "ON", attributes: {volume: 18}}
+      - {device_id: P002, state: "ON"}
+    secondary_activities:
+      - {activity_id: bathroom_break, probability: 0.02, block_minutes: 10}
+    adl_label: Relax
+  - id: housekeeping
+    name: Housekeeping
+    room_id: living_room
+    base_duration_minutes: 60
+    variation_fraction: 0.15
+    device_actions:
+      - {device_id: L004, state: "ON", attributes: {brightness: 100, color_temperature: 4500}}
+    adl_label: Housekeeping
+  - id: leaving_home
+    name: LeavingHome
+    room_id: outside
+    base_duration_minutes: 300
+    variation_fraction: 0.1
+    adl_label: Leave_Home
+  - id: entering_home
+    name: EnteringHome
+    room_id: entrance
+    base_duration_minutes: 10
+    variation_fraction: 0.05
+    adl_label: Enter_Home
+
+residents:
+  - id: resident_1
+    name: Haruko
+    initial_room_id: bedroom
+    priority: 10
+    duration_multiplier: 1.0
+    secondary_activity_factor: 1.0
+    preferences:
+      L001: {brightness: 35, color_temperature: 2800}
+      L004: {brightness: 50, color_temperature: 2900}
+      T001: {volume: 16}
+    weekly_routine:
+      monday: &single_daily
+        [sleeping, bed_to_toilet, personal_hygiene, meal_preparation, eating, relaxing,
+         housekeeping, leaving_home, entering_home, relaxing]
+      tuesday: *single_daily
+      wednesday: *single_daily
+      thursday: *single_daily
+      friday: *single_daily
+      saturday: *single_daily
+      sunday: *single_daily

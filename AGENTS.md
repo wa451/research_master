@@ -9,7 +9,7 @@
 
 ## Before editing
 
-1. Follow the lookup order below. Evaluation behavior changes require the matching `docs/evaluation_*.md` and `docs/known_issues.md`.
+1. Follow the lookup order below. Evaluation behavior changes require the matching `docs/evaluation_*.md` and `docs/research/known_issues.md`.
 2. Inspect the implementation, tests, configuration, and actual CLI definition. Run `--help` only after confirming the entry point uses `argparse` and exits safely.
 3. Treat code as evidence of current behavior, not automatic proof of research intent. If sources conflict, classify and report the conflict instead of guessing or legitimizing a suspected bug as specification.
 

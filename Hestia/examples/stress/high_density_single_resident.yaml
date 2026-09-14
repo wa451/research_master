@@ -1,0 +1,38 @@
+extends: ../realistic_calibrated/aruba_single_resident.yaml
+id: stress_high_density_single_resident
+name: High-density single-resident stress scenario
+residents:
+  - id: resident_1
+    name: Haruko
+    initial_room_id: bedroom
+    initial_zone_id: bedroom_bed
+    priority: 10
+    duration_multiplier: 0.62
+    secondary_activity_factor: 1.0
+    preferences:
+      L_LIVING: {brightness: 48, color_temperature: 2900}
+      T_LIVING: {volume: 15}
+      AC_LIVING: {temperature: 23, mode: auto}
+    weekly_routine:
+      monday: &dense_day
+        - {activity_id: sleeping, scheduled_start_minute: 0}
+        - {activity_id: personal_hygiene, scheduled_start_minute: 300}
+        - {activity_id: meal_preparation, scheduled_start_minute: 345}
+        - {activity_id: eating, scheduled_start_minute: 400}
+        - {activity_id: housekeeping, scheduled_start_minute: 450}
+        - {activity_id: relaxing, scheduled_start_minute: 540}
+        - {activity_id: meal_preparation, scheduled_start_minute: 690}
+        - {activity_id: eating, scheduled_start_minute: 745}
+        - {activity_id: check_entrance, scheduled_start_minute: 800, inclusion_probability: 0.4}
+        - {activity_id: housekeeping, scheduled_start_minute: 850}
+        - {activity_id: relaxing, scheduled_start_minute: 940}
+        - {activity_id: meal_preparation, scheduled_start_minute: 1090}
+        - {activity_id: eating, scheduled_start_minute: 1145}
+        - {activity_id: personal_hygiene, scheduled_start_minute: 1200}
+        - {activity_id: relaxing, scheduled_start_minute: 1260}
+      tuesday: *dense_day
+      wednesday: *dense_day
+      thursday: *dense_day
+      friday: *dense_day
+      saturday: *dense_day
+      sunday: *dense_day

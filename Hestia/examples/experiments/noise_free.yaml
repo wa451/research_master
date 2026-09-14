@@ -1,0 +1,14 @@
+# 本実験の初期案。conditions省略時は3住宅 x 8条件の一因子変更デザイン。
+# generate/prepare/baseline/evaluateはAPIを呼ばない。
+schema_version: 1
+observation_noise: false
+start_datetime: 2025-01-06T00:00:00+09:00
+train_days: 7
+test_days: 7
+seeds: [11, 22, 33]
+n_states: 15
+hamming_threshold: 0
+smoothing_window_sec: 0
+min_train_support: 2
+baseline_top_k: 20
+llm_runs: 3

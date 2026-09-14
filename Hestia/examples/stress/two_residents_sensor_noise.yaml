@@ -1,0 +1,36 @@
+extends: ../realistic_calibrated/two_residents.yaml
+id: stress_two_residents_sensor_noise
+name: Two-resident stress scenario with observed-sensor imperfections
+sensor_imperfections:
+  enabled: true
+  safe_mode: true
+  default_profile:
+    drop_probability: 0.012
+    duplicate_probability: 0.006
+    flip_probability: 0.002
+    false_trigger_probability: 0.003
+    detection_delay_seconds: {kind: normal, mean: 0.8, standard_deviation: 0.45, clip_min: 0, clip_max: 2.5}
+    off_delay_seconds: {kind: lognormal, mu: 0.7, sigma: 0.35, clip_min: 0.5, clip_max: 4.5}
+    clock_skew_seconds: {kind: normal, mean: 0, standard_deviation: 0.25, clip_min: -0.8, clip_max: 0.8}
+    false_trigger_duration_seconds: {kind: uniform, low: 0.4, high: 2.2}
+  profiles:
+    M_WINDOW:
+      drop_probability: 0.035
+      duplicate_probability: 0.01
+      flip_probability: 0.003
+      false_trigger_probability: 0.006
+      detection_delay_seconds: {kind: normal, mean: 1.2, standard_deviation: 0.6, clip_min: 0, clip_max: 3.5}
+      off_delay_seconds: {kind: lognormal, mu: 1.0, sigma: 0.4, clip_min: 1, clip_max: 7}
+      clock_skew_seconds: {kind: normal, mean: 0, standard_deviation: 0.4, clip_min: -1, clip_max: 1}
+      false_trigger_duration_seconds: {kind: uniform, low: 0.5, high: 3}
+      outage_windows:
+        - {start_minute: 1800, end_minute: 1920}
+    M_BATH_ENT:
+      drop_probability: 0.018
+      duplicate_probability: 0.005
+      flip_probability: 0.01
+      false_trigger_probability: 0.004
+      detection_delay_seconds: {kind: uniform, low: 0, high: 2}
+      off_delay_seconds: {kind: uniform, low: 1, high: 5}
+      clock_skew_seconds: {kind: normal, mean: 0, standard_deviation: 0.3, clip_min: -1, clip_max: 1}
+      false_trigger_duration_seconds: {kind: uniform, low: 0.5, high: 2}

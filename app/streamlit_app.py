@@ -1,4 +1,4 @@
-"""Local Streamlit dashboard for Evaluation 4 through Evaluation 9."""
+"""Local Streamlit dashboard for Evaluation 4 through Evaluation 10."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ from app.command_builder import (  # noqa: E402
     build_evaluation7_steps,
     build_evaluation8_steps,
     build_evaluation9_steps,
+    build_evaluation10_steps,
     command_preview,
     default_direct_path,
     default_proposed_path,
@@ -216,6 +217,26 @@ RESULT_GUIDES["評価9"] = [
 ]
 RESULT_FILE_ORDER["評価9"] = ["evaluation9_summary.csv", "evaluation9_summary.json"]
 
+RESULT_GUIDES["評価10"] = [
+    {
+        "files": "evaluation10_summary.csv",
+        "how_to_read": "methodごとにstatusを確認し、後半で再出現したパターン割合、日単位再現率、遷移被覆率を読みます。llm=missingは0点ではありません。",
+    },
+    {
+        "files": "evaluation10_pattern_details.csv",
+        "how_to_read": "系列・時間帯ごとに学習/テスト出現数、出現日数、1日あたり出現率とその比を確認します。",
+    },
+    {
+        "files": "evaluation10_summary.json",
+        "how_to_read": "入力hash、manifest timezone、前半/後半の半開区間、K/h/平滑化と警告を確認します。正解ADLがないためADL精度ではありません。",
+    },
+]
+RESULT_FILE_ORDER["評価10"] = [
+    "evaluation10_summary.csv",
+    "evaluation10_pattern_details.csv",
+    "evaluation10_summary.json",
+]
+
 
 def parse_float_list(text: str) -> list[float]:
     values: list[float] = []
@@ -243,7 +264,11 @@ def rel_default(path: Path) -> str:
 
 def common_sidebar() -> dict:
     st.sidebar.header("共通設定")
-    evaluation = st.sidebar.radio("評価を選択", ["評価4", "評価5", "評価6", "評価7", "評価8", "評価9"], horizontal=True)
+    evaluation = st.sidebar.radio(
+        "評価を選択",
+        ["評価4", "評価5", "評価6", "評価7", "評価8", "評価9", "評価10"],
+        horizontal=True,
+    )
     runner = st.sidebar.selectbox("Python実行方法", ["uv run python", "python"], index=0)
     run_name = st.sidebar.text_input("run名（ログ用）", "manual")
     smoothing_window_sec = st.sidebar.number_input(
@@ -835,7 +860,7 @@ def render_eval8_settings(common: dict) -> dict:
 
 def render_eval9_settings(common: dict) -> dict:
     st.subheader("評価9: Hestia合成ログによる系列回収・ADL意味対応")
-    st.caption("手順・指標: docs/evaluation_9_hestia.md。実Arubaの評価とは別に集計します。")
+    st.caption("手順・指標: docs/evaluations/evaluation_9_hestia.md。実Arubaの評価とは別に集計します。")
     st.info("既定は4条件×1seed×4日のpilotです。平滑化・K・seed・日数は計画ファイルの値を使います。")
     hestia_root = st.text_input("Hestiaディレクトリ", "Hestia")
     plan = st.text_input(
@@ -861,6 +886,64 @@ def render_eval9_settings(common: dict) -> dict:
         "plan": plan,
         "experiment": experiment,
         "output_dir": output_dir,
+        "method": method,
+        "allow_api": allow_api,
+    }
+
+
+def render_eval10_settings(common: dict) -> dict:
+    st.subheader("評価10: SwitchBot実宅ログの時間ホールドアウト評価")
+    st.caption("前半だけで生成し、固定した状態表で後半の再出現を評価します。正解ADL精度ではありません。")
+    snapshot = st.text_input(
+        "SwitchBotスナップショット",
+        "data/switchbot/2026-09-01_2026-09-08",
+    )
+    snapshot_name = Path(snapshot.rstrip("/")).name or "snapshot"
+    output_dir = st.text_input(
+        "中間成果物ディレクトリ", f"output/10_switchbot/{snapshot_name}"
+    )
+    results_dir = st.text_input(
+        "評価10の集計先", f"results/10_switchbot/{snapshot_name}"
+    )
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        train_ratio = st.number_input(
+            "学習期間比率", min_value=0.1, max_value=0.9, value=0.7, step=0.1
+        )
+    with col2:
+        n_states = st.number_input(
+            "代表状態数 K", min_value=1, value=DEFAULT_N_STATES, step=1
+        )
+    with col3:
+        hamming = st.number_input(
+            "ハミング距離閾値", min_value=0, value=DEFAULT_HAMMING_THRESHOLD, step=1
+        )
+    split_at = st.text_input("テスト開始（任意・現地時刻の0時）", "")
+    sampling_seconds = st.number_input("サンプリング間隔（秒）", min_value=1, value=1, step=1)
+    min_sequence_length = st.number_input("最小系列長", min_value=2, value=2, step=1)
+    max_sequence_length = st.number_input(
+        "最大系列長", min_value=int(min_sequence_length), value=max(4, int(min_sequence_length)), step=1
+    )
+    min_train_occurrences = st.number_input("学習側の最小出現回数", min_value=1, value=2, step=1)
+    top_k_per_mode = st.number_input("時間帯ごとの最大頻出系列数", min_value=1, value=20, step=1)
+    method = st.selectbox("採点する手法", ["both", "frequency", "llm"])
+    allow_api = st.checkbox("LLM抽出のAPI呼出しを許可（費用が発生します）", value=False)
+    if allow_api:
+        st.warning("一括実行またはステップ2でGemini APIを呼びます。")
+    return {
+        **common,
+        "snapshot": snapshot,
+        "output_dir": output_dir,
+        "results_dir": results_dir,
+        "split_at": split_at,
+        "train_ratio": float(train_ratio),
+        "n_states": int(n_states),
+        "hamming_threshold": int(hamming),
+        "sampling_seconds": int(sampling_seconds),
+        "min_sequence_length": int(min_sequence_length),
+        "max_sequence_length": int(max_sequence_length),
+        "min_train_occurrences": int(min_train_occurrences),
+        "top_k_per_mode": int(top_k_per_mode),
         "method": method,
         "allow_api": allow_api,
     }
@@ -923,6 +1006,7 @@ FINAL_EVALUATION_STEP_IDS = {
     "eval6_compare",
     "eval7_evaluate",
     "eval9_evaluate",
+    "eval10_evaluate",
 }
 
 
@@ -1048,6 +1132,8 @@ def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
 
 def infer_evaluation_for_results(selected_dir: Path, files: list[Path], current_evaluation: str | None) -> str | None:
     names = {path.name for path in files}
+    if any(name.startswith("evaluation10_") for name in names):
+        return "評価10"
     if any(name.startswith("evaluation9_") for name in names):
         return "評価9"
     if any(name.startswith("evaluation8_") for name in names):
@@ -1241,6 +1327,8 @@ def default_result_dirs(settings: dict) -> list[Path]:
         return [PROJECT_ROOT / settings["output_dir"]]
     if evaluation in ("評価8", "評価9"):
         return [PROJECT_ROOT / settings["output_dir"]]
+    if evaluation == "評価10":
+        return [PROJECT_ROOT / settings["results_dir"]]
     suffix = short_suffix(settings["n_states"], settings["hamming_threshold"], settings["days"])
     output_dir = PROJECT_ROOT / settings["output_dir"]
     return [output_dir / suffix if output_dir.name != suffix else output_dir, PROJECT_ROOT / settings["intermediate_output_dir"]]
@@ -1270,9 +1358,12 @@ def main() -> None:
         elif common["evaluation"] == "評価8":
             settings = render_eval8_settings(common)
             steps = build_evaluation8_steps(settings)
-        else:
+        elif common["evaluation"] == "評価9":
             settings = render_eval9_settings(common)
             steps = build_evaluation9_steps(settings)
+        else:
+            settings = render_eval10_settings(common)
+            steps = build_evaluation10_steps(settings)
 
         st.markdown("### ステップ")
         render_batch_runner(steps, settings)

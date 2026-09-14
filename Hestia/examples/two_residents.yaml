@@ -1,0 +1,150 @@
+schema_version: 1
+id: two_residents
+name: Two residents with conflicting shared-device preferences
+start_datetime: 2025-01-06T00:00:00+09:00
+
+rooms:
+  - id: bedroom_a
+    name: Bedroom A
+    capacity: 1
+    devices:
+      - {id: MA, type: MotionSensor, name: Bedroom A motion}
+      - {id: LA, type: Light, name: Bedroom A light}
+      - {id: DA, type: DoorSensor, name: Bedroom A door}
+  - id: bedroom_b
+    name: Bedroom B
+    capacity: 1
+    devices:
+      - {id: MB, type: MotionSensor, name: Bedroom B motion}
+      - {id: LB, type: Light, name: Bedroom B light}
+      - {id: DB, type: DoorSensor, name: Bedroom B door}
+  - id: bathroom
+    name: Bathroom
+    capacity: 1
+    devices:
+      - {id: MBATH, type: MotionSensor, name: Bathroom motion}
+      - {id: LBATH, type: Light, name: Bathroom light}
+      - {id: DBATH, type: DoorSensor, name: Bathroom door}
+  - id: kitchen
+    name: Kitchen
+    capacity: 2
+    devices:
+      - {id: MK, type: MotionSensor, name: Kitchen motion}
+      - {id: LK, type: Light, name: Kitchen light}
+      - {id: PK, type: SmartPlug, name: Kitchen smart plug}
+      - {id: DK, type: DoorSensor, name: Kitchen door}
+  - id: living
+    name: Living Room
+    capacity: 3
+    devices:
+      - {id: ML, type: MotionSensor, name: Living room motion}
+      - {id: LL, type: Light, name: Living room light}
+      - {id: AC, type: AirConditioner, name: Shared air conditioner}
+      - {id: TV, type: Television, name: Shared television}
+      - {id: DL, type: DoorSensor, name: Living room door}
+  - id: hallway
+    name: Hallway
+    capacity: 3
+    devices:
+      - {id: MH, type: MotionSensor, name: Hallway motion}
+      - {id: DE, type: DoorSensor, name: Entrance door}
+  - id: outside
+    name: Outside
+    capacity: 10
+    is_outside: true
+    devices:
+      - {id: MO, type: MotionSensor, name: Outside motion}
+
+connections:
+  - {source: bedroom_a, target: hallway, travel_seconds: 3, door_sensor_id: DA}
+  - {source: bedroom_b, target: hallway, travel_seconds: 3, door_sensor_id: DB}
+  - {source: bathroom, target: hallway, travel_seconds: 2, door_sensor_id: DBATH}
+  - {source: kitchen, target: hallway, travel_seconds: 3, door_sensor_id: DK}
+  - {source: living, target: hallway, travel_seconds: 2, door_sensor_id: DL}
+  - {source: hallway, target: outside, travel_seconds: 5, door_sensor_id: DE}
+
+activities:
+  - {id: sleep_a, name: Early Sleeping, room_id: bedroom_a, base_duration_minutes: 390,
+     variation_fraction: 0.03, adl_label: Sleeping}
+  - {id: sleep_b, name: Late Sleeping, room_id: bedroom_b, base_duration_minutes: 510,
+     variation_fraction: 0.03, adl_label: Sleeping}
+  - id: breakfast
+    name: Breakfast
+    room_id: kitchen
+    base_duration_minutes: 45
+    variation_fraction: 0.1
+    device_actions:
+      - {device_id: LK, state: "ON", attributes: {brightness: 85, color_temperature: 4200}}
+      - {device_id: PK, state: "ON"}
+    adl_label: Meal_Preparation
+  - id: work_outside
+    name: Work Outside
+    room_id: outside
+    base_duration_minutes: 480
+    variation_fraction: 0.03
+    adl_label: Leave_Home
+  - id: bathroom_break
+    name: Bathroom Break
+    room_id: bathroom
+    base_duration_minutes: 6
+    variation_fraction: 0.15
+    device_actions:
+      - {device_id: LBATH, state: "ON", attributes: {brightness: 65, color_temperature: 3600}}
+    adl_label: Toileting
+  - id: shared_evening
+    name: Shared Evening
+    room_id: living
+    base_duration_minutes: 300
+    variation_fraction: 0.05
+    device_actions:
+      - {device_id: LL, state: "ON", attributes: {brightness: 60, color_temperature: 3200}}
+      - {device_id: AC, state: "ON", attributes: {temperature: 24, mode: auto}}
+      - {device_id: TV, state: "ON", attributes: {volume: 20}}
+    secondary_activities:
+      - {activity_id: bathroom_break, probability: 0.025, block_minutes: 10,
+         preserve_primary_devices: false}
+    adl_label: Relax
+  - id: return_home
+    name: Return Home
+    room_id: hallway
+    base_duration_minutes: 10
+    variation_fraction: 0.05
+    adl_label: Enter_Home
+
+residents:
+  - id: alice
+    name: Alice
+    initial_room_id: bedroom_a
+    priority: 10
+    duration_multiplier: 1.0
+    secondary_activity_factor: 0.8
+    preferences:
+      AC: {temperature: 22, mode: cool}
+      TV: {volume: 14}
+      LL: {brightness: 45, color_temperature: 3000}
+    weekly_routine:
+      monday: &alice_daily [sleep_a, breakfast, work_outside, return_home, shared_evening]
+      tuesday: *alice_daily
+      wednesday: *alice_daily
+      thursday: *alice_daily
+      friday: *alice_daily
+      saturday: *alice_daily
+      sunday: *alice_daily
+  - id: bob
+    name: Bob
+    initial_room_id: bedroom_b
+    priority: 5
+    duration_multiplier: 1.0
+    secondary_activity_factor: 1.0
+    preferences:
+      AC: {temperature: 25, mode: auto}
+      TV: {volume: 24}
+      LL: {brightness: 75, color_temperature: 4000}
+    weekly_routine:
+      monday: &bob_daily [sleep_b, breakfast, shared_evening]
+      tuesday: *bob_daily
+      wednesday: *bob_daily
+      thursday: *bob_daily
+      friday: *bob_daily
+      saturday: *bob_daily
+      sunday: *bob_daily

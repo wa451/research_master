@@ -5,7 +5,7 @@ description: Change evaluation controls, command building/execution, dry-run, lo
 
 # Streamlit Evaluation Dashboard
 
-- Read affected sections of [dashboard docs](../../../docs/evaluation_streamlit_dashboard.md), the target [evaluation route](../../../docs/codex_memory/EVALUATION_ROUTES.md), its specification/known issues, and actual CLI arguments.
+- Read affected sections of [dashboard docs](../../../docs/operations/dashboard.md), the target [evaluation route](../../../docs/codex_memory/EVALUATION_ROUTES.md), its specification/known issues, and actual CLI arguments.
 - Responsibilities: `app/streamlit_app.py` UI/results; `app/command_builder.py::build_evaluationN_steps` argv; `app/utils.py::run_command` subprocess/logging. Search the target builder/renderer before reading entire files.
 - Expose supported CLI options as argument lists with previews; use the execution helper, never `shell=True` or duplicated research logic. Keep inputs, outputs, step order, conditional generation and batch behavior aligned with the CLI.
 - Preserve dry-run as non-executing command/log recording; retain stdout/stderr, command and exit context under the existing log root with secrets redacted. Eval9 also uses `verify_on_batch` for existing-output hash validation.

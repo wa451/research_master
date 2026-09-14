@@ -992,3 +992,90 @@ def build_evaluation9_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
             )
         )
     return steps
+
+
+def build_evaluation10_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
+    """Build the thin dashboard wrapper for SwitchBot holdout evaluation."""
+    snapshot = as_path(settings["snapshot"])
+    output_dir = as_path(settings["output_dir"])
+    results_dir = as_path(settings["results_dir"])
+    assert snapshot is not None and output_dir is not None and results_dir is not None
+
+    def command(stage: str) -> list[str]:
+        value = script_cmd(settings["runner"], "scripts/evaluate_10_switchbot.py")
+        for flag, item in (
+            ("--snapshot", snapshot),
+            ("--stage", stage),
+            ("--output-dir", output_dir),
+            ("--results-dir", results_dir),
+        ):
+            add_arg(value, flag, item)
+        if stage == "prepare":
+            for flag, item in (
+                ("--split-at", settings.get("split_at")),
+                ("--train-ratio", settings["train_ratio"]),
+                ("--n-states", settings["n_states"]),
+                ("--hamming-threshold", settings["hamming_threshold"]),
+                ("--smoothing-window-sec", settings["smoothing_window_sec"]),
+                ("--sampling-seconds", settings["sampling_seconds"]),
+                ("--min-sequence-length", settings["min_sequence_length"]),
+                ("--max-sequence-length", settings["max_sequence_length"]),
+                ("--min-train-occurrences", settings["min_train_occurrences"]),
+                ("--top-k-per-mode", settings["top_k_per_mode"]),
+            ):
+                add_arg(value, flag, item)
+        if stage == "extract":
+            value.append("--allow-api")
+        if stage == "evaluate":
+            add_arg(value, "--method", settings["method"])
+        return value
+
+    steps = [
+        EvaluationStep(
+            "eval10_prepare",
+            "1. 入力検証・学習側パターン生成",
+            "manifestとCSVを検証し、前半だけで代表状態、ネットワーク、頻出系列を生成します。",
+            command("prepare"),
+            [snapshot / "events.csv", snapshot / "manifest.json"],
+            [
+                output_dir / "preparation.json",
+                output_dir / "state_table.tsv",
+                output_dir / "frequency_patterns.json",
+                output_dir / "test_state_segments.json",
+            ],
+            verify_on_batch=True,
+        )
+    ]
+    if settings.get("allow_api", False):
+        steps.append(
+            EvaluationStep(
+                "eval10_extract",
+                "2. LLMパターン抽出",
+                "学習期間の時間帯別ネットワークだけをGeminiへ渡します。",
+                command("extract"),
+                [
+                    output_dir / "preparation.json",
+                    *[
+                        output_dir / f"network/state_transition_{mode}.json"
+                        for mode in ("Morning", "Daytime", "Night", "Midnight")
+                    ],
+                ],
+                [],
+                verify_on_batch=True,
+            )
+        )
+    steps.append(
+        EvaluationStep(
+            "eval10_evaluate",
+            "3. 後半ホールドアウト評価",
+            "固定した状態表で後半の再出現率、日単位再現率、遷移被覆率を集計します。",
+            command("evaluate"),
+            [output_dir / "preparation.json", output_dir / "test_state_segments.json"],
+            [
+                results_dir / "evaluation10_summary.csv",
+                results_dir / "evaluation10_pattern_details.csv",
+                results_dir / "evaluation10_summary.json",
+            ],
+        )
+    )
+    return steps

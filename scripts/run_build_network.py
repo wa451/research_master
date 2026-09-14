@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -16,8 +17,24 @@ from src.behavior_pattern_mining.visualization.state_transition_visualizer impor
 )
 
 
-def main() -> None:
-    data_file = PROJECT_ROOT / "data" / f"{DATASET_NAME}.csv"
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="代表状態・状態遷移ネットワーク・図を構築します。"
+    )
+    parser.add_argument(
+        "--input",
+        type=Path,
+        help=(
+            "ヘッダーなしのCASAS互換CSV（date,time,sensor,value）。省略時は"
+            f"data/{DATASET_NAME}.csv"
+        ),
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    data_file = args.input or PROJECT_ROOT / "data" / f"{DATASET_NAME}.csv"
     visualizer = StateTransitionVisualizer()
     visualizer.main(str(data_file), mode_split=True)
 

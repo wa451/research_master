@@ -14,5 +14,3 @@ output
 picture
 results/
 iot2026_submission_ja
-# Independent simulator repository (including its own history and ignored outputs).
-/Hestia/

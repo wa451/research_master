@@ -1,0 +1,76 @@
+extends: aruba_single_resident.yaml
+id: realistic_two_residents
+name: Realistic calibrated two-resident smart home
+residents:
+  - id: haruko
+    name: Haruko
+    initial_room_id: bedroom
+    initial_zone_id: bedroom_bed
+    priority: 10
+    secondary_activity_factor: 0.9
+    preferences:
+      L_LIVING: {brightness: 46, color_temperature: 2900}
+      T_LIVING: {volume: 14}
+      AC_LIVING: {temperature: 23, mode: auto}
+    weekly_routine:
+      monday: &haruko_weekday
+        - {activity_id: sleeping, scheduled_start_minute: 0, start_jitter_minutes: {kind: normal, mean: 0, standard_deviation: 5, clip_min: -8, clip_max: 8}}
+        - {activity_id: personal_hygiene, scheduled_start_minute: 420, start_jitter_minutes: {kind: normal, mean: 0, standard_deviation: 10, clip_min: -20, clip_max: 20}}
+        - {activity_id: meal_preparation, scheduled_start_minute: 465}
+        - {activity_id: eating, scheduled_start_minute: 525}
+        - {activity_id: leaving_home, scheduled_start_minute: 660, inclusion_probability: 0.72}
+        - {activity_id: entering_home, scheduled_start_minute: 960, inclusion_probability: 0.72}
+        - {activity_id: meal_preparation, scheduled_start_minute: 1045}
+        - {activity_id: eating, scheduled_start_minute: 1120}
+        - {activity_id: relaxing, scheduled_start_minute: 1175, start_jitter_minutes: {kind: normal, mean: 0, standard_deviation: 12, clip_min: -20, clip_max: 20}}
+      tuesday: *haruko_weekday
+      wednesday: *haruko_weekday
+      thursday: *haruko_weekday
+      friday: *haruko_weekday
+      saturday: &haruko_weekend
+        - {activity_id: sleeping, scheduled_start_minute: 0}
+        - {activity_id: personal_hygiene, scheduled_start_minute: 465}
+        - {activity_id: meal_preparation, scheduled_start_minute: 515}
+        - {activity_id: eating, scheduled_start_minute: 580}
+        - {activity_id: housekeeping, scheduled_start_minute: 655, inclusion_probability: 0.8}
+        - {activity_id: relaxing, scheduled_start_minute: 775}
+        - {activity_id: meal_preparation, scheduled_start_minute: 1100}
+        - {activity_id: eating, scheduled_start_minute: 1170}
+        - {activity_id: relaxing, scheduled_start_minute: 1220}
+      sunday: *haruko_weekend
+  - id: ken
+    name: Ken
+    initial_room_id: bedroom
+    initial_zone_id: bedroom_bed
+    priority: 5
+    duration_multiplier: 0.96
+    secondary_activity_factor: 0.8
+    preferences:
+      L_LIVING: {brightness: 72, color_temperature: 3800}
+      T_LIVING: {volume: 23}
+      AC_LIVING: {temperature: 25, mode: auto}
+    weekly_routine:
+      monday: &ken_weekday
+        - {activity_id: sleeping, scheduled_start_minute: 0, start_jitter_minutes: {kind: normal, mean: 15, standard_deviation: 6, clip_min: 5, clip_max: 25}}
+        - {activity_id: personal_hygiene, scheduled_start_minute: 450, start_jitter_minutes: {kind: normal, mean: 0, standard_deviation: 12, clip_min: -20, clip_max: 20}}
+        - {activity_id: meal_preparation, scheduled_start_minute: 505, inclusion_probability: 0.75}
+        - {activity_id: eating, scheduled_start_minute: 565}
+        - {activity_id: housekeeping, scheduled_start_minute: 650, inclusion_probability: 0.28}
+        - {activity_id: leaving_home, scheduled_start_minute: 720, inclusion_probability: 0.62}
+        - {activity_id: entering_home, scheduled_start_minute: 1010, inclusion_probability: 0.62}
+        - {activity_id: eating, scheduled_start_minute: 1110, inclusion_probability: 0.82}
+        - {activity_id: relaxing, scheduled_start_minute: 1145, start_jitter_minutes: {kind: normal, mean: 0, standard_deviation: 8, clip_min: -15, clip_max: 15}}
+      tuesday: *ken_weekday
+      wednesday: *ken_weekday
+      thursday: *ken_weekday
+      friday: *ken_weekday
+      saturday: &ken_weekend
+        - {activity_id: sleeping, scheduled_start_minute: 0}
+        - {activity_id: personal_hygiene, scheduled_start_minute: 500}
+        - {activity_id: meal_preparation, scheduled_start_minute: 560, inclusion_probability: 0.65}
+        - {activity_id: eating, scheduled_start_minute: 620}
+        - {activity_id: relaxing, scheduled_start_minute: 730}
+        - {activity_id: housekeeping, scheduled_start_minute: 900, inclusion_probability: 0.55}
+        - {activity_id: eating, scheduled_start_minute: 1170, inclusion_probability: 0.85}
+        - {activity_id: relaxing, scheduled_start_minute: 1210}
+      sunday: *ken_weekend

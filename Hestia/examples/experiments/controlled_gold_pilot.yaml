@@ -1,0 +1,27 @@
+# APIなしでgold catalogと採点契約を確認する最小のcontrolled pilot。
+schema_version: 1
+observation_noise: false
+start_datetime: 2025-01-06T00:00:00+09:00
+train_days: 2
+test_days: 2
+seeds: [11]
+n_states: 15
+hamming_threshold: 0
+smoothing_window_sec: 0
+min_train_support: 2
+baseline_top_k: 20
+llm_runs: 1
+fragmentation_containment_threshold: 0.7
+conditions:
+  - {id: compact_controlled, house: compact, variability: fixed}
+targets:
+  - id: morning_meal
+    activity_id: meal
+    resident_id: resident_1
+    time_band: Morning
+    scheduled_start_minutes: [390]
+  - id: daytime_work
+    activity_id: work
+    resident_id: resident_1
+    time_band: Daytime
+    scheduled_start_minutes: [660]

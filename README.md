@@ -2,7 +2,7 @@
 
 スマートホームのセンサログから代表状態と状態遷移ネットワークを構築し、LLMによる生活行動系列の抽出、ベースライン比較、ADLラベルを用いた評価を行う研究コードです。
 
-処理の全体像は [docs/pipeline.md](docs/pipeline.md)、実装の責務は [docs/code_inventory.md](docs/code_inventory.md)、再現手順は [docs/experiment_reproduction.md](docs/experiment_reproduction.md) を参照してください。研究判断が未確定の挙動は [docs/known_issues.md](docs/known_issues.md) に分離しています。
+文書の分類は [docs/README.md](docs/README.md) を入口にしてください。処理の全体像は [docs/architecture/pipeline.md](docs/architecture/pipeline.md)、実装の責務は [docs/architecture/code_inventory.md](docs/architecture/code_inventory.md)、再現手順は [docs/operations/experiment_reproduction.md](docs/operations/experiment_reproduction.md) を参照してください。研究判断が未確定の挙動は [docs/research/known_issues.md](docs/research/known_issues.md) に分離しています。
 
 ## セットアップ
 
@@ -39,7 +39,7 @@ GEMINI_API_KEY=...
 | `output/` | LLM出力、ベースライン、中間生成物 |
 | `results/` | 後段評価の集計結果 |
 
-Pythonファイル単位の台帳は [docs/python_file_inventory.md](docs/python_file_inventory.md)、成果物の扱いは [docs/artifact_policy.md](docs/artifact_policy.md) にあります。
+Pythonファイル単位の台帳は [docs/architecture/python_file_inventory.md](docs/architecture/python_file_inventory.md)、成果物の扱いは [docs/operations/artifact_policy.md](docs/operations/artifact_policy.md) にあります。
 
 ## 現在の共通既定値
 
@@ -56,7 +56,7 @@ Pythonファイル単位の台帳は [docs/python_file_inventory.md](docs/python
 | LLMモデル | `gemini-2.5-pro` |
 | Temperature | `0.2` |
 
-論文採用条件では `K=15, h=0` を使う評価があります。共通既定値と論文採用条件を混同せず、[docs/paper_parameters.md](docs/paper_parameters.md) と各評価文書の明示引数を確認してください。この差は [KI-01](docs/known_issues.md#ki-01) として判断保留です。
+論文採用条件では `K=15, h=0` を使う評価があります。共通既定値と論文採用条件を混同せず、[docs/research/paper_parameters.md](docs/research/paper_parameters.md) と各評価文書の明示引数を確認してください。この差は [KI-01](docs/research/known_issues.md#ki-01) として判断保留です。
 
 ## 基本的な実行
 
@@ -85,16 +85,18 @@ uv run python scripts/run_all.py
 
 | 評価 | 内容 | 文書 |
 |---:|---|---|
-| 1 | K・ハミング距離の感度分析（旧評価と評価7への案内） | [evaluation_1_parameter_sensitivity.md](docs/evaluation_1_parameter_sensitivity.md) |
-| 2 | 提案手法の複数run評価 | [evaluation_2_proposed_method_5runs.md](docs/evaluation_2_proposed_method_5runs.md) |
-| 3 | direct-log LLM baselineとの比較 | [evaluation_3_direct_log_baseline_comparison.md](docs/evaluation_3_direct_log_baseline_comparison.md) |
-| 4 | ラベル付きCASASによる単一手法ADL評価 | [evaluation_4_labeled_casas_adl.md](docs/evaluation_4_labeled_casas_adl.md) |
-| 5 | パターン単位のADL-grounded/Useless評価 | [evaluation_5_adl_correspondence.md](docs/evaluation_5_adl_correspondence.md) |
-| 6 | LLM解釈ラベルとADL重なりラベルのset比較 | [evaluation_6_adl_interpretation_set.md](docs/evaluation_6_adl_interpretation_set.md) |
-| 7 | 全条件探索と上位条件の複数run感度評価 | [evaluation_7_parameter_sensitivity_adl_interpretation.md](docs/evaluation_7_parameter_sensitivity_adl_interpretation.md) |
-| 8 | 頻度帯別ADL整合性評価 | [evaluation_8_frequency_stratified_adl_consistency.md](docs/evaluation_8_frequency_stratified_adl_consistency.md) |
+| 1 | K・ハミング距離の感度分析（旧評価と評価7への案内） | [evaluation_1_parameter_sensitivity.md](docs/evaluations/evaluation_1_parameter_sensitivity.md) |
+| 2 | 提案手法の複数run評価 | [evaluation_2_proposed_method_5runs.md](docs/evaluations/evaluation_2_proposed_method_5runs.md) |
+| 3 | direct-log LLM baselineとの比較 | [evaluation_3_direct_log_baseline_comparison.md](docs/evaluations/evaluation_3_direct_log_baseline_comparison.md) |
+| 4 | ラベル付きCASASによる単一手法ADL評価 | [evaluation_4_labeled_casas_adl.md](docs/evaluations/evaluation_4_labeled_casas_adl.md) |
+| 5 | パターン単位のADL-grounded/Useless評価 | [evaluation_5_adl_correspondence.md](docs/evaluations/evaluation_5_adl_correspondence.md) |
+| 6 | LLM解釈ラベルとADL重なりラベルのset比較 | [evaluation_6_adl_interpretation_set.md](docs/evaluations/evaluation_6_adl_interpretation_set.md) |
+| 7 | 全条件探索と上位条件の複数run感度評価 | [evaluation_7_parameter_sensitivity_adl_interpretation.md](docs/evaluations/evaluation_7_parameter_sensitivity_adl_interpretation.md) |
+| 8 | 頻度帯別ADL整合性評価 | [evaluation_8_frequency_stratified_adl_consistency.md](docs/evaluations/evaluation_8_frequency_stratified_adl_consistency.md) |
+| 9 | Hestia合成ログによる系列回収・ADL意味対応 | [evaluation_9_hestia.md](docs/evaluations/evaluation_9_hestia.md) |
+| 10 | SwitchBot実宅ログの時間ホールドアウト評価 | [evaluation_10_switchbot_holdout.md](docs/evaluations/evaluation_10_switchbot_holdout.md) |
 
-評価4〜8はStreamlitの薄いCLIラッパーからも実行できます。使い方は [docs/evaluation_streamlit_dashboard.md](docs/evaluation_streamlit_dashboard.md) を参照してください。
+評価4〜10はStreamlitの薄いCLIラッパーからも実行できます。使い方は [docs/operations/dashboard.md](docs/operations/dashboard.md) を参照してください。
 
 ```bash
 uv run streamlit run app/streamlit_app.py
@@ -112,8 +114,12 @@ uv run python -m unittest discover -s tests
 
 - 文書と実装が異なる場合、実装は現在の挙動を示す証拠ですが、研究上の意図を自動的に確定しません。
 - 評価指標、閾値、分母、split、seed、run欠損処理、LLM設定、CSV/JSON契約を別作業のついでに変更しないでください。
-- 未解決事項を修正する場合は、[docs/known_issues.md](docs/known_issues.md) の影響範囲と過去結果の再評価要否を先に確認してください。
+- 未解決事項を修正する場合は、[docs/research/known_issues.md](docs/research/known_issues.md) の影響範囲と過去結果の再評価要否を先に確認してください。
 
 ## 評価9: Hestia合成ログ
 
-Hestiaは `master-research/Hestia/` に配置する。Webアプリの「評価9」または `uv run python scripts/evaluate_9_hestia.py` でログ生成から採点まで実行できる（既定はAPIなし）。配置・入力契約・指標・実行方法は [評価9のガイド](docs/evaluation_9_hestia.md) を参照。
+Hestiaは `master-research/Hestia/` に配置する。Webアプリの「評価9」または `uv run python scripts/evaluate_9_hestia.py` でログ生成から採点まで実行できる（既定はAPIなし）。配置・入力契約・指標・実行方法は [評価9のガイド](docs/evaluations/evaluation_9_hestia.md) を参照。
+
+## 評価10: SwitchBot実宅ログ
+
+`data/switchbot/<取得期間>/events.csv` と `manifest.json` を一組で指定し、train期間だけでパターンを生成して後半test期間の再出現を評価します。既定runはAPIなしのfrequency評価で、LLM抽出は `--allow-api` が必要です。詳細は [評価10のガイド](docs/evaluations/evaluation_10_switchbot_holdout.md) を参照してください。
