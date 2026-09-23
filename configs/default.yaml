@@ -45,6 +45,11 @@ llm:
   runs_default: 1
   batch_runs: 5
   max_retries_per_run: 3
+  bedrock:
+    region: us-east-2
+    model_id: ""
+    max_tokens: 8192
+    estimated_output_tokens: null
 
 evaluation:
   allow_baseline_contains_llm: false
