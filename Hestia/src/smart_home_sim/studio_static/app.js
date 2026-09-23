@@ -30,6 +30,17 @@ const DEVICE_ICONS = {
   CoffeeMachine: "☕",
 };
 
+const PAPER_DEVICE_LABELS = {
+  MotionSensor: "Motion sensor",
+  ContactSensor: "Contact sensor",
+  DoorSensor: "Door sensor",
+  Light: "Light",
+  AirConditioner: "Air conditioner",
+  Television: "Television",
+  SmartPlug: "Smart plug",
+  CoffeeMachine: "Coffee machine",
+};
+
 const EVALUATION_HOUSES = ["compact", "corridor", "branched"];
 const FLOORPLAN_EXPORT_WIDTH = 1600;
 const FLOORPLAN_EXPORT_HEIGHT = 1000;
@@ -950,15 +961,16 @@ function renderLayout() {
       return '<button class="device' + (deviceSelected ? " selected" : "") + '" data-device-id="'
         + escapeHtml(device.id) + '" data-device-type="' + escapeHtml(device.type) + '" type="button"'
         + ' style="left:' + devicePosition.x + "%;top:" + devicePosition.y + '%;transform:translate(-50%,-50%);">'
-        + deviceIcon(device.type) + '<span class="device-tooltip">' + escapeHtml(device.name)
+        + deviceIcon(device.type) + '<span class="device-tooltip">'
+        + escapeHtml(PAPER_DEVICE_LABELS[device.type] || device.type) + " · " + escapeHtml(device.name)
         + " · " + escapeHtml(device.id) + "</span></button>";
     }).join("");
     return '<article class="room' + (room.is_outside ? " outside" : "") + (selected ? " selected" : "")
       + (isSource ? " connection-source" : "") + '" data-room-id="' + escapeHtml(room.id) + '"'
       + ' style="left:' + position.x + "%;top:" + position.y + "%;width:" + position.width
       + "%;height:" + position.height + '%;">'
-      + '<div class="room-heading"><div><strong>' + escapeHtml(room.name) + "</strong><small>"
-      + escapeHtml(room.id) + '</small></div><span class="room-capacity">'
+      + '<div class="room-heading"><div title="Room ID: ' + escapeHtml(room.id)
+      + '"><strong>' + escapeHtml(room.name) + '</strong></div><span class="room-capacity">'
       + (room.is_outside ? "屋外" : "定員 " + room.capacity) + "</span></div>"
       + deviceMarkup + '<span class="resize-handle" title="部屋の大きさを変更"></span></article>';
   });
@@ -2701,6 +2713,19 @@ function svgEscape(value) {
   return escapeHtml(value).replaceAll("&#039;", "&apos;");
 }
 
+function paperLabelLines(label, width) {
+  const lines = [];
+  String(label).split(" ").forEach(function (word) {
+    const last = lines.length - 1;
+    if (last >= 0 && (lines[last] + " " + word).length * 9.5 <= width * 1.15) {
+      lines[last] += " " + word;
+    } else {
+      lines.push(word);
+    }
+  });
+  return lines;
+}
+
 function buildFloorplanSvg() {
   if (!state.scenario) {
     return "";
@@ -2710,6 +2735,7 @@ function buildFloorplanSvg() {
   const roomPositions = state.scenario.editor_layout.room_positions;
   const devicePositions = state.scenario.editor_layout.device_positions;
   const connectionLabels = [];
+  const connectionLabelBoxes = [];
   const roomBox = function (roomId) {
     const position = roomPositions[roomId];
     if (!position) {
@@ -2741,24 +2767,58 @@ function buildFloorplanSvg() {
     if (!source || !target) {
       return;
     }
-    const x1 = source.x + source.width / 2;
-    const y1 = source.y + source.height / 2;
-    const x2 = target.x + target.width / 2;
-    const y2 = target.y + target.height / 2;
+    const sourceX = source.x + source.width / 2;
+    const sourceY = source.y + source.height / 2;
+    const targetX = target.x + target.width / 2;
+    const targetY = target.y + target.height / 2;
+    const dx = targetX - sourceX;
+    const dy = targetY - sourceY;
+    const edgeRatio = function (box) {
+      return Math.min(0.5, dx ? box.width / 2 / Math.abs(dx) : Infinity,
+        dy ? box.height / 2 / Math.abs(dy) : Infinity);
+    };
+    const x1 = sourceX + dx * edgeRatio(source);
+    const y1 = sourceY + dy * edgeRatio(source);
+    const x2 = targetX - dx * edgeRatio(target);
+    const y2 = targetY - dy * edgeRatio(target);
     const middleX = (x1 + x2) / 2;
     const middleY = (y1 + y2) / 2;
     const label = asNumber(connection.travel_seconds, 0) + " s"
-      + (connection.door_sensor_id ? " · " + connection.door_sensor_id : "");
-    const labelWidth = Math.max(64, label.length * 7.1 + 18);
+      + (connection.door_sensor_id ? " · Door: " + connection.door_sensor_id : "");
+    const labelWidth = Math.max(64, label.length * 8.2 + 18);
+    // 部屋名・機器を隠さない空白へ注記を置き、移動した場合は引出線で結ぶ。
+    const obstacles = state.scenario.rooms.map(function (room) { return roomBox(room.id); })
+      .filter(Boolean).concat(connectionLabelBoxes);
+    const offsets = [0];
+    for (let offset = 24; offset <= 384; offset += 24) {
+      offsets.push(-offset, offset);
+    }
+    const candidates = offsets.flatMap(function (ox) {
+      return offsets.map(function (oy) { return { x: middleX + ox, y: middleY + oy, distance: ox * ox + oy * oy }; });
+    }).sort(function (a, b) { return a.distance - b.distance; });
+    const labelCenter = candidates.find(function (point) {
+      const left = point.x - labelWidth / 2;
+      const top = point.y - 13;
+      return left >= plot.x && left + labelWidth <= plot.x + plot.width
+        && top >= plot.y && top + 26 <= plot.y + plot.height
+        && !obstacles.some(function (box) {
+          return left < box.x + box.width + 4 && left + labelWidth > box.x - 4
+            && top < box.y + box.height + 4 && top + 26 > box.y - 4;
+        });
+    }) || { x: middleX, y: middleY };
+    connectionLabelBoxes.push({ x: labelCenter.x - labelWidth / 2, y: labelCenter.y - 13,
+      width: labelWidth, height: 26 });
     parts.push(
       '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2
         + '" stroke="#65737a" stroke-width="5" stroke-linecap="round"/>',
     );
     connectionLabels.push(
-      '<rect x="' + (middleX - labelWidth / 2) + '" y="' + (middleY - 13)
+      '<line x1="' + middleX + '" y1="' + middleY + '" x2="' + labelCenter.x
+        + '" y2="' + labelCenter.y + '" stroke="#8c9ba1" stroke-width="1.5" stroke-dasharray="4 3"/>',
+      '<rect x="' + (labelCenter.x - labelWidth / 2) + '" y="' + (labelCenter.y - 13)
         + '" width="' + labelWidth + '" height="26" rx="6" fill="#ffffff" stroke="#cbd3d4"/>',
-      '<text x="' + middleX + '" y="' + (middleY + 5)
-        + '" text-anchor="middle" fill="#33434a" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600">'
+      '<text x="' + labelCenter.x + '" y="' + (labelCenter.y + 5)
+        + '" text-anchor="middle" fill="#33434a" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="600">'
         + svgEscape(label) + "</text>",
     );
   });
@@ -2775,11 +2835,8 @@ function buildFloorplanSvg() {
         + '" height="' + box.height + '" rx="12" fill="' + fill
         + '" stroke="#35464a" stroke-width="2.5"' + dash + "/>",
       '<text x="' + (box.x + 15) + '" y="' + (box.y + 27)
-        + '" fill="#172326" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">'
+        + '" fill="#172326" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">'
         + svgEscape(room.name) + "</text>",
-      '<text x="' + (box.x + 15) + '" y="' + (box.y + 48)
-        + '" fill="#607077" font-family="Arial, Helvetica, sans-serif" font-size="12">'
-        + svgEscape(room.id) + (room.is_outside ? " · outside" : "") + "</text>",
     );
     room.devices.forEach(function (device) {
       const position = devicePositions[device.id] || { x: 50, y: 60 };
@@ -2787,11 +2844,41 @@ function buildFloorplanSvg() {
       const y = box.y + box.height * position.y / 100;
       const isSensor = ["MotionSensor", "ContactSensor", "DoorSensor"].includes(device.type);
       const color = isSensor ? "#147d78" : "#d06a24";
+      const label = PAPER_DEVICE_LABELS[device.type] || device.type;
+      // 同じ行の機器間隔に合わせて折り返し、配置そのものは変えない。
+      let labelWidth = Math.min(box.width - 24,
+        Math.max(label.length * 9.5, String(device.id).length * 8) + 12);
+      room.devices.forEach(function (peer) {
+        const peerPosition = devicePositions[peer.id];
+        if (peer.id !== device.id && peerPosition
+            && Math.abs(peerPosition.y - position.y) < 10) {
+          labelWidth = Math.min(labelWidth,
+            Math.abs(peerPosition.x - position.x) * box.width / 100 - 12);
+        }
+      });
+      labelWidth = Math.max(60, labelWidth);
+      const lines = paperLabelLines(label, labelWidth);
+      const labelX = clamp(x, box.x + labelWidth / 2 + 8,
+        box.x + box.width - labelWidth / 2 - 8);
+      const labelHeight = (lines.length - 1) * 20 + 17;
+      const labelY = y + 23 + labelHeight > box.y + box.height - 8
+        ? y - labelHeight - 14 : y + 23;
+      const typeMarkup = lines.map(function (line, index) {
+        const fit = line.length * 9.5 > labelWidth
+          ? ' textLength="' + labelWidth + '" lengthAdjust="spacingAndGlyphs"' : "";
+        return '<tspan x="' + labelX + '" dy="' + (index ? 20 : 0) + '"' + fit + '>'
+          + svgEscape(line) + '</tspan>';
+      }).join("");
+      const idFit = String(device.id).length * 8 > labelWidth
+        ? ' textLength="' + labelWidth + '" lengthAdjust="spacingAndGlyphs"' : "";
       parts.push(
-        '<circle cx="' + x + '" cy="' + y + '" r="7" fill="' + color
+        '<circle cx="' + x + '" cy="' + y + '" r="9" fill="' + color
           + '" stroke="#ffffff" stroke-width="2"/>',
-        '<text x="' + (x + 12) + '" y="' + (y + 4)
-          + '" fill="#27373d" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="600">'
+        '<text x="' + labelX + '" y="' + labelY
+          + '" text-anchor="middle" fill="#27373d" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="600">'
+          + typeMarkup + "</text>",
+        '<text x="' + labelX + '" y="' + (labelY + labelHeight)
+          + '" text-anchor="middle" fill="#526168" font-family="Arial, Helvetica, sans-serif" font-size="14"' + idFit + '>'
           + svgEscape(device.id) + "</text>",
       );
     });
@@ -2807,6 +2894,7 @@ function buildFloorplanSvg() {
     '<text x="686" y="919" fill="#405158" font-family="Arial, Helvetica, sans-serif" font-size="14">device / actuator</text>',
     '<rect x="873" y="903" width="30" height="22" rx="4" fill="#f8faf9" stroke="#35464a" stroke-width="2" stroke-dasharray="6 4"/>',
     '<text x="914" y="919" fill="#405158" font-family="Arial, Helvetica, sans-serif" font-size="14">outside</text>',
+    '<text x="80" y="956" fill="#405158" font-family="Arial, Helvetica, sans-serif" font-size="17">Preset ID prefixes: M_ = motion sensor · D_ = door sensor · L_ = light. IDs identify devices in the sensor log.</text>',
     '<text x="1520" y="968" text-anchor="end" fill="#7a878c" font-family="Arial, Helvetica, sans-serif" font-size="12">Exported from Hestia Studio</text>',
     "</svg>",
   );

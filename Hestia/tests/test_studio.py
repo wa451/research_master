@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
+import subprocess
 from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree
 
 import httpx
 import pytest
@@ -101,6 +104,83 @@ def test_studio_serves_editor_and_validates_the_starter_scenario() -> None:
         validation.json()["scenario"]["editor_layout"]["room_positions"]["living_room"]["x"] == 10
     )
     assert initial.json()["source_filename"] is None
+
+
+def test_paper_floorplan_labels_use_device_types_and_one_room_name() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is required to exercise the shared SVG renderer")
+    service = StudioService()
+    scenarios = []
+    for house in ("compact", "corridor", "branched"):
+        body = service.initial(house).body
+        assert isinstance(body, dict)
+        scenarios.append(body["scenario"])
+    custom = deepcopy(scenarios[0])
+    custom["rooms"][0]["devices"][0].update(id="custom<&>", type="Light", name="Custom lamp")
+    scenarios.append(custom)
+    script_path = ROOT / "src/smart_home_sim/studio_static/app.js"
+    result = subprocess.run(
+        [
+            node,
+            "-e",
+            """
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync(process.argv[1], 'utf8')
+  .replace('export default function', 'function');
+const context = vm.createContext({document: {querySelector: () => null}});
+vm.runInContext(source, context);
+const scenarios = JSON.parse(fs.readFileSync(0, 'utf8'));
+const svgs = scenarios.map(scenario => {
+  context.scenario = scenario;
+  return vm.runInContext('state.scenario = scenario; buildFloorplanSvg()', context);
+});
+process.stdout.write(JSON.stringify(svgs));
+""",
+            str(script_path),
+        ],
+        input=json.dumps(scenarios),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    for scenario, svg in zip(scenarios, json.loads(result.stdout), strict=True):
+        root = ElementTree.fromstring(svg)
+        texts = root.findall("{http://www.w3.org/2000/svg}text")
+        labels = [" ".join(text.itertext()) for text in texts]
+        assert "Motion sensor" in labels
+        assert "Light" in labels
+        assert "Door sensor" in labels
+        assert any("M_ = motion sensor" in (label or "") for label in labels)
+        for room in scenario["rooms"]:
+            assert labels.count(room["name"]) == 1
+            assert labels.count(room["id"]) == (1 if room["id"] == "outside" else 0)
+            for device in room["devices"]:
+                assert device["id"] in labels
+        for text in texts:
+            if " ".join(text.itertext()) in {"Motion sensor", "Light", "Door sensor"}:
+                assert text.attrib["font-size"] == "18"
+            if text.text == "custom<&>":
+                assert text.attrib["font-size"] == "14"
+        rectangles = root.findall("{http://www.w3.org/2000/svg}rect")
+        room_boxes = [box for box in rectangles if box.get("stroke") == "#35464a"]
+        annotations = [box for box in rectangles if box.get("stroke") == "#cbd3d4"]
+        assert len(annotations) == len(scenario["connections"])
+        for annotation in annotations:
+            x, y, width, height = (
+                float(annotation.attrib[key]) for key in ("x", "y", "width", "height")
+            )
+            for room_box in room_boxes:
+                rx, ry, rw, rh = (
+                    float(room_box.attrib[key]) for key in ("x", "y", "width", "height")
+                )
+                assert not (x < rx + rw and x + width > rx and y < ry + rh and y + height > ry)
+            for other in annotations:
+                if other is annotation:
+                    continue
+                ox, oy, ow, oh = (float(other.attrib[key]) for key in ("x", "y", "width", "height"))
+                assert not (x < ox + ow and x + width > ox and y < oy + oh and y + height > oy)
 
 
 def test_studio_service_supports_non_http_frontends(tmp_path: Path) -> None:
