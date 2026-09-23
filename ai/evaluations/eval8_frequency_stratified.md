@@ -35,7 +35,7 @@ time-bandレコードは`[start,end)`全体が対象帯に収まる出現だけ�
 
 ## 入出力と実行例
 
-主要成果物はdetails、frequency band集計、method別・run別集計、occurrence-weighted summary、summary JSON、154日fixedの分布図と指標図である。14日比較の典型は次のとおり。
+主要成果物は`evaluation8_frequency_band_details.csv`、`evaluation8_by_frequency_band.csv`、comparison時の`evaluation8_by_frequency_band_by_method.csv`、`evaluation8_by_frequency_band_by_run.csv`、`evaluation8_occurrence_weighted_summary.csv`、`evaluation8_summary.json`である。154日fixedでは`evaluation8_frequency_distribution.png`と`evaluation8_frequency_band_metrics.png`も作る。detailsは修正前/後出現数、差分、fallback、重複監査、頻度帯を持つ。summaryは有効期間、ID/一意化/ownership/tie方針、run別値、重み総和検証を持つ。14日比較の典型は次のとおり。
 
 ```bash
 uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
@@ -47,6 +47,8 @@ uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
 ```
 
 154日proposedでは`--runs 5 --days 154 --n-states 15 --hamming-threshold 0`と、抽出時と同じstate seriesを明示する。30日scopeは入力期間を自動検証しないため、input summary・パスで30日であることを確認し、14日出力を上書きしない。
+
+154日固定帯の完全な呼出しは、`--analysis-scope proposed_154days`、`--patterns-proposed results/<model>/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json`、`--state-series output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv`、`--labeled-casas new_labeled_data/aruba.txt`、`--frequency-band-mode fixed --fixed-frequency-bin-edges 0,1,10,100,1000,10000`を指定する。図を不要にする場合だけ`--no-write-distribution-plots`を追加する。bothでは同じ出力先直下の`tertile/`と`fixed/`に分けられる。
 
 ## 解釈・変更時の注意
 

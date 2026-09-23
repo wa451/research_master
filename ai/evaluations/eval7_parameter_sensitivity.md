@@ -34,9 +34,28 @@ LLM JSON/checkpointは`results/<model>/aruba_{K}_{h}_{days}days/`、screening・
 
 典型のscreeningは `--n-states-list 10,15,20,25,30,35,40 --hamming-thresholds 0,1,2,3 --days 30 --runs 1 --min-overlap-ratio-for-true-label 0.10 --selection-metric mean_multilabel_f1`。最終出力先をscreeningと同じにせず`results/<model>/7_param_search/top10_5runs/`へ分ける。
 
+反復生成と最終評価の完全な呼出し形は次のとおり。manifestにある条件以外を最終評価へ混ぜない。
+
+```bash
+uv run python scripts/run_evaluation7_top_condition_repeats.py \
+  --screening-summary results/<model>/7_param_search/evaluation7_condition_summary.csv \
+  --manifest results/<model>/7_param_search/evaluation7_top10_5runs_conditions.csv \
+  --top-n 10 --total-runs 5 --days 30
+
+uv run python scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py \
+  --conditions-file results/<model>/7_param_search/evaluation7_top10_5runs_conditions.csv \
+  --condition-summary-copy results/<model>/7_param_search/evaluation7_top10_5runs_conditions.csv \
+  --run-ids 1 2 3 4 5 --days 30 \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --output-dir results/<model>/7_param_search/top10_5runs \
+  --selection-metric mean_multilabel_f1
+```
+
 ## 成果物とWeb
 
 出力は条件summary、run別summary、pattern detail、予測/真値/time-band別集計、`evaluation7_summary.json`。manifestはrun 2〜5生成直後はscreening指標を保持し、最終評価後はtop10_5runsの5回平均・標準偏差・順位へ更新する。
+
+全ファイル名は`evaluation7_condition_summary.csv`、`evaluation7_condition_summary_by_run.csv`、`evaluation7_pattern_set_details.csv`、`evaluation7_by_pred_label.csv`、`evaluation7_by_true_label.csv`、`evaluation7_by_time_band.csv`、`evaluation7_summary.json`である。summary JSONには閾値、skip条件、最適条件、出力一覧を保存する。
 
 Streamlitの評価7は既存CLIを順に呼ぶ薄い画面で、既定の二段階実行は「ネットワーク→全条件run1→state series→screening→top10の不足run→最終5run集計」。初回summaryがあれば前4段をスキップし、個別ボタンではファイル存在を確認する。アプリへ集合評価を重複実装しない。
 

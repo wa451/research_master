@@ -57,6 +57,8 @@ uv run python scripts/evaluate_adl_labels.py \
 
 `pattern_occurrences.csv`（出現）、`pattern_adl_mapping.csv`（対応）、`merged_predictions.csv`、`filtered_predictions.csv`、IoU別の`adl_metrics_*`と`boundary_metrics_*`、`adl_interval_hit_metrics.csv`/details、`evaluation_summary.json`を出す。まずsummary・IoU 0.3・hit metricsで集計を確認し、次にdetailsでmissの理由を追い、最後にsummary内の入力・閾値・後処理条件を再現条件として確認する。
 
+具体的な標準ファイル名は、`adl_metrics_iou_0.3.csv`、`adl_metrics_iou_0.5.csv`、`boundary_metrics_iou_0.3.csv`、`boundary_metrics_iou_0.5.csv`、`adl_interval_hit_details.csv`である。`--write-state-series`を付けた時だけ`state_series.csv`も作る。`--state-series-only`は系列を書いてパターン・ADL採点前に終了する。`--max-skip-duration-minutes`は`skip-other`のときだけ、1つのOther区間を無視できる最長時間を表す。
+
 ## 変更時に守ること
 
 - 既存の前処理、代表状態抽出、LLM抽出をこの評価の都合で変えない。

@@ -53,9 +53,49 @@ contextless_useless = structural_useless OR adl_unsupported
 
 ## 実行と成果物
 
-canonical実行はstate series作成後、`evaluate_adl_correspondence.py`へ各入力、`--train-ratio 0.7`、上述の閾値、FP-Growth（support 0.05、top 50、len 2–4、median 1800秒/p90 3600秒）、transition（top 50、min-prob 0.0、len 2–4）、`--fragmentation-containment-threshold 0.7`を渡す。`--runs 5`ではbaselineは最初のrunだけ、proposedだけ全runを評価する。欠損runの許容は`--skip-missing-runs`を明示する。
+state series作成は次で行う。これは154日で作った状態表を固定して先頭220日をnetwork-equivalentへ写像する唯一の正式経路である。
+
+```bash
+uv run python scripts/evaluate_adl_labels.py \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --state-table state/aruba_15_0_154days.txt \
+  --sensor-map configs/aruba_sensor_map.json \
+  --hamming-threshold 0 --state-series-preprocessing network-equivalent \
+  --smoothing-window-sec 5 --state-series-days 220 --state-series-only \
+  --write-state-series output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv
+```
+
+続いて評価本体へ各入力、`--train-ratio 0.7`、上述の閾値、FP-Growth（support 0.05、top 50、len 2–4、median 1800秒/p90 3600秒）、transition（top 50、min-prob 0.0、len 2–4）、`--fragmentation-containment-threshold 0.7`を渡す。
+
+```bash
+uv run python scripts/evaluate_adl_correspondence.py \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --state-series output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv \
+  --state-definition state/aruba_15_0_154days.txt \
+  --patterns-frequency output/aruba_15_0_154days/state_sequence_counts_15_0_154days.json \
+  --patterns-rule-light output/5_rule_filter/frequency_rule_light.csv \
+  --patterns-rule-medium output/5_rule_filter/frequency_rule_medium.csv \
+  --patterns-rule-strong output/5_rule_filter/frequency_rule_strong.csv \
+  --patterns-proposed results/<model>/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json \
+  --output-dir results/<model>/5_pattern_quality_fixed \
+  --train-ratio 0.7 --grounded-hit-threshold 0.3 --grounded-purity-threshold 0.3 \
+  --useless-hit-threshold 0.1 --useless-purity-threshold 0.1 \
+  --assigned-adl-purity-threshold 0.10 --assigned-adl-max-categories 3 \
+  --enable-fp-growth-baseline --fp-min-support 0.05 --fp-top-k 50 \
+  --fp-min-len 2 --fp-max-len 4 --fp-max-median-duration-seconds 1800 \
+  --fp-max-p90-duration-seconds 3600 --enable-transition-baseline \
+  --transition-top-k 50 --transition-min-prob 0.0 --transition-min-len 2 \
+  --transition-max-len 4 --baseline-cache-dir output/5_adl_correspondence_baselines_fixed \
+  --use-baseline-cache --fragmentation-containment-threshold 0.7 \
+  --other-state-labels その他 Other Other_ADL unknown --exclude-other-adl-from-any \
+  --min-overlap-seconds 1
+```
+
+`--runs 5`ではbaselineは最初のrunだけ、proposedだけ全runを評価する。標準外のrun命名なら`--patterns-proposed-template ..._{run}.json`を使う。欠損runの許容は`--skip-missing-runs`を明示する。FP-Growthを比較しない時は`--enable-fp-growth-baseline`と関連引数を外す。
 
 主要成果物は`evaluation5_summary_by_method.csv`、必要時の`..._by_run.csv`、`evaluation5_pattern_details.csv`、`evaluation5_summary.json`。summaryでは分子・分母、比較可能pair/child数、系列長分布、run数、skipを確認する。detailsで各真偽、parent ID、`low_information_ratio`、`evaluation_status`を監査する。
+
+`evaluation5_summary_by_method_by_run.csv`は、runsが2以上、または`--skip-missing-runs`により実際にrunをskipした場合だけ出る。summary JSONには入力、state属性、train/test期間、閾値、完了/skip run・method、baseline設定を保存する。旧IoU・境界・hit系CSVが同じ場所に残っていても、現評価5の主出力は`evaluation5_*`である。
 
 ## 守る契約
 

@@ -34,11 +34,26 @@ Hestiaはこの親repoの`Hestia/`に含まれる。移動前の外部`/Users/wa
 
 `experiment.json`、生成ログ、truth、prepared state/networkは`output/9_hestia/`。LLM JSON、mode checkpoint、usage、LLM個別採点は`results/<model>/9_hestia/<experiment>/artifacts/`、集計はそのexperiment直下。Hestia CLIへmodel-specific artifact rootが渡るため、別モデルのcomplete markerを再利用しない。
 
-主出力は`evaluation9_summary.csv`（最初に読む）、seed/run/condition別`evaluation9_summary_runs.csv`、`evaluation9_summary.json`。Webのログ・effective planは`output/logs/evaluation_dashboard/`に残る。Studioの単体`events.csv`/`casas_motion_door.txt`にはplan・truth・train/test契約がないため、直接評価9の入力にしない。
+標準planは`Hestia/examples/experiments/noise_free_pilot.yaml`（4 condition×1 seed×4日、前半2/後半2、LLM各1反復）、API不要のgold契約確認は`controlled_gold_pilot.yaml`、本実験は`noise_free.yaml`（6 condition）。主出力は`evaluation9_summary.csv`（最初に読む）、seed/run/condition別`evaluation9_summary_runs.csv`、`evaluation9_summary.json`。Webのログ・effective planは`output/logs/evaluation_dashboard/`に残る。Studioの単体`events.csv`/`casas_motion_door.txt`にはplan・truth・train/test契約がないため、直接評価9の入力にしない。
 
 ## 実行段階・API安全性
 
 `controlled_gold_pilot.yaml` + `--method frequency`はAPIなしのgold契約pilot。通常の`evaluate_9_hestia.py`もAPIなしでは生成、prepare、frequency、budget、採点までであり、提案LLMはmissing。LLMは`--stage extract --allow-api`または`run --allow-api`だけが呼ぶ。`--dry-run`はCLIでは一切ファイルを書かない。
+
+```bash
+# API不要のgold契約pilot
+uv run python scripts/evaluate_9_hestia.py \
+  --plan Hestia/examples/experiments/controlled_gold_pilot.yaml \
+  --experiment output/9_hestia/controlled_gold_pilot \
+  --output-dir results/<model>/9_hestia/controlled_gold_pilot --method frequency
+
+# LLM抽出と再採点（明示opt-in）
+uv run python scripts/evaluate_9_hestia.py --stage budget
+uv run python scripts/evaluate_9_hestia.py --stage extract --allow-api
+uv run python scripts/evaluate_9_hestia.py --stage evaluate --method both
+```
+
+本実験は`--plan Hestia/examples/experiments/noise_free.yaml --experiment output/9_hestia/full --output-dir results/<model>/9_hestia/full`を明示する。6 conditionは`compact_base`, `compact_variable`, `corridor_base`, `corridor_variable`, `branched_base`, `branched_variable`で、variableは開始時刻±45分、活動・step時間±30%の揺らぎである。
 
 Webは評価9を選び、plan preset/seed/LLM runを設定する。共通平滑化、K、日数、condition詳細を画面から変更せず、effective planとしてhash付き保存する。既存成果物はファイル存在でスキップせず、CLIのhash検証へ委譲する。plan/code変更・不完全生成なら新experiment/output先で停止する。既存と異なるplanを同じパスへ使う時は、UIが作るbackupへ退避する明示操作だけを使い、hash検証を無効化しない。
 
@@ -47,6 +62,8 @@ Webは評価9を選び、plan preset/seed/LLM runを設定する。共通平滑�
 `evaluate_9_duration.py`は既存7日train本実験を変えない追加評価。各condition×seedで35日rawを1回生成し、Day29–35を共通test、trainは直前の3/7/14/28日へ変えるpaired比較。各windowで状態表・canonical・network・checkpointを独立に作り、28日状態表を短期間へ流用しない。canonicalがtrain期間で変わるため、exact P/R/F1だけの単純大小で結論せず、`adl_macro_f1`、target coverage、visible catalog recallを併読する。7日との差は相対率でなく同condition/seedの値差である。
 
 本実験は6 condition×3 seed×3 LLM run×4帯、durationはさらに4期間を掛ける（fresh最大864 API calls、parse retry上限2592、transport retry除く）。API許可前に予算を確認する。
+
+durationは`evaluate_9_duration.py`へ順に`--stage generate`、`prepare`、`baseline`、`budget`、`extract --allow-api`、`evaluate --method both`を渡す。出力は`results/<model>/9_hestia/duration/evaluation9_duration_summary.csv`、`..._summary_runs.csv`、`..._summary.json`と、`adl_macro_f1`・target coverage・F1のcondition別/overall SVGである。
 
 ## 不変条件
 

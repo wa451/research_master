@@ -46,4 +46,6 @@ APIなしの標準実行は `uv run python scripts/evaluate_10_switchbot.py --sn
 
 `preparation.json`、train state table、network、frequency patterns、train/test segmentsは`output/10_switchbot/<期間>/`に保持する。LLM fingerprint/checkpoint/usageと評価結果は`results/<model>/10_switchbot/<期間>/`。`evaluation10_summary.csv`（手法別指標・status）、`evaluation10_pattern_details.csv`（pattern別train/test出現・日別再現）、summary JSONを確認する。
 
+中間の具体的なファイルは`state_table.tsv`、`network/`、`frequency_patterns.json`、`{train,test}_state_segments.json`である。LLMはresults側のfingerprint別領域に保存され、同じ入力fingerprintでも別モデル間で共有しない。summary JSONには入力、split、パラメータ、method別summary、出力一覧を保存する。`preparation.json`には入力hash、期間、split、件数、test-only sensor等の警告を保存する。
+
 実宅ログ、`data/`、`output/`、`results/`、`picture/`はGit管理外であり、内容・派生成果物をコミットしない。入力hash、test-only sensor、CSV/JSON契約、API opt-inを変更する場合は専用テストと正本も更新する。

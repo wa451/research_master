@@ -36,12 +36,26 @@
 4. 同じ14日代表状態系列でdirect-log baselineを1回（または5回）生成する。
 5. 比較CLIへ双方JSON、state series、labeled CASAS、`--min-overlap-ratio-for-true-label 0.10 --days 14 --n-states 15 --hamming-threshold 0`を明示して実行する。
 
+前段の標準コマンドは、networkを`run_build_network_from_labeled_casas.py --days 14 --n-states 15 --hamming-threshold 0 --smoothing-window-sec 5`で作り、提案側を`run_llm_extraction.py --days 14 --n-states 15 --hamming-threshold 0 [--runs 5]`、direct側を`run_direct_log_baseline.py --log-days 14 --n-states 15 --hamming-threshold 0 --extract-only [--runs 5]`で作る。比較は次の形である。
+
+```bash
+uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
+  --patterns-proposed results/<model>/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
+  --patterns-direct results/<model>/llm_direct_15_0_14days/1.json \
+  --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --output-dir results/<model>/6_adl_match \
+  --min-overlap-ratio-for-true-label 0.10 --days 14 --n-states 15 --hamming-threshold 0
+```
+
+5 runには`--runs 5`を追加し、proposedのmetrics templateとdirect metricsを明示する。具体的なtemplateは`results/<model>/aruba_15_0_14days/llm_modes_metrics_15_0_14days_run{run}.csv`、direct metricsは`results/<model>/llm_direct_15_0_14days/llm_direct_metrics_14days.csv`である。
+
 新規のproposed/direct JSON、checkpoint、usage、比較結果はそれぞれ`results/<model>/aruba_*`、`results/<model>/llm_direct_*`、`results/<model>/6_adl_match/`である。照合state seriesはモデル非依存で`output/`に共有する。human docsの`output/aruba_*`/`results/6_*`はGemini移行元を含む旧表記であり、CLI既定値も正式条件と一致しない（**KI-01**, **KI-08**）。パスとK/h/daysを省略しない。
 
 ## 出力・run集計・使用量
 
 - `evaluation6_method_comparison.csv`は主比較、`..._by_run.csv`はrunごとの元データ、`...pattern_set_details_by_method.csv`は状態とrawラベルを含む根拠である。
-- label別・true label別・time band別CSV、`evaluation6_comparison_summary.json`も保存する。評価8はdetails CSVを入力として使うため、列・分母・`num_occurrences`を軽率に変更しない。
+- label別`evaluation6_by_pred_label_by_method.csv`、true label別`evaluation6_by_true_label_by_method.csv`、time band別`evaluation6_by_time_band_by_method.csv`、`evaluation6_comparison_summary.json`も保存する。評価8はdetails CSVを入力として使うため、列・分母・`num_occurrences`を軽率に変更しない。
 - `--runs 5`では提案手法とdirect-logをそれぞれ独立に平均する。欠損JSON/runを許すなら`--skip-missing-runs`。共通runへ自動制限しない点、run等重みかdetail poolかの正式集計は **KI-09**。
 - usage CSVは1 runの抽出全体を比較する。提案手法は4時間帯の成功API呼出し合計、directは1呼出し。完全な記録を持つrunだけで平均し、欠損を0補完しない。Geminiの`totalTokenCount`はprompt+thoughts+candidatesであり、可視入力+出力の単純和ではない。
 
