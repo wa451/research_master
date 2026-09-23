@@ -1,0 +1,64 @@
+#!/bin/zsh
+# Keep this bundle in the repository root so it can use that checkout's uv environment.
+set -eu
+
+project_root="${0:A:h:h:h:h}"
+dashboard_url="http://127.0.0.1:8501"
+
+show_error() {
+  /usr/bin/osascript \
+    -e 'on run argv' \
+    -e 'display alert "ダッシュボードを起動できません" message (item 1 of argv) as critical' \
+    -e 'end run' \
+    -- "$1"
+}
+
+open_dashboard() {
+  if [[ "${MASTER_RESEARCH_DASHBOARD_NO_BROWSER:-}" != "1" ]]; then
+    /usr/bin/open "$dashboard_url"
+  fi
+}
+
+# Reuse the local dashboard when it is already running instead of starting a
+# second Streamlit process on another port.
+if /usr/bin/curl --fail --silent --show-error "$dashboard_url/_stcore/health" >/dev/null 2>&1; then
+  open_dashboard
+  exit 0
+fi
+
+cd "$project_root"
+uv_command="$(command -v uv 2>/dev/null || true)"
+for candidate in \
+  "${HOME}/.local/bin/uv" \
+  "${HOME}/.cargo/bin/uv" \
+  "/opt/homebrew/bin/uv" \
+  "/usr/local/bin/uv"; do
+  if [[ -z "$uv_command" && -x "$candidate" ]]; then
+    uv_command="$candidate"
+  fi
+done
+
+if [[ -z "$uv_command" ]]; then
+  show_error "uv が見つかりません。uv をインストールしてから、もう一度起動してください。"
+  exit 1
+fi
+
+launch_log="$(/usr/bin/mktemp -t master-research-dashboard.XXXXXX)"
+/usr/bin/nohup /usr/bin/env STREAMLIT_SERVER_HEADLESS=true \
+  "$uv_command" run streamlit run app/streamlit_app.py >"$launch_log" 2>&1 < /dev/null &
+dashboard_pid=$!
+
+for _ in {1..60}; do
+  if /usr/bin/curl --fail --silent --show-error "$dashboard_url/_stcore/health" >/dev/null 2>&1; then
+    open_dashboard
+    exit 0
+  fi
+  if ! /bin/kill -0 "$dashboard_pid" 2>/dev/null; then
+    break
+  fi
+  /bin/sleep 0.5
+done
+
+error_summary="$(/usr/bin/tail -n 4 "$launch_log" | /usr/bin/tr '\n' ' ')"
+show_error "$error_summary"
+exit 1

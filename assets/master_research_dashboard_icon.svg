@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Master Research Dashboard">
+  <defs>
+    <linearGradient id="background" x1="104" y1="96" x2="920" y2="928" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1A3C6E"/>
+      <stop offset="1" stop-color="#0A1730"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="260" y1="332" x2="764" y2="726" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2E8AB3"/>
+      <stop offset="1" stop-color="#1A4E83"/>
+    </linearGradient>
+  </defs>
+  <rect x="72" y="72" width="880" height="880" rx="194" fill="url(#background)"/>
+  <path d="M230 491 512 254l282 237v293c0 28-23 51-51 51H281c-28 0-51-23-51-51V491Z" fill="#F5F9FF"/>
+  <path d="M294 510 512 327l218 183v248c0 7-6 13-13 13H307c-7 0-13-6-13-13V510Z" fill="url(#screen)"/>
+  <path d="M212 510 512 256l300 254" fill="none" stroke="#90E5F7" stroke-linecap="round" stroke-linejoin="round" stroke-width="42"/>
+  <rect x="387" y="552" width="250" height="177" rx="26" fill="#F5F9FF"/>
+  <path d="M431 677v-54m54 54v-104m54 104V529m54 148v-82" fill="none" stroke="#20A6C5" stroke-linecap="round" stroke-width="27"/>
+  <circle cx="431" cy="623" r="14" fill="#C4F5FF"/>
+  <circle cx="485" cy="573" r="14" fill="#C4F5FF"/>
+  <circle cx="539" cy="529" r="14" fill="#C4F5FF"/>
+  <circle cx="593" cy="595" r="14" fill="#C4F5FF"/>
+  <path d="M360 520h-44m44 60h-44m392-60h-44m44 60h-44" fill="none" stroke="#90E5F7" stroke-linecap="round" stroke-width="22"/>
+</svg>

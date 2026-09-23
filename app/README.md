@@ -9,6 +9,8 @@ uv sync
 uv run streamlit run app/streamlit_app.py
 ```
 
+macOSでは、リポジトリ直下の `start_dashboard.command` をダブルクリックして同じアプリを起動できる。Dockからワンクリックで起動したい場合は、同じ階層にある `master-research-dashboard.app` をDockへドラッグする。この `.app` はリポジトリ直下の `uv` 環境から直接ダッシュボードを起動するため、リポジトリ直下に置いたままにする。起動後は既定のブラウザでダッシュボードを開き、すでに起動済みの場合は同じ画面を再表示する。
+
 一括実行では、不足ファイル生成のみ、不足ファイル生成 + 評価本体、全ステップ再実行を選べます。
 
 評価7では、代表状態数Kとハミング距離を複数指定して `scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py` を実行できます。不足している条件別ファイルがある場合は、一括実行で不足分を生成してから評価7本体まで続けて実行できます。

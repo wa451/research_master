@@ -16,6 +16,8 @@ uv sync
 uv run streamlit run app/streamlit_app.py
 ```
 
+macOSでは、リポジトリ直下の `start_dashboard.command` をダブルクリックして起動することもできます。Dockからワンクリックで起動するには、Finderで同じ階層の `master-research-dashboard.app` をDockへドラッグします。この `.app` はリポジトリ直下の `uv` 環境から直接ダッシュボードを起動するため、リポジトリ直下に置いたままにしてください。起動後は既定のブラウザでダッシュボードを開き、すでに起動済みの場合は同じ画面を再表示します。
+
 ## 評価番号の選択
 
 左サイドバーの「評価を選択」から以下を選びます。
