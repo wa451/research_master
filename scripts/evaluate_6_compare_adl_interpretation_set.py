@@ -13,7 +13,14 @@ ROOT_DIR_FOR_IMPORTS = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR_FOR_IMPORTS) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR_FOR_IMPORTS))
 
-from experiment_config import DATASET_NAME, HAMMING_THRESHOLD, N_STATES, ROOT_DIR
+from experiment_config import (
+    DATASET_NAME,
+    HAMMING_THRESHOLD,
+    N_STATES,
+    ROOT_DIR,
+    current_model_identity,
+    current_model_results_root,
+)
 from src.behavior_pattern_mining.evaluation.adl import (
     PatternRecord,
     find_pattern_occurrences,
@@ -186,7 +193,7 @@ MEAN_SUMMARY_FIELDNAMES = [
 
 
 def default_output_root() -> Path:
-    return ROOT_DIR / "results" / "6_adl_match"
+    return current_model_results_root() / "6_adl_match"
 
 
 def condition_suffix(days: int, n_states: int | None, hamming_threshold: int | None) -> str:
@@ -221,7 +228,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--patterns-proposed",
         type=Path,
-        default=ROOT_DIR / "output" / f"{DATASET_NAME}_{param_suffix}" / f"llm_sequences_modes_{param_suffix}_1.json",
+        default=current_model_results_root()
+        / f"{DATASET_NAME}_{param_suffix}"
+        / f"llm_sequences_modes_{param_suffix}_1.json",
         help="Proposed-method LLM pattern JSON containing ADL系列ラベル",
     )
     parser.add_argument(
@@ -230,14 +239,14 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Optional proposed pattern path template for multi-run evaluation. "
-            "Use {run}, e.g. output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_{run}.json"
+            "Use {run}, e.g. results/<model>/aruba_15_1_14days/"
+            "llm_sequences_modes_15_1_14days_{run}.json"
         ),
     )
     parser.add_argument(
         "--patterns-direct",
         type=Path,
-        default=ROOT_DIR
-        / "output"
+        default=current_model_results_root()
         / f"llm_direct_{N_STATES}_{HAMMING_THRESHOLD}_{EVAL6_DAYS}days"
         / "1.json",
         help="Direct-log baseline LLM pattern JSON containing ADL系列ラベル",
@@ -248,7 +257,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Optional direct-baseline pattern path template for multi-run evaluation. "
-            "Use {run}, e.g. output/llm_direct_15_1_14days/{run}.json"
+            "Use {run}, e.g. results/<model>/llm_direct_15_1_14days/{run}.json"
         ),
     )
     parser.add_argument(
@@ -294,8 +303,8 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Output root or condition directory for evaluation 6 method comparison. "
-            "When omitted, or when results/6_adl_match is passed, "
-            "outputs are written to results/6_adl_match/{K}_{hamming}_{days}days."
+            "When omitted, outputs are written to "
+            "results/<model>/6_adl_match/{K}_{hamming}_{days}days."
         ),
     )
     parser.add_argument(
@@ -731,7 +740,13 @@ def main() -> None:
         ["method", "time_band", *AGGREGATE_SUMMARY_FIELDNAMES],
     )
 
+    identity = current_model_identity()
     summary_payload = {
+        "model": {
+            "provider": identity.provider,
+            "model_id": identity.model_id,
+            "result_name": identity.result_name,
+        },
         "patterns_proposed": str(args.patterns_proposed),
         "patterns_proposed_template": args.patterns_proposed_template,
         "patterns_direct": str(args.patterns_direct),

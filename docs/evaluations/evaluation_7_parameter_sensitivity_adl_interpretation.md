@@ -1,5 +1,7 @@
 # 評価7: 提案手法のADL解釈ラベル精度パラメータ感度分析
 
+> **モデル別保存:** 条件別LLM JSON/checkpointは `results/<model>/aruba_{K}_{h}_{days}days/`、screening・top条件manifest・複数run集計は `results/<model>/7_param_search/` に保存する。state seriesとnetworkは `output/` / `picture/` に残し、全モデルで共有する。staged repeatも同じモデル配下だけを探索する。
+
 ## 目的
 
 提案手法単独について、代表状態数 `K` とハミング距離閾値を変化させたときのADL解釈ラベル精度を比較し、最適なパラメータ条件を選ぶ。

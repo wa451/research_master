@@ -19,7 +19,11 @@ ROOT_DIR_FOR_IMPORTS = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR_FOR_IMPORTS) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR_FOR_IMPORTS))
 
-from experiment_config import ROOT_DIR
+from experiment_config import (
+    ROOT_DIR,
+    current_model_identity,
+    current_model_results_root,
+)
 from scripts.evaluate_6_compare_adl_interpretation_set import (
     evaluate_method,
     load_truth_intervals,
@@ -255,7 +259,7 @@ def default_output_dir(analysis_scope: str) -> Path:
         if analysis_scope in COMPARISON_SCOPES
         else "8_proposed_own_id_fixed"
     )
-    return ROOT_DIR / "results" / directory_name
+    return current_model_results_root() / directory_name
 
 
 def parse_args() -> argparse.Namespace:
@@ -1592,7 +1596,13 @@ def write_mode_outputs(
             write_fixed_range_plots(output_dir, overall_by_band, frequency_bands)
         )
 
+    identity = current_model_identity()
     summary = {
+        "model": {
+            "provider": identity.provider,
+            "model_id": identity.model_id,
+            "result_name": identity.result_name,
+        },
         "evaluation_type": "frequency_stratified_adl_consistency",
         "frequency_band_mode": (
             "tertile_by_num_occurrences"

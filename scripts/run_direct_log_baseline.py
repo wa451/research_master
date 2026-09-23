@@ -55,12 +55,31 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Hamming distance threshold used by the state table and direct-log state mapping.",
     )
+    parser.add_argument(
+        "--estimate-cost",
+        action="store_true",
+        help="Estimate Bedrock tokens and USD cost without model inference or evaluation.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Explicit direct-log LLM artifact directory. By default it is selected "
+            "under results/<model> from the active model."
+        ),
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    if args.log_days is not None and args.log_days != DAYS and not args.extract_only:
+    if (
+        args.log_days is not None
+        and args.log_days != DAYS
+        and not args.extract_only
+        and not args.estimate_cost
+    ):
         raise ValueError(
             "--log-days differs from the project default DAYS. "
             "Use --extract-only for evaluation 6, or keep the default for evaluation 3."
@@ -72,8 +91,10 @@ def main() -> None:
         runs=args.runs,
         n_states=args.n_states,
         hamming_threshold=args.hamming_threshold,
+        estimate_cost=args.estimate_cost,
+        output_dir=args.output_dir,
     )
-    if not args.extract_only:
+    if not args.extract_only and not args.estimate_cost:
         direct_log.main()
 
 

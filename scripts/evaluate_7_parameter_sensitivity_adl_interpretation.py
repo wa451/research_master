@@ -14,7 +14,12 @@ ROOT_DIR_FOR_IMPORTS = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR_FOR_IMPORTS) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR_FOR_IMPORTS))
 
-from experiment_config import DATASET_NAME, ROOT_DIR
+from experiment_config import (
+    DATASET_NAME,
+    ROOT_DIR,
+    current_model_identity,
+    current_model_results_root,
+)
 from scripts.evaluate_6_compare_adl_interpretation_set import (
     AGGREGATE_SUMMARY_FIELDNAMES,
     DETAIL_FIELDNAMES as EVAL6_DETAIL_FIELDNAMES,
@@ -232,7 +237,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=ROOT_DIR / "results" / "7_param_search",
+        default=current_model_results_root() / "7_param_search",
     )
     parser.add_argument("--min-overlap-ratio-for-true-label", type=float, default=0.10)
     parser.add_argument(
@@ -306,7 +311,11 @@ def template_context(
 
 def default_pattern_path(dataset: str, n_states: int, hamming_threshold: int, days: int) -> Path:
     suffix = condition_id(n_states, hamming_threshold, days)
-    return ROOT_DIR / "output" / f"{dataset}_{suffix}" / f"llm_sequences_modes_{suffix}_1.json"
+    return (
+        current_model_results_root()
+        / f"{dataset}_{suffix}"
+        / f"llm_sequences_modes_{suffix}_1.json"
+    )
 
 
 def default_state_series_path(n_states: int, hamming_threshold: int, days: int) -> Path:
@@ -730,8 +739,14 @@ def write_outputs(args: argparse.Namespace, result: dict[str, Any]) -> None:
         TIME_BAND_FIELDNAMES,
     )
 
+    identity = current_model_identity()
     summary_payload = {
         "evaluation": 7,
+        "model": {
+            "provider": identity.provider,
+            "model_id": identity.model_id,
+            "result_name": identity.result_name,
+        },
         "evaluation_type": "proposed_parameter_sensitivity_adl_interpretation_set",
         "order_sensitive": False,
         "time_band_aware": True,

@@ -1,5 +1,7 @@
 # 評価5: ADLラベルを用いたパターン単位評価
 
+> **モデル別保存:** 提案手法JSON・checkpoint・usageは `results/<model>/aruba_{K}_{h}_{days}days/`、本評価の既定出力は `results/<model>/5_pattern_quality_fixed/` に保存する。`<model>` は `.env` の実行モデルから自動決定される。`output/5_adl_evaluation_*` のstate series、baseline、状態定義はモデル非依存入力として移動しない。以下に残る `output/aruba_*/llm_*` と `results/5_*` の表記は既存Gemini成果物の移行元を説明するlegacy pathで、新規実行では同じ下位名を `results/<model>/` 配下で使う。
+
 ## 評価の要約
 
 頻度ベースライン、ルールフィルタ後の頻度ベースライン、FP-Growth系ベースライン、遷移確率ベースライン、提案手法が出力した系列パターンを、パターン1件単位で評価する。train期間でパターンとADL集合の対応を決め、test期間でその対応が維持されるか、また生活文脈のない系列や長い系列の断片がどの程度あるかを確認する。

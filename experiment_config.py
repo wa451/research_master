@@ -3,6 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.behavior_pattern_mining.config import get_config_value, load_config
+from src.behavior_pattern_mining.llm.result_paths import (
+    ModelIdentity,
+    model_results_root,
+    resolve_project_model_identity,
+)
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -33,10 +38,38 @@ TIME_MODES = {
 }
 
 LLM_MODEL_NAME = str(get_config_value(CONFIG, "llm.model", "gemini-2.5-pro"))
+LLM_PROVIDER = str(get_config_value(CONFIG, "llm.provider", "google_gemini"))
 LLM_TEMPERATURE = float(get_config_value(CONFIG, "llm.temperature", 0.2))
 LLM_RUNS_DEFAULT = int(get_config_value(CONFIG, "llm.runs_default", 1))
 LLM_BATCH_RUNS = int(get_config_value(CONFIG, "llm.batch_runs", 5))
 LLM_MAX_RETRIES_PER_RUN = int(get_config_value(CONFIG, "llm.max_retries_per_run", 3))
+BEDROCK_REGION = str(get_config_value(CONFIG, "llm.bedrock.region", "us-east-2"))
+BEDROCK_MODEL_ID = str(get_config_value(CONFIG, "llm.bedrock.model_id", ""))
+BEDROCK_MAX_TOKENS = int(get_config_value(CONFIG, "llm.bedrock.max_tokens", 8192))
+_BEDROCK_ESTIMATED_OUTPUT_TOKENS = get_config_value(
+    CONFIG,
+    "llm.bedrock.estimated_output_tokens",
+    None,
+)
+BEDROCK_ESTIMATED_OUTPUT_TOKENS = (
+    None
+    if _BEDROCK_ESTIMATED_OUTPUT_TOKENS is None
+    else int(_BEDROCK_ESTIMATED_OUTPUT_TOKENS)
+)
+
+
+def current_model_identity() -> ModelIdentity:
+    """Return the active provider/model used to namespace LLM results."""
+    return resolve_project_model_identity(
+        ROOT_DIR,
+        default_provider=LLM_PROVIDER,
+        gemini_model_name=LLM_MODEL_NAME,
+        bedrock_model_id=BEDROCK_MODEL_ID,
+    )
+
+
+def current_model_results_root() -> Path:
+    return model_results_root(ROOT_DIR, current_model_identity())
 
 TRANSITION_PROBABILITY_THRESHOLD = float(
     get_config_value(CONFIG, "baselines.transition_probability.threshold", 0.2)

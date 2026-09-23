@@ -13,7 +13,12 @@ import math
 
 import pandas as pd
 
-from experiment_config import TIME_MODES, UNKNOWN_STATE
+from experiment_config import (
+    TIME_MODES,
+    UNKNOWN_STATE,
+    current_model_identity,
+    current_model_results_root,
+)
 from src.behavior_pattern_mining.baselines.frequency import count_sequences
 from src.behavior_pattern_mining.data.state_vectors import (
     apply_delayed_off_smoothing,
@@ -611,21 +616,36 @@ def preparation_fingerprint(output_dir: Path, preparation: dict[str, Any]) -> st
     return digest.hexdigest()[:16]
 
 
-def llm_patterns_path(output_dir: Path, preparation: dict[str, Any]) -> Path:
+def llm_patterns_path(
+    output_dir: Path,
+    preparation: dict[str, Any],
+    llm_results_dir: Path | None = None,
+) -> Path:
     params = preparation["parameters"]
     train_days = preparation["split"]["train_days"]
     fingerprint = preparation_fingerprint(output_dir, preparation)
-    return output_dir / "llm" / fingerprint / (
+    result_base = llm_results_dir or (
+        current_model_results_root() / "10_switchbot" / output_dir.name
+    )
+    return result_base / "llm" / fingerprint / (
         f"llm_sequences_modes_{params['n_states']}_{params['hamming_threshold']}_{train_days}days_1.json"
     )
 
 
-def extract(*, output_dir: Path, allow_api: bool) -> Path:
+def extract(
+    *,
+    output_dir: Path,
+    allow_api: bool,
+    llm_results_dir: Path | None = None,
+) -> Path:
     preparation = verify_preparation(output_dir)
     if not allow_api:
         raise ValueError("LLM extraction requires explicit --allow-api")
     params = preparation["parameters"]
-    llm_dir = output_dir / "llm" / preparation_fingerprint(output_dir, preparation)
+    result_base = llm_results_dir or (
+        current_model_results_root() / "10_switchbot" / output_dir.name
+    )
+    llm_dir = result_base / "llm" / preparation_fingerprint(output_dir, preparation)
     pattern_extractor.main(
         days=preparation["split"]["train_days"],
         input_modes_dir=output_dir / "network",
@@ -634,7 +654,7 @@ def extract(*, output_dir: Path, allow_api: bool) -> Path:
         n_states=params["n_states"],
         hamming_threshold=params["hamming_threshold"],
     )
-    path = llm_patterns_path(output_dir, preparation)
+    path = llm_patterns_path(output_dir, preparation, result_base)
     if not path.is_file():
         raise RuntimeError(f"LLM extractor did not produce expected output: {path}")
     return path
@@ -790,7 +810,7 @@ def evaluate(
         path = (
             output_dir / "frequency_patterns.json"
             if current == "frequency"
-            else (llm_patterns or llm_patterns_path(output_dir, preparation))
+            else (llm_patterns or llm_patterns_path(output_dir, preparation, results_dir))
         )
         input_paths[current] = str(path)
         if current == "llm" and not path.is_file():
@@ -821,8 +841,14 @@ def evaluate(
     results_dir.mkdir(parents=True, exist_ok=True)
     _write_csv(results_dir / "evaluation10_pattern_details.csv", detail_rows, DETAIL_COLUMNS)
     _write_csv(results_dir / "evaluation10_summary.csv", summary_rows, SUMMARY_COLUMNS)
+    identity = current_model_identity()
     payload = {
         "evaluation": 10,
+        "model": {
+            "provider": identity.provider,
+            "model_id": identity.model_id,
+            "result_name": identity.result_name,
+        },
         "interpretation": (
             "Held-out recurrence diagnostics for unlabeled home logs; these are not ADL accuracy metrics."
         ),

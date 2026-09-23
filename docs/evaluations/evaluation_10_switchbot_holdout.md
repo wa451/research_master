@@ -1,5 +1,7 @@
 # 評価10: SwitchBot実宅ログの時間ホールドアウト評価
 
+> **モデル別保存:** `preparation.json`、state table、network、frequency patterns、train/test segmentsは `output/10_switchbot/<期間>/` に残す。LLM fingerprint/checkpoint/usageと評価結果は `results/<model>/10_switchbot/<期間>/` に保存し、同一入力fingerprintでも異なるモデル間では共有しない。
+
 ## 目的と評価可能範囲
 
 自宅で収集したSwitchBotイベントから生活行動候補の状態系列を生成し、時間的に後の未使用期間で同じ系列が再出現するかを評価する。入力に正解ADL区間がないため、本評価はADL解釈の正確さ、行動検出Precision/Recall、住人識別精度を測らない。結果は「学習期間から生成した系列の時間的安定性」の診断値として扱う。

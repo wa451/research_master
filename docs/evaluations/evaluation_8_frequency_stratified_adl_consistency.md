@@ -1,5 +1,7 @@
 # 評価8: 頻度帯別ADL整合性評価
 
+> **モデル別保存:** 評価6detailsまたは154日proposed JSONは現在モデルの `results/<model>/` から読み、結果は `results/<model>/8_vs_llm_own_id_fixed/` または `results/<model>/8_proposed_own_id_fixed/` に保存する。照合用state seriesはモデル非依存のため `output/` に残す。評価8は新しいLLM呼出しを行わない。
+
 ## 目的
 
 評価8は評価6のADL解釈ラベルset一致指標を置き換えない後段分析である。抽出済みパターンを代表状態系列上の出現回数でLow / Middle / Highに分け、高頻度パターンほどADLラベル整合性が安定するかを確認する。頻度が高いこと自体は有用性の十分条件として扱わない。

@@ -50,6 +50,20 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Hamming distance threshold used in the input/output directory suffix.",
     )
+    parser.add_argument(
+        "--estimate-cost",
+        action="store_true",
+        help="Estimate Bedrock tokens and USD cost without running model inference.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Explicit LLM artifact directory. By default it is selected from the active "
+            "model as results/<model>/<dataset>_<K>_<h>_<days>days."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -61,4 +75,6 @@ if __name__ == "__main__":
         run_ids=args.run_ids,
         n_states=args.n_states,
         hamming_threshold=args.hamming_threshold,
+        estimate_cost=args.estimate_cost,
+        output_dir=args.output_dir,
     )

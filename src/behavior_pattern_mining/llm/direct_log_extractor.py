@@ -5,27 +5,42 @@ from __future__ import annotations
 
 import csv
 import json
-import os
 import tempfile
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Tuple
 
 import pandas as pd
 
 from experiment_config import (
+    BEDROCK_ESTIMATED_OUTPUT_TOKENS,
+    BEDROCK_MAX_TOKENS,
+    BEDROCK_MODEL_ID,
+    BEDROCK_REGION,
     DATASET_NAME,
     DAYS,
     HAMMING_THRESHOLD,
     LLM_MAX_RETRIES_PER_RUN,
     LLM_MODEL_NAME,
+    LLM_PROVIDER,
     LLM_RUNS_DEFAULT,
     LLM_TEMPERATURE,
     N_STATES,
     ROOT_DIR,
 )
 from src.behavior_pattern_mining.evaluation.adl import load_sensor_id_map
-from src.behavior_pattern_mining.llm.client import call_gemini, load_dotenv, parse_pattern_records
+from src.behavior_pattern_mining.llm.client import (
+    call_llm,
+    load_dotenv,
+    parse_pattern_records,
+    resolve_llm_runtime_config,
+)
+from src.behavior_pattern_mining.llm.cost_estimator import print_bedrock_cost_estimate
+from src.behavior_pattern_mining.llm.result_paths import (
+    ensure_model_artifact_directory,
+    model_identity,
+    model_result_path,
+)
 from src.behavior_pattern_mining.visualization import state_transition_visualizer as stv
 
 
@@ -47,9 +62,6 @@ MAX_RETRIES_PER_RUN = LLM_MAX_RETRIES_PER_RUN
 # 入力ログ。現在の評価ではラベル付きCASASを入力元にし、activity begin/endは使わずセンサーイベントのみを抽出する。
 INPUT_LOG_PATH = ROOT_DIR / "new_labeled_data" / f"{DATASET_NAME}.txt"
 SENSOR_MAP_PATH = ROOT_DIR / "configs" / "aruba_sensor_map.json"
-# 出力ルート（評価6の30日条件では llm_direct_{K}_{H}_{DAYS}days 配下に保存する）
-OUTPUT_DIR = ROOT_DIR / "output" / f"llm_direct_{LOG_DAYS}"
-
 DIRECT_METRICS_FIELDNAMES = [
     "run",
     "model",
@@ -271,6 +283,11 @@ def output_has_adl_sequence_labels(path: Path) -> bool:
     return isinstance(payload, list) and records_have_adl_sequence_labels(payload)
 
 
+def direct_output_is_reusable(path: Path) -> bool:
+    """Match the normal execution condition for skipping a direct-log run."""
+    return path.exists() and output_has_adl_sequence_labels(path)
+
+
 def prepare_input_csv(input_path: Path) -> tuple[Path, tempfile.TemporaryDirectory | None, int | None]:
     """Return an event CSV path, converting labeled CASAS txt when needed."""
     if not input_path.exists():
@@ -449,6 +466,7 @@ def main(
     runs: int | None = None,
     n_states: int | None = None,
     hamming_threshold: int | None = None,
+    estimate_cost: bool = False,
 ) -> None:
     effective_log_days = log_days if log_days is not None else LOG_DAYS
     if effective_log_days <= 0:
@@ -471,11 +489,18 @@ def main(
     if MAX_ROWS < 0:
         raise ValueError("MAX_ROWS must be >= 0")
 
-    # APIキーの準備
+    # LLM provider設定の準備
     load_dotenv(ENV_FILE_PATH)
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        raise RuntimeError(".env に GEMINI_API_KEY が未設定です。")
+    llm_config = resolve_llm_runtime_config(
+        default_provider=LLM_PROVIDER,
+        gemini_model_name=MODEL_NAME,
+        temperature=TEMPERATURE,
+        bedrock_region=BEDROCK_REGION,
+        bedrock_model_id=BEDROCK_MODEL_ID,
+        bedrock_max_tokens=BEDROCK_MAX_TOKENS,
+        bedrock_estimated_output_tokens=BEDROCK_ESTIMATED_OUTPUT_TOKENS,
+    )
+    identity = model_identity(llm_config.provider, llm_config.model_name)
 
     # 入力ログに対して state_transition_visualizer の前処理を適用する。
     # ラベル付きCASAS txtを指定した場合は activity begin/end を捨て、
@@ -484,13 +509,17 @@ def main(
     if output_dir is not None:
         effective_output_dir = output_dir
     elif effective_log_days != DAYS or n_states is not None or hamming_threshold is not None:
-        effective_output_dir = (
-            ROOT_DIR
-            / "output"
-            / f"llm_direct_{effective_n_states}_{effective_hamming_threshold}_{effective_log_days}days"
+        effective_output_dir = model_result_path(
+            ROOT_DIR,
+            identity,
+            f"llm_direct_{effective_n_states}_{effective_hamming_threshold}_{effective_log_days}days",
         )
     else:
-        effective_output_dir = ROOT_DIR / "output" / f"llm_direct_{effective_log_days}"
+        effective_output_dir = model_result_path(
+            ROOT_DIR,
+            identity,
+            f"llm_direct_{effective_log_days}",
+        )
 
     try:
         if converted_event_count is not None:
@@ -560,33 +589,65 @@ def main(
             log_text=log_text,
             truncated=truncated
         ).replace("{N_STATES}", str(effective_n_states)).replace("{STATE_TABLE}", state_table_text)
-    
-        effective_output_dir.mkdir(parents=True, exist_ok=True)
+
+        if estimate_cost:
+            run_ids = list(range(1, effective_runs + 1))
+            user_messages: list[str] = []
+            skipped_count = 0
+            for run_idx in run_ids:
+                output_path = effective_output_dir / f"{run_idx}.json"
+                if direct_output_is_reusable(output_path):
+                    skipped_count += 1
+                else:
+                    user_messages.append(user_message)
+            print_bedrock_cost_estimate(
+                llm_config=llm_config,
+                user_messages=user_messages,
+                skipped_count=skipped_count,
+                run_ids=run_ids,
+            )
+            return
+
+        ensure_model_artifact_directory(
+            effective_output_dir,
+            identity,
+            temperature=llm_config.temperature,
+            region=llm_config.region_name,
+            max_tokens=llm_config.max_tokens,
+            extra={"artifact_kind": "direct_log_llm_extraction"},
+        )
 
         backend_name = "unknown"
         metrics_path = effective_output_dir / f"llm_direct_metrics_{effective_log_days}days.csv"
         metrics_by_run = load_direct_metrics_by_run(metrics_path)
+        mismatched_metrics = [
+            row
+            for row in metrics_by_run.values()
+            if row.get("model") and row.get("model") != llm_config.model_name
+        ]
+        if mismatched_metrics:
+            raise RuntimeError(
+                f"別モデルのmetricsは再利用できません: {metrics_path}"
+            )
         for run_idx in range(1, effective_runs + 1):
             output_path = effective_output_dir / f"{run_idx}.json"
-            if output_path.exists() and output_has_adl_sequence_labels(output_path):
+            if direct_output_is_reusable(output_path):
                 print(f"Run {run_idx}: ADL系列ラベル付き出力が既に存在するためスキップします -> {output_path}")
                 continue
             if output_path.exists():
                 print(f"Run {run_idx}: 既存出力にADL系列ラベルが無いため再生成します -> {output_path}")
 
-            # Geminiに問い合わせ
+            # 選択したLLM providerに問い合わせ
             attempt = 0
             while True:
                 try:
-                    llm_text, backend, usage, duration_sec = call_gemini(
-                        api_key=api_key,
-                        model_name=MODEL_NAME,
-                        user_message=user_message,
-                        temperature=TEMPERATURE,
+                    llm_text, backend, usage, duration_sec = call_llm(
+                        llm_config,
+                        user_message,
                     )
 
                     if not llm_text:
-                        raise RuntimeError("Geminiから空の応答が返されました。")
+                        raise RuntimeError("LLMから空の応答が返されました。")
 
                     # 応答をJSON配列として解釈し保存
                     records = parse_pattern_records(llm_text)
@@ -598,7 +659,7 @@ def main(
                     )
                     metrics_by_run[run_idx] = {
                         "run": run_idx,
-                        "model": MODEL_NAME,
+                        "model": llm_config.model_name,
                         "backend": backend,
                         "duration_sec": duration_sec,
                         "prompt_tokens": usage.get("prompt_tokens"),
@@ -606,6 +667,31 @@ def main(
                         "total_tokens": usage.get("total_tokens"),
                         "attempts": attempt + 1,
                     }
+                    (
+                        effective_output_dir
+                        / f"llm_direct_run{run_idx}_metadata.json"
+                    ).write_text(
+                        json.dumps(
+                            {
+                                "run": run_idx,
+                                "provider": identity.provider,
+                                "model_id": identity.model_id,
+                                "model_display_name": identity.result_name,
+                                "region": llm_config.region_name,
+                                "temperature": llm_config.temperature,
+                                "max_tokens": llm_config.max_tokens,
+                                "executed_at": datetime.now(timezone.utc).isoformat(),
+                                "backend": backend,
+                                "duration_sec": duration_sec,
+                                "usage": usage,
+                                "attempts": attempt + 1,
+                            },
+                            ensure_ascii=False,
+                            indent=2,
+                        )
+                        + "\n",
+                        encoding="utf-8",
+                    )
                     break
                 except Exception as exc:
                     attempt += 1
@@ -629,7 +715,7 @@ def main(
             print(f"状態パターン長      : {len(state_labels_list)}")
             print(f"使用するパターン行数: {prompt_log_lines}")
             print(f"最大行数              : {MAX_ROWS}")
-            print(f"モデル                : {MODEL_NAME}")
+            print(f"モデル                : {llm_config.model_name}")
             print(f"利用SDK               : {backend}")
             print(f"出力ファイル          : {output_path}")
             print(f"抽出パターン数        : {len(records)}")

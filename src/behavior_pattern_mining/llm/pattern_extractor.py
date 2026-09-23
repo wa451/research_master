@@ -1,5 +1,5 @@
 """
-Gemini APIを用いて、時間帯モード別JSONからパターンを抽出し統合するスクリプト。
+LLM APIを用いて、時間帯モード別JSONからパターンを抽出し統合するスクリプト。
 
 要件:
 - state_transition_all.json と同じ階層にある mode JSON を対象にする
@@ -11,15 +11,20 @@ Gemini APIを用いて、時間帯モード別JSONからパターンを抽出し
 from __future__ import annotations
 
 import json
-import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List, Tuple
 
 from experiment_config import (
+    BEDROCK_ESTIMATED_OUTPUT_TOKENS,
+    BEDROCK_MAX_TOKENS,
+    BEDROCK_MODEL_ID,
+    BEDROCK_REGION,
     DATASET_NAME,
     DAYS,
     HAMMING_THRESHOLD,
     LLM_MODEL_NAME,
+    LLM_PROVIDER,
     LLM_RUNS_DEFAULT,
     LLM_TEMPERATURE,
     N_STATES,
@@ -27,7 +32,19 @@ from experiment_config import (
     TIME_MODES,
 )
 from src.behavior_pattern_mining.io.csv_io import write_csv
-from src.behavior_pattern_mining.llm.client import call_gemini, load_dotenv, parse_pattern_records
+from src.behavior_pattern_mining.llm.client import (
+    LLMRuntimeConfig,
+    call_llm,
+    load_dotenv,
+    parse_pattern_records,
+    resolve_llm_runtime_config,
+)
+from src.behavior_pattern_mining.llm.cost_estimator import print_bedrock_cost_estimate
+from src.behavior_pattern_mining.llm.result_paths import (
+    ensure_model_artifact_directory,
+    model_identity,
+    model_result_path,
+)
 
 
 # =============================
@@ -167,6 +184,15 @@ def build_user_message(prompt_template: str, graph_json_text: str, mode_label: s
     )
 
 
+def build_mode_user_message(mode_path: Path) -> str:
+    """Build the exact first-attempt message used by execution and estimation."""
+    return build_user_message(
+        PROMPT_TEMPLATE,
+        mode_path.read_text(encoding="utf-8"),
+        mode_label_from_path(mode_path),
+    )
+
+
 def mode_label_from_path(mode_path: Path) -> str:
     """state_transition_{MODE}.json の MODE から時間帯ラベルを返す。"""
     mode_name = mode_path.stem.replace("state_transition_", "", 1)
@@ -265,6 +291,32 @@ def records_have_adl_sequence_labels(records: List[dict]) -> bool:
     )
 
 
+def reusable_mode_checkpoint_records(records_path: Path) -> List[dict] | None:
+    """Return records only when normal execution would reuse this checkpoint."""
+    if not records_path.exists():
+        return None
+    records = load_checkpoint_records(records_path)
+    return records if records_have_adl_sequence_labels(records) else None
+
+
+def plan_mode_llm_requests(
+    mode_files: List[Path],
+    run_ids: List[int],
+    output_dir: Path,
+) -> Tuple[List[str], int]:
+    """Build first-attempt prompts and skip the same checkpoints as execution."""
+    user_messages: List[str] = []
+    skipped_count = 0
+    for run_idx in run_ids:
+        for mode_path in mode_files:
+            paths = mode_checkpoint_paths(output_dir, run_idx, mode_path)
+            if reusable_mode_checkpoint_records(paths["records"]) is not None:
+                skipped_count += 1
+                continue
+            user_messages.append(build_mode_user_message(mode_path))
+    return user_messages, skipped_count
+
+
 def save_successful_mode_checkpoint(
     output_dir: Path,
     run_idx: int,
@@ -275,6 +327,11 @@ def save_successful_mode_checkpoint(
     usage: dict,
     duration_sec: float,
     attempt: int,
+    model_name: str = MODEL_NAME,
+    provider: str | None = None,
+    region: str | None = None,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
 ) -> None:
     """Persist a successful mode result immediately for resume-safe execution."""
     paths = mode_checkpoint_paths(output_dir, run_idx, mode_path)
@@ -286,12 +343,17 @@ def save_successful_mode_checkpoint(
             "run": run_idx,
             "mode": mode_label_from_path(mode_path),
             "mode_file": mode_path.name,
-            "model": MODEL_NAME,
+            "model": model_name,
+            "provider": provider,
+            "region": region,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
             "backend": backend,
             "duration_sec": duration_sec,
             "usage": usage,
             "attempt": attempt,
             "status": "success",
+            "executed_at": datetime.now(timezone.utc).isoformat(),
         },
     )
 
@@ -396,12 +458,13 @@ def print_summary(
     backend: str,
     output_path: Path,
     input_modes_dir: Path,
+    model_name: str = MODEL_NAME,
 ) -> None:
     """実行結果の概要を表示する。"""
     print("=" * 80)
     print("LLMパターン抽出（モード別統合）")
     print("=" * 80)
-    print(f"モデル                : {MODEL_NAME}")
+    print(f"モデル                : {model_name}")
     print(f"対象フォルダ            : {input_modes_dir}")
     print(f"モードJSON数            : {len(mode_files)}")
     print("モード別生成件数          :")
@@ -416,15 +479,13 @@ def print_summary(
 
 def extract_sequences_for_mode_file(
     mode_path: Path,
-    api_key: str,
+    llm_config: LLMRuntimeConfig,
     output_dir: Path,
     run_idx: int,
     max_parse_retries: int = MAX_PARSE_RETRIES,
 ) -> Tuple[List[dict], str, dict, float]:
     """1つのモードJSONからLLMでパターンを抽出する。"""
-    graph_json_text = mode_path.read_text(encoding="utf-8")
-    mode_label = mode_label_from_path(mode_path)
-    user_message = build_user_message(PROMPT_TEMPLATE, graph_json_text, mode_label)
+    user_message = build_mode_user_message(mode_path)
     last_error: Exception | None = None
 
     for attempt in range(1, max_parse_retries + 1):
@@ -433,16 +494,11 @@ def extract_sequences_for_mode_file(
             if attempt == 1
             else build_retry_message(user_message, last_error or RuntimeError("unknown"), attempt)
         )
-        llm_text, backend, usage, duration_sec = call_gemini(
-            api_key=api_key,
-            model_name=MODEL_NAME,
-            user_message=request_message,
-            temperature=TEMPERATURE,
-        )
+        llm_text, backend, usage, duration_sec = call_llm(llm_config, request_message)
 
         try:
             if not llm_text:
-                raise RuntimeError(f"Geminiから空の応答が返されました: {mode_path.name}")
+                raise RuntimeError(f"LLMから空の応答が返されました: {mode_path.name}")
             records = parse_pattern_records(llm_text)
         except RuntimeError as err:
             last_error = err
@@ -472,6 +528,11 @@ def extract_sequences_for_mode_file(
             usage=usage,
             duration_sec=duration_sec,
             attempt=attempt,
+            model_name=llm_config.model_name,
+            provider=llm_config.provider,
+            region=llm_config.region_name,
+            temperature=llm_config.temperature,
+            max_tokens=llm_config.max_tokens,
         )
         return records, backend, usage, duration_sec
 
@@ -542,6 +603,7 @@ def main(
     run_ids: list[int] | None = None,
     n_states: int | None = None,
     hamming_threshold: int | None = None,
+    estimate_cost: bool = False,
 ) -> None:
     effective_days = days if days is not None else DAYS
     if effective_days <= 0:
@@ -563,12 +625,18 @@ def main(
     if effective_hamming_threshold < 0:
         raise ValueError("hamming_threshold must be >= 0")
 
-    # 1) APIキーの準備
+    # 1) LLM provider設定の準備
     load_dotenv(ENV_FILE_PATH)
-
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        raise RuntimeError(".env に GEMINI_API_KEY が未設定です。")
+    llm_config = resolve_llm_runtime_config(
+        default_provider=LLM_PROVIDER,
+        gemini_model_name=MODEL_NAME,
+        temperature=TEMPERATURE,
+        bedrock_region=BEDROCK_REGION,
+        bedrock_model_id=BEDROCK_MODEL_ID,
+        bedrock_max_tokens=BEDROCK_MAX_TOKENS,
+        bedrock_estimated_output_tokens=BEDROCK_ESTIMATED_OUTPUT_TOKENS,
+    )
+    identity = model_identity(llm_config.provider, llm_config.model_name)
 
     # 2) 対象モードJSONを列挙
     effective_input_modes_dir = (
@@ -582,11 +650,33 @@ def main(
     all_metrics_rows: List[dict] = []
     effective_output_dir = (
         output_dir
-        or ROOT_DIR
-        / "output"
-        / f"{DATASET_NAME}_{effective_n_states}_{effective_hamming_threshold}_{effective_days}days"
+        or model_result_path(
+            ROOT_DIR,
+            identity,
+            f"{DATASET_NAME}_{effective_n_states}_{effective_hamming_threshold}_{effective_days}days",
+        )
     )
-    effective_output_dir.mkdir(parents=True, exist_ok=True)
+    if estimate_cost:
+        user_messages, skipped_count = plan_mode_llm_requests(
+            mode_files,
+            effective_run_ids,
+            effective_output_dir,
+        )
+        print_bedrock_cost_estimate(
+            llm_config=llm_config,
+            user_messages=user_messages,
+            skipped_count=skipped_count,
+            run_ids=effective_run_ids,
+        )
+        return
+    ensure_model_artifact_directory(
+        effective_output_dir,
+        identity,
+        temperature=llm_config.temperature,
+        region=llm_config.region_name,
+        max_tokens=llm_config.max_tokens,
+        extra={"artifact_kind": "proposed_method_llm_extraction"},
+    )
 
     # 3) 同じ入力で複数回実行
     for run_position, run_idx in enumerate(effective_run_ids, start=1):
@@ -600,10 +690,16 @@ def main(
             print(f"Processing mode file: {mode_path.name}")
             checkpoint_paths = mode_checkpoint_paths(effective_output_dir, run_idx, mode_path)
             checkpoint_metrics = load_checkpoint_metrics(checkpoint_paths["metrics"])
+            checkpoint_model = checkpoint_metrics.get("model")
+            if checkpoint_model and checkpoint_model != llm_config.model_name:
+                raise RuntimeError(
+                    "別モデルのcheckpointは再利用できません: "
+                    f"{checkpoint_paths['metrics']} ({checkpoint_model!r} != {llm_config.model_name!r})"
+                )
 
             if checkpoint_paths["records"].exists():
-                records = load_checkpoint_records(checkpoint_paths["records"])
-                if records_have_adl_sequence_labels(records):
+                records = reusable_mode_checkpoint_records(checkpoint_paths["records"])
+                if records is not None:
                     backend = str(checkpoint_metrics.get("backend") or "cached")
                     usage = checkpoint_metrics.get("usage")
                     if not isinstance(usage, dict):
@@ -614,14 +710,14 @@ def main(
                     print(f"  -> stale checkpoint without ADL labels, regenerating: {checkpoint_paths['records']}")
                     records, backend, usage, duration_sec = extract_sequences_for_mode_file(
                         mode_path=mode_path,
-                        api_key=api_key,
+                        llm_config=llm_config,
                         output_dir=effective_output_dir,
                         run_idx=run_idx,
                     )
             else:
                 records, backend, usage, duration_sec = extract_sequences_for_mode_file(
                     mode_path=mode_path,
-                    api_key=api_key,
+                    llm_config=llm_config,
                     output_dir=effective_output_dir,
                     run_idx=run_idx,
                 )
@@ -637,7 +733,7 @@ def main(
                     "run": run_idx,
                     "mode": mode_label,
                     "mode_file": mode_path.name,
-                    "model": MODEL_NAME,
+                    "model": llm_config.model_name,
                     "backend": backend,
                     "duration_sec": duration_sec,
                     "prompt_tokens": usage.get("prompt_tokens"),
@@ -693,6 +789,7 @@ def main(
             backend_name,
             output_path,
             effective_input_modes_dir,
+            llm_config.model_name,
         )
 
     # 6) 平均メトリクスを保存

@@ -25,6 +25,8 @@ from experiment_config import (
     HAMMING_THRESHOLD,
     N_STATES,
     ROOT_DIR,
+    current_model_identity,
+    current_model_results_root,
 )
 from src.behavior_pattern_mining.evaluation.adl import (
     load_state_series_csv,
@@ -79,7 +81,7 @@ PATTERN_CACHE_COLUMNS = [
 
 
 def default_output_dir() -> Path:
-    return ROOT_DIR / "results" / "5_pattern_quality_fixed"
+    return current_model_results_root() / "5_pattern_quality_fixed"
 
 
 def default_baseline_cache_dir() -> Path:
@@ -88,13 +90,14 @@ def default_baseline_cache_dir() -> Path:
 
 def default_paths() -> dict[str, Path]:
     param_suffix = f"{N_STATES}_{HAMMING_THRESHOLD}_{DAYS}days"
-    output_dir = ROOT_DIR / "output" / f"{DATASET_NAME}_{param_suffix}"
+    input_output_dir = ROOT_DIR / "output" / f"{DATASET_NAME}_{param_suffix}"
+    llm_output_dir = current_model_results_root() / f"{DATASET_NAME}_{param_suffix}"
     return {
-        "frequency": output_dir / f"state_sequence_counts_{param_suffix}.json",
+        "frequency": input_output_dir / f"state_sequence_counts_{param_suffix}.json",
         "rule_light": ROOT_DIR / "output" / "5_rule_filter" / "frequency_rule_light.csv",
         "rule_medium": ROOT_DIR / "output" / "5_rule_filter" / "frequency_rule_medium.csv",
         "rule_strong": ROOT_DIR / "output" / "5_rule_filter" / "frequency_rule_strong.csv",
-        "proposed": output_dir / f"llm_sequences_modes_{param_suffix}_1.json",
+        "proposed": llm_output_dir / f"llm_sequences_modes_{param_suffix}_1.json",
     }
 
 
@@ -143,7 +146,8 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Optional proposed pattern path template for multi-run evaluation. "
-            "Use {run}, e.g. output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_{run}.json"
+            "Use {run}, e.g. results/<model>/aruba_15_0_154days/"
+            "llm_sequences_modes_15_0_154days_{run}.json"
         ),
     )
     parser.add_argument(
@@ -895,7 +899,13 @@ def main() -> None:
     test_occurrences_by_method = first_result["test_occurrences_by_method"]
     method_paths = method_paths_from_args(args)
 
+    identity = current_model_identity()
     summary = {
+        "model": {
+            "provider": identity.provider,
+            "model_id": identity.model_id,
+            "result_name": identity.result_name,
+        },
         "rq": "Can the proposed method extract useful non-redundant ADL-grounded patterns and reduce fragmented subsequences?",
         "labeled_casas_path": str(args.labeled_casas),
         "state_series_path": str(args.state_series),

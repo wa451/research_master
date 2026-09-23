@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from experiment_config import current_model_results_root  # noqa: E402
+
 from src.behavior_pattern_mining.evaluation.evaluation10_switchbot import (  # noqa: E402
     METHODS,
     STAGES,
@@ -26,7 +28,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--snapshot", type=Path, required=True, help="Directory containing events.csv and manifest.json")
     parser.add_argument("--stage", choices=STAGES, default="run")
     parser.add_argument("--output-dir", type=Path, help="Intermediate output; default: output/10_switchbot/<snapshot>")
-    parser.add_argument("--results-dir", type=Path, help="Evaluation output; default: results/10_switchbot/<snapshot>")
+    parser.add_argument(
+        "--results-dir",
+        type=Path,
+        help="Evaluation/LLM output; default: results/<model>/10_switchbot/<snapshot>",
+    )
     parser.add_argument("--split-at", help="Local midnight starting the held-out test period")
     parser.add_argument("--train-ratio", type=float, default=0.7)
     parser.add_argument("--n-states", type=int, default=15)
@@ -52,7 +58,10 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     snapshot = _resolve(args.snapshot)
     output_dir = _resolve(args.output_dir or Path("output/10_switchbot") / snapshot.name)
-    results_dir = _resolve(args.results_dir or Path("results/10_switchbot") / snapshot.name)
+    results_dir = _resolve(
+        args.results_dir
+        or current_model_results_root() / "10_switchbot" / snapshot.name
+    )
     stages = (
         ["prepare", *(["extract"] if args.allow_api else []), "evaluate"]
         if args.stage == "run"
@@ -88,7 +97,11 @@ def main(argv: list[str] | None = None) -> int:
                     top_k_per_mode=args.top_k_per_mode,
                 )
             elif stage == "extract":
-                extract(output_dir=output_dir, allow_api=args.allow_api)
+                extract(
+                    output_dir=output_dir,
+                    allow_api=args.allow_api,
+                    llm_results_dir=results_dir,
+                )
             elif stage == "evaluate":
                 evaluate(
                     output_dir=output_dir,

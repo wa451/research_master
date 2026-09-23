@@ -12,7 +12,7 @@ ROOT_DIR_FOR_IMPORTS = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR_FOR_IMPORTS) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR_FOR_IMPORTS))
 
-from experiment_config import DATASET_NAME, ROOT_DIR
+from experiment_config import DATASET_NAME, current_model_results_root
 from src.behavior_pattern_mining.evaluation.evaluation7_staged import (
     select_top_condition_rows,
 )
@@ -48,8 +48,7 @@ def expected_pattern_path(
 ) -> Path:
     suffix = f"{n_states}_{hamming_threshold}_{days}days"
     return (
-        ROOT_DIR
-        / "output"
+        current_model_results_root()
         / f"{dataset}_{suffix}"
         / f"llm_sequences_modes_{suffix}_{run_id}.json"
     )
