@@ -48,10 +48,13 @@ macOSでは、リポジトリ直下の `start_dashboard.command` をダブルク
 
 | 項目 | 説明 |
 |---|---|
+| 実行LLMモデル | 評価4〜10のLLM生成・評価で使うモデルを選ぶ。既定は **GPT-5.6 Sol**。選択したモデルのLLM JSON、checkpoint、metrics、評価結果は `results/<model>/` に分離する。 |
 | Python実行方法 | READMEの既定に合わせて `uv run python` を既定にしています。 |
 | run名 | ログディレクトリ名に使います。CLI引数には渡しません。 |
 | チャタリング除去時間（秒） | 代表状態・状態遷移ネットワーク作成時の遅延OFF窓幅。既定は `5` 秒で、`0` は無効。評価4〜7と評価10の前段CLIへ渡す。 |
 | dry-run | 実行せず、コマンドとログファイルだけを保存します。 |
+
+モデル選択は、画面が起動する子プロセスにだけ `LLM_PROVIDER` とモデルIDを渡します。リポジトリ直下の `.env` は変更しません。Bedrockモデルでは `.env` または通常のAWS認証チェーンに有効なAWS認証情報とリージョンを、Geminiでは `GEMINI_API_KEY` をあらかじめ設定してください。画面上の入力JSON・出力ディレクトリの既定値も選択モデルの `results/<model>/` へ切り替わります。
 
 評価4・5・6・8の代表状態数とハミング距離閾値は、評価7の選定結果に合わせて `K=15`、`hamming=0` を既定値にしています。評価7は感度分析のため、複数条件を指定する探索範囲を維持します。
 
@@ -185,7 +188,7 @@ output/logs/evaluation_dashboard/
 |---|---|
 | `streamlit` が見つからない | `uv sync` 後に `uv run streamlit run app/streamlit_app.py` を使う。 |
 | 入力ファイルがmissingになる | 前段ステップが未実行か、K / hamming / days の条件が入力ファイル名とずれていないか確認する。評価7では `skip-missing-conditions` で未生成条件をスキップできる。 |
-| LLM抽出で失敗する | `.env` の `GEMINI_API_KEY` とネットワーク接続を確認する。ログにはAPIキー値を出さないよう簡易redactionしています。 |
+| LLM抽出で失敗する | 選択したモデルに必要な認証を確認する。Geminiは `.env` の `GEMINI_API_KEY`、BedrockはAWS認証チェーン・リージョン・model accessが必要。ログには秘密値を出さないよう簡易redactionしています。 |
 | 評価5/6でrunが足りない | `--runs` と実在するJSON数を揃えるか、`skip-missing-runs` を有効化する。 |
 | CLIでは動くが画面では動かない | コマンドプレビューをコピーし、同じworking directoryで実行して差分を見る。 |
 
@@ -207,6 +210,10 @@ uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py --help
 
 設定画面の **3住宅のつながり** では、compact / corridor / branched の部屋と接続を横並びで確認できる。線のラベルはHestiaが生成するドアセンサーIDと移動時間を表す。base / large variability は住宅構造を変えず、行動の揺らぎだけを変える。
 
+評価9の **実験プリセット** はPilot、本実験・小規模確認、本実験、期間感度評価を選べる。既存planを直接読み、seed一覧とLLM run数だけをGUIで上書きする。小規模確認は`noise_free.yaml`の6条件・7日/7日・その他全設定を維持し、seed=[11]、LLM 1反復、専用の`full_smoke`出力を既定とするため、fresh推定は24 API callsである。期間感度は同一35日rawログから3/7/14/28日trainと共通7日testを派生し、raw生成18 run、LLM対象72 window、fresh推定864 callsである。確定した全項目は`output/logs/evaluation_dashboard/evaluation9_plans/`へ内容hash付きeffective planとして保存され、生成ステップはsource planではなくこのファイルを使う。画面にはHestia生成run数と、4時間帯・期間数を掛けたfresh API呼び出し推定、parse retry込み上限を表示する。API許可は従来どおり既定OFFである。
+
+既存`experiment.json`とeffective planが一致しない場合は実行前に停止する。新しいhash付き出力先へ切り替えるか、明示確認後に既存の生成・集計ディレクトリを`output/logs/evaluation_dashboard/evaluation9_backups/`へ退避して同じパスを再利用できる。後者もhash検証は回避せず、元パスを空にしてから再生成する。
+
 ## Hestia Studio
 
 上部の **Hestia Studio** タブはStreamlit Components v2として同じページ内に直接描画される。Studio用サーバー、別ポート、iframe、起動・停止操作はない。Studio内の住宅タブで compact / corridor / branched の評価9 base住宅を切り替える。3住宅は初期データとして先読みされ、住宅ごとの未保存編集はページを開いている間保持される。ブラウザまたはStreamlitページを再読み込みする前にはYAML保存する。
@@ -216,5 +223,7 @@ uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py --help
 Studio内では、部屋のドラッグ・リサイズ、接続の追加・削除と移動時間、センサー／デバイスの追加・削除・所属部屋・表示位置を編集できる。所属部屋や種類はシミュレーション設定、部屋内のアイコン座標は表示専用の `editor_layout` である。編集内容はStudio上部の **YAML保存** から `Hestia/scenarios/` に保存する。
 
 間取り画面の **論文用SVG** / **論文用PNG** から、現在の住宅を白背景の図として保存できる。図には部屋、接続、移動時間、ドアセンサーID、センサー／デバイスID、凡例を含み、ホーム設定の表示名を図タイトルに使う。SVGは拡大可能なベクター、PNGは3200 × 2000 pxである。図は論文で住宅構造を説明するための可視化であり、評価9のground truthや検出器入力ではない。
+
+論文用図の部屋名は表示名だけとし、内部ID（例: `Bedroom`に対する`bedroom`）を重複表示しない。機器は種類を18 px、ログ照合用IDを14 pxの二段で示す。プリセットのID接頭辞は `M_`＝人感センサー、`D_`＝ドアセンサー、`L_`＝照明で、図と画面に説明を付ける。種類は接頭辞から推測せずScenarioのdevice typeを使うため、独自IDでも正しい種類を表示する。内部IDや配置・シミュレーション設定自体は変更しない。
 
 Studio保存ファイルは通常のHestiaカスタムシナリオであり、評価9の `noise_free.yaml` やexperiment生成処理へ自動的には組み込まれない。評価9の研究条件・gold・train/test分離を意図せず変更しないための分離である。シミュレーション結果は従来どおり `Hestia/outputs/studio/<run-name>/` に保存し、同名出力を上書きしない。

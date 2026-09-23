@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import json
 import sys
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -30,12 +30,32 @@ from app.command_builder import (  # noqa: E402
     proposed_run_path,
     short_suffix,
 )
+from app.evaluation9_plan import (  # noqa: E402
+    DURATION_PRESET,
+    DURATION_TRAIN_DAYS,
+    EFFECTIVE_PLAN_DIR,
+    EVALUATION9_BACKUP_DIR,
+    PRESET_PLAN_FILENAMES,
+    archive_evaluation9_outputs,
+    build_effective_plan,
+    estimate_scale,
+    experiment_snapshot_matches,
+    load_preset_plan,
+    parse_seed_list,
+    preset_directory_name,
+    save_effective_plan,
+)
 from app.hestia_house_diagrams import (  # noqa: E402
     HOUSE_DESCRIPTIONS,
     HOUSE_TITLES,
     house_topology_dot,
 )
 from app.hestia_studio_component import render_hestia_studio_component  # noqa: E402
+from app.model_selection import (  # noqa: E402
+    DASHBOARD_MODELS,
+    DEFAULT_DASHBOARD_MODEL_ID,
+    dashboard_model,
+)
 from app.utils import (  # noqa: E402
     append_history,
     discover_result_dirs,
@@ -46,12 +66,25 @@ from app.utils import (  # noqa: E402
     metric_columns,
     run_command,
 )
-from experiment_config import SMOOTHING_WINDOW_SEC  # noqa: E402
+from experiment_config import (  # noqa: E402
+    SMOOTHING_WINDOW_SEC,
+    current_model_results_root,
+)
 
 
 LOG_ROOT = PROJECT_ROOT / "output" / "logs" / "evaluation_dashboard"
 DEFAULT_N_STATES = 15
 DEFAULT_HAMMING_THRESHOLD = 0
+
+
+def model_results_relative(common: dict | None = None) -> str:
+    """Return the selected model's result root relative to the project."""
+    root = (
+        Path(common["model_results_root"])
+        if common and common.get("model_results_root")
+        else current_model_results_root()
+    )
+    return root.relative_to(PROJECT_ROOT).as_posix()
 
 RESULT_GUIDES: dict[str, list[dict[str, str]]] = {
     "評価4": [
@@ -213,6 +246,10 @@ RESULT_FILE_ORDER: dict[str, list[str]] = {
 
 RESULT_GUIDES["評価9"] = [
     {
+        "files": "evaluation9_duration_summary.csv",
+        "how_to_read": "train_days別にoverallと6 conditionを比較します。7日差分は同じseed同士のpaired差です。canonical goldが期間ごとに変わるため、exact-match F1だけでなくADL macro-F1とtest coverageも併読します。",
+    },
+    {
         "files": "evaluation9_summary.csv",
         "how_to_read": "condition・method別にcomplete/missing/invalidとcomplete_seedsを先に確認します。回収率、対象活動coverage、Other時間割合、ADL macro-F1の平均・標本標準偏差を読みます。1seedの標準偏差は空欄です。",
     },
@@ -221,7 +258,12 @@ RESULT_GUIDES["評価9"] = [
         "how_to_read": "runsでseed・反復別のstatus、理由、指標・採点コードhashを確認します。欠落を0点にせず、不完全なseedを主集計から除外します。頻度対照のADL指標はnullです。",
     },
 ]
-RESULT_FILE_ORDER["評価9"] = ["evaluation9_summary.csv", "evaluation9_summary.json"]
+RESULT_FILE_ORDER["評価9"] = [
+    "evaluation9_summary.csv",
+    "evaluation9_summary.json",
+    "evaluation9_duration_summary.csv",
+    "evaluation9_duration_summary.json",
+]
 
 RESULT_GUIDES["評価10"] = [
     {
@@ -268,12 +310,31 @@ def rel_default(path: Path) -> str:
     return display_path(path)
 
 
+def model_environment_preview(settings: dict) -> str:
+    overrides = settings.get("model_environment", {})
+    return " ".join(f"{key}={value}" for key, value in sorted(overrides.items()))
+
+
 def common_sidebar() -> dict:
     st.sidebar.header("共通設定")
     evaluation = st.sidebar.radio(
         "評価を選択",
         ["評価4", "評価5", "評価6", "評価7", "評価8", "評価9", "評価10"],
         horizontal=True,
+    )
+    model_id = st.sidebar.selectbox(
+        "実行LLMモデル",
+        [model.model_id for model in DASHBOARD_MODELS],
+        index=[model.model_id for model in DASHBOARD_MODELS].index(
+            DEFAULT_DASHBOARD_MODEL_ID
+        ),
+        format_func=lambda value: dashboard_model(value).label,
+        help="選択値はこの画面が起動する評価プロセスだけに渡されます。.env は変更しません。",
+    )
+    model = dashboard_model(model_id)
+    model_root = model.results_root(PROJECT_ROOT)
+    st.sidebar.caption(
+        f"保存先: `{display_path(model_root)}` / provider: `{model.provider}`"
     )
     runner = st.sidebar.selectbox("Python実行方法", ["uv run python", "python"], index=0)
     run_name = st.sidebar.text_input("run名（ログ用）", "manual")
@@ -291,7 +352,10 @@ def common_sidebar() -> dict:
         "現在の成果物名には秒数が含まれません。"
     )
     if evaluation == "評価9":
-        st.sidebar.caption("評価9のseed・日数・平滑化は実験計画ファイルで指定します。共通の平滑化設定は評価9には適用しません。")
+        st.sidebar.caption(
+            "評価9のseedとLLM run数は評価9画面で編集できます。"
+            "日数・平滑化は選択した実験planを使い、共通の平滑化設定は適用しません。"
+        )
     else:
         st.sidebar.caption("seed / overwrite は既存CLI引数がないためUI化していません。")
     return {
@@ -301,6 +365,10 @@ def common_sidebar() -> dict:
         "smoothing_window_sec": int(smoothing_window_sec),
         "dry_run": dry_run,
         "dataset": "aruba",
+        "model_id": model.model_id,
+        "model_label": model.label,
+        "model_results_root": str(model_root),
+        "model_environment": model.environment_overrides(),
     }
 
 
@@ -315,13 +383,21 @@ def render_eval4_settings(common: dict) -> dict:
         hamming = st.number_input("ハミング距離閾値", min_value=0, value=DEFAULT_HAMMING_THRESHOLD, step=1)
 
     default_state = default_state_table("aruba", int(n_states), int(hamming), int(days))
-    default_patterns = default_proposed_path("aruba", int(n_states), int(hamming), int(days))
+    model_root = Path(common["model_results_root"])
+    model_key = common["model_id"]
+    default_patterns = default_proposed_path(
+        "aruba", int(n_states), int(hamming), int(days), results_root=model_root
+    )
 
     st.markdown("**入力パス**")
     labeled = st.text_input("ラベル付きCASAS", "new_labeled_data/aruba.txt")
     sensor_map = st.text_input("センサーマップ", "configs/aruba_sensor_map.json")
     state_table = st.text_input("代表状態テーブル", rel_default(default_state))
-    patterns = st.text_input("評価対象パターンJSON", rel_default(default_patterns))
+    patterns = st.text_input(
+        "評価対象パターンJSON",
+        rel_default(default_patterns),
+        key=f"eval4_patterns_{model_key}",
+    )
     state_series = st.text_input("既存state_series CSV（任意）", "")
     event_log = st.text_input("event-log（任意。未指定ならlabeled-casasから再構築）", "")
 
@@ -341,8 +417,16 @@ def render_eval4_settings(common: dict) -> dict:
         min_duration = st.text_input("min-duration-config（任意）", "configs/adl_min_duration.json")
 
     st.markdown("**出力**")
-    output_dir = st.text_input("output-dir", "results/4_adl_detect")
-    write_state = st.text_input("write-state-series", "results/4_adl_detect/state_series.csv")
+    output_dir = st.text_input(
+        "output-dir",
+        f"{model_results_relative(common)}/4_adl_detect",
+        key=f"eval4_output_dir_{model_key}",
+    )
+    write_state = st.text_input(
+        "write-state-series",
+        f"{model_results_relative(common)}/4_adl_detect/state_series.csv",
+        key=f"eval4_write_state_series_{model_key}",
+    )
 
     return {
         **common,
@@ -395,13 +479,27 @@ def render_eval5_settings(common: dict) -> dict:
     patterns_rule_light = st.text_input("patterns-rule-light", "output/5_rule_filter/frequency_rule_light.csv")
     patterns_rule_medium = st.text_input("patterns-rule-medium", "output/5_rule_filter/frequency_rule_medium.csv")
     patterns_rule_strong = st.text_input("patterns-rule-strong", "output/5_rule_filter/frequency_rule_strong.csv")
-    patterns_proposed = st.text_input("patterns-proposed", rel_default(default_proposed_path("aruba", int(n_states), int(hamming), int(days))))
+    model_root = Path(common["model_results_root"])
+    model_key = common["model_id"]
+    patterns_proposed = st.text_input(
+        "patterns-proposed",
+        rel_default(
+            default_proposed_path(
+                "aruba", int(n_states), int(hamming), int(days), results_root=model_root
+            )
+        ),
+        key=f"eval5_patterns_proposed_{model_key}",
+    )
     with st.expander("複数run用テンプレート（任意）"):
         st.caption("使用可能: {dataset}, {n_states}, {hamming_threshold}, {hamming}, {days}, {run}, {suffix}")
         patterns_proposed_template = st.text_input(
             "patterns-proposed-template",
             "",
-            placeholder="output/aruba_{suffix}/llm_sequences_modes_{suffix}_{run}.json",
+            placeholder=(
+                f"{model_results_relative(common)}/aruba_{{suffix}}/"
+                "llm_sequences_modes_{suffix}_{run}.json"
+            ),
+            key=f"eval5_patterns_template_{model_key}",
         )
         skip_missing_runs = st.checkbox("skip-missing-runs", value=False)
         proposed_base_path = PROJECT_ROOT / patterns_proposed if not Path(patterns_proposed).is_absolute() else Path(patterns_proposed)
@@ -489,7 +587,11 @@ def render_eval5_settings(common: dict) -> dict:
             )
 
     st.markdown("**出力**")
-    output_dir = st.text_input("output-dir", "results/5_pattern_quality_fixed")
+    output_dir = st.text_input(
+        "output-dir",
+        f"{model_results_relative(common)}/5_pattern_quality_fixed",
+        key=f"eval5_output_dir_{model_key}",
+    )
 
     return {
         **common,
@@ -565,8 +667,26 @@ def render_eval6_settings(common: dict) -> dict:
     labeled = st.text_input("ラベル付きCASAS", "new_labeled_data/aruba.txt")
     sensor_map = st.text_input("センサーマップ", "configs/aruba_sensor_map.json")
     state_table = st.text_input("代表状態テーブル", rel_default(default_state_table("aruba", int(n_states), int(hamming), int(days))))
-    proposed = st.text_input("patterns-proposed", rel_default(default_proposed_path("aruba", int(n_states), int(hamming), int(days))))
-    direct = st.text_input("patterns-direct", rel_default(default_direct_path(int(n_states), int(hamming), int(days))))
+    model_root = Path(common["model_results_root"])
+    model_key = common["model_id"]
+    proposed = st.text_input(
+        "patterns-proposed",
+        rel_default(
+            default_proposed_path(
+                "aruba", int(n_states), int(hamming), int(days), results_root=model_root
+            )
+        ),
+        key=f"eval6_patterns_proposed_{model_key}",
+    )
+    direct = st.text_input(
+        "patterns-direct",
+        rel_default(
+            default_direct_path(
+                int(n_states), int(hamming), int(days), results_root=model_root
+            )
+        ),
+        key=f"eval6_patterns_direct_{model_key}",
+    )
     state_series = st.text_input("state-series", f"{default_intermediate}/state_series.csv")
     adl_intervals = st.text_input("adl-intervals（任意。なければlabeled-casasから生成）", "output/adl_label_intervals.csv")
 
@@ -592,7 +712,11 @@ def render_eval6_settings(common: dict) -> dict:
 
     st.markdown("**出力**")
     intermediate_dir = st.text_input("中間output-dir", default_intermediate)
-    output_dir = st.text_input("比較output-dir", "results/6_adl_match")
+    output_dir = st.text_input(
+        "比較output-dir",
+        f"{model_results_relative(common)}/6_adl_match",
+        key=f"eval6_output_dir_{model_key}",
+    )
 
     return {
         **common,
@@ -654,7 +778,11 @@ def render_eval7_settings(common: dict) -> dict:
         patterns_template = st.text_input(
             "patterns-template",
             "",
-            placeholder="output/aruba_{suffix}/llm_sequences_modes_{suffix}_{run}.json",
+            placeholder=(
+                f"{model_results_relative(common)}/aruba_{{suffix}}/"
+                "llm_sequences_modes_{suffix}_{run}.json"
+            ),
+            key=f"eval7_patterns_template_{common['model_id']}",
         )
         state_series_template = st.text_input(
             "state-series-template",
@@ -709,7 +837,11 @@ def render_eval7_settings(common: dict) -> dict:
         st.warning("二段階実行の反復生成は標準のoutput命名を使います。patterns-templateは空にしてください。")
 
     st.markdown("**出力**")
-    output_dir = st.text_input("output-dir", "results/7_param_search")
+    output_dir = st.text_input(
+        "output-dir",
+        f"{model_results_relative(common)}/7_param_search",
+        key=f"eval7_output_dir_{common['model_id']}",
+    )
 
     return {
         **common,
@@ -781,7 +913,8 @@ def render_eval8_settings(common: dict) -> dict:
     if analysis_scope in {"comparison_14days", "comparison_30days"}:
         details = st.text_input(
             "evaluation6 details file path",
-            f"results/6_adl_match/{suffix}/evaluation6_pattern_set_details_by_method.csv",
+            f"{model_results_relative(common)}/6_adl_match/{suffix}/evaluation6_pattern_set_details_by_method.csv",
+            key=f"eval8_details_{common['model_id']}",
         )
         patterns_proposed = ""
         state_series = st.text_input(
@@ -792,7 +925,8 @@ def render_eval8_settings(common: dict) -> dict:
         adl_intervals = ""
         output_dir = st.text_input(
             "output directory",
-            "results/8_vs_llm_own_id_fixed",
+            f"{model_results_relative(common)}/8_vs_llm_own_id_fixed",
+            key=f"eval8_output_comparison_{common['model_id']}",
         )
         st.caption("評価6詳細CSVには5 run分のレコードを含めてください。評価8ではrunごとの帯別指標を平均します。")
         patterns_proposed_template = ""
@@ -801,7 +935,8 @@ def render_eval8_settings(common: dict) -> dict:
         details = ""
         patterns_proposed = st.text_input(
             "patterns-proposed (154日)",
-            f"output/aruba_{suffix}/llm_sequences_modes_{suffix}_1.json",
+            f"{model_results_relative(common)}/aruba_{suffix}/llm_sequences_modes_{suffix}_1.json",
+            key=f"eval8_patterns_proposed_{common['model_id']}",
         )
         state_series_default = (
             "output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv"
@@ -816,11 +951,16 @@ def render_eval8_settings(common: dict) -> dict:
         patterns_proposed_template = st.text_input(
             "patterns-proposed-template（任意）",
             "",
-            placeholder="output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_{run}.json",
+            placeholder=(
+                f"{model_results_relative(common)}/aruba_15_0_154days/"
+                "llm_sequences_modes_15_0_154days_{run}.json"
+            ),
+            key=f"eval8_patterns_template_{common['model_id']}",
         )
         output_dir = st.text_input(
             "output directory",
-            "results/8_proposed_own_id_fixed",
+            f"{model_results_relative(common)}/8_proposed_own_id_fixed",
+            key=f"eval8_output_proposed_{common['model_id']}",
         )
     frequency_band_mode = "both"
     st.markdown("**頻度帯評価: 三分位 + 固定回数帯（同時実行）**")
@@ -884,16 +1024,190 @@ def render_hestia_house_connections() -> None:
 def render_eval9_settings(common: dict) -> dict:
     st.subheader("評価9: Hestia合成ログによる系列回収・ADL意味対応")
     st.caption("手順・指標: docs/evaluations/evaluation_9_hestia.md。実Arubaの評価とは別に集計します。")
-    st.info("既定は4条件×1seed×4日のpilotです。平滑化・K・seed・日数は計画ファイルの値を使います。")
+    st.info(
+        "Pilot / 本実験・小規模確認 / 本実験 / 期間感度評価の既存planを基準に、"
+        "seedとLLM run数だけを変更できます。研究指標や条件定義は変わりません。"
+    )
+    archive_notice = st.session_state.pop("eval9_archive_notice", None)
+    if archive_notice:
+        st.success(f"既存成果物をバックアップしました: `{archive_notice}`")
     render_hestia_house_connections()
     hestia_root = st.text_input("Hestiaディレクトリ", "Hestia")
-    plan = st.text_input(
-        "実験計画（JSON / YAML）", "Hestia/examples/experiments/noise_free_pilot.yaml"
+    resolved_hestia = Path(hestia_root).expanduser()
+    if not resolved_hestia.is_absolute():
+        resolved_hestia = PROJECT_ROOT / resolved_hestia
+    preset = st.selectbox("実験プリセット", list(PRESET_PLAN_FILENAMES), key="eval9_preset")
+    try:
+        base_plan_path, base_plan = load_preset_plan(resolved_hestia, preset)
+    except (OSError, ValueError) as exc:
+        st.error(f"実験planを読み込めません: {exc}")
+        st.stop()
+        raise RuntimeError("Streamlit execution did not stop") from exc
+    duration = preset == DURATION_PRESET
+    duration_train_days = DURATION_TRAIN_DAYS if duration else None
+
+    preset_token = f"{base_plan_path.resolve()}:{preset}:{common['model_id']}"
+    if st.session_state.get("eval9_loaded_preset") != preset_token:
+        st.session_state["eval9_loaded_preset"] = preset_token
+        st.session_state["eval9_llm_runs"] = base_plan.llm_runs
+        st.session_state["eval9_seeds"] = ", ".join(str(seed) for seed in base_plan.seeds)
+        suffix = preset_directory_name(preset)
+        st.session_state["eval9_experiment"] = f"output/9_hestia/{suffix}"
+        st.session_state["eval9_output_dir"] = (
+            f"{model_results_relative(common)}/9_hestia/{suffix}"
+        )
+
+    st.caption(f"ベースplan: `{display_path(base_plan_path)}`")
+    summary_columns = st.columns(4)
+    summary_columns[0].metric("conditions", len(base_plan.conditions))
+    summary_columns[1].metric("train / test", f"{base_plan.train_days}日 / {base_plan.test_days}日")
+    summary_columns[2].metric("seeds", str(base_plan.seeds))
+    summary_columns[3].metric("llm_runs", base_plan.llm_runs)
+    if duration:
+        st.info(
+            "train期間: 3 / 7 / 14 / 28日、test期間: 7日固定。"
+            "同一condition・seedの35日rawログを共有し、Day 29〜35を共通testにします。"
+        )
+
+    llm_runs = st.number_input(
+        "LLM run数",
+        min_value=1,
+        step=1,
+        key="eval9_llm_runs",
+        help="同一condition・seedについてLLM抽出を繰り返す回数です。",
     )
-    experiment = st.text_input("生成ログ・中間成果物ディレクトリ", "output/9_hestia/pilot")
-    output_dir = st.text_input("評価9の集計先", "results/9_hestia/pilot")
+    seeds_text = st.text_input(
+        "seed一覧（整数・カンマ区切り）",
+        key="eval9_seeds",
+        help="再現性のためseed値を明示します。値の自動生成は行いません。",
+    )
+    try:
+        seeds = parse_seed_list(seeds_text)
+        effective_plan = build_effective_plan(
+            base_plan, seeds=seeds, llm_runs=int(llm_runs)
+        )
+    except ValueError as exc:
+        st.error(f"実行設定が不正です: {exc}")
+        st.stop()
+        raise RuntimeError("Streamlit execution did not stop") from exc
+    st.caption(f"Seed数: {len(effective_plan.seeds)}")
+
+    experiment = st.text_input(
+        "生成ログ・中間成果物ディレクトリ", key="eval9_experiment"
+    )
+    output_dir = st.text_input("評価9の集計先", key="eval9_output_dir")
+    effective_plan_path = save_effective_plan(
+        effective_plan, PROJECT_ROOT / EFFECTIVE_PLAN_DIR
+    )
+    st.caption(f"実行用plan: `{effective_plan_path.relative_to(PROJECT_ROOT)}`")
+
+    resolved_experiment = Path(experiment).expanduser()
+    if not resolved_experiment.is_absolute():
+        resolved_experiment = PROJECT_ROOT / resolved_experiment
+    resolved_output_dir = Path(output_dir).expanduser()
+    if not resolved_output_dir.is_absolute():
+        resolved_output_dir = PROJECT_ROOT / resolved_output_dir
+    scale = estimate_scale(
+        effective_plan,
+        experiment=resolved_experiment,
+        duration_train_days=duration_train_days,
+    )
+    st.markdown("#### 実行規模")
+    scale_columns = st.columns(5)
+    scale_columns[0].metric("condition数", scale.condition_count)
+    scale_columns[1].metric("seed数", scale.seed_count)
+    scale_columns[2].metric("LLM runs", scale.llm_runs)
+    scale_columns[3].metric("時間帯数", scale.time_band_count)
+    scale_columns[4].metric("Hestia生成run数", scale.hestia_run_count)
+    budget_label = "推定API呼び出し（残り）" if scale.uses_existing_budget else "推定API呼び出し"
+    st.metric(budget_label, f"{scale.fresh_api_calls}回")
+    st.caption(
+        f"{scale.condition_count} conditions × {scale.seed_count} seeds × "
+        f"{scale.llm_runs} LLM runs × {scale.time_band_count} time bands"
+        + (f" × {len(DURATION_TRAIN_DAYS)} train durations。" if duration else "。")
+        + f"JSON parse retryを含む上限は{scale.parse_attempts_upper_bound}回です。"
+    )
+    if scale.uses_existing_budget:
+        st.caption(
+            f"既存checkpointを反映したextraction_budgetです（全件未実行なら{scale.full_fresh_api_calls}回）。"
+        )
+    else:
+        st.caption("すべて未実行の場合の推定です。既存checkpointがあれば実際の呼び出しは減ります。")
+    st.caption("backendのtransport retryによる追加通信は正確に予測できないため、この上限には含みません。")
+    if experiment_snapshot_matches(
+        effective_plan,
+        resolved_experiment,
+        duration_train_days=duration_train_days,
+    ) is False:
+        plan_hash = effective_plan_path.stem.rsplit("_", 1)[-1][:8]
+        directory_name = preset_directory_name(preset)
+        suggested_experiment = f"output/9_hestia/{directory_name}_{plan_hash}"
+        suggested_output = (
+            f"{model_results_relative(common)}/9_hestia/{directory_name}_{plan_hash}"
+        )
+
+        def use_suggested_eval9_directories() -> None:
+            st.session_state["eval9_experiment"] = suggested_experiment
+            st.session_state["eval9_output_dir"] = suggested_output
+
+        st.error(
+            "選択した実行用planが、この実験ディレクトリのexperiment.jsonと一致しません。"
+            "既存のhash検証を回避せず、新しい実験ディレクトリを指定してください。"
+        )
+        st.info(
+            "例: 生成ログ・中間成果物ディレクトリを "
+            f"`{suggested_experiment}`、評価9の集計先を "
+            f"`{suggested_output}` に変更してください。"
+        )
+        st.button(
+            "推奨する新しい出力先へ切り替える",
+            key="eval9_use_suggested_directories",
+            type="primary",
+            on_click=use_suggested_eval9_directories,
+        )
+        st.markdown("**同じ出力先を再利用する場合**")
+        archive_confirmed = st.checkbox(
+            "既存の生成・集計成果物をバックアップへ移動することを確認しました",
+            key="eval9_confirm_archive",
+        )
+        if common["dry_run"]:
+            st.caption("dry-run中は成果物のバックアップ操作を実行しません。")
+        if st.button(
+            "既存成果物をバックアップして同じ出力先を再利用",
+            key="eval9_archive_and_reuse",
+            disabled=not archive_confirmed or common["dry_run"],
+        ):
+            try:
+                archive = archive_evaluation9_outputs(
+                    experiment=resolved_experiment,
+                    output_dir=resolved_output_dir,
+                    project_root=PROJECT_ROOT,
+                    archive_root=PROJECT_ROOT / EVALUATION9_BACKUP_DIR,
+                )
+            except (OSError, ValueError) as exc:
+                st.error(f"バックアップできませんでした: {exc}")
+            else:
+                archive_directory = str(archive["archive_directory"])
+                append_history(
+                    LOG_ROOT,
+                    {
+                        "evaluation": common["evaluation"],
+                        "action": "archive_outputs_for_plan_change",
+                        "experiment": str(resolved_experiment),
+                        "output_dir": output_dir,
+                        "archive_directory": archive_directory,
+                    },
+                )
+                st.session_state["eval9_archive_notice"] = display_path(
+                    Path(archive_directory)
+                )
+                st.rerun()
+        st.stop()
+
     method = st.selectbox("採点する手法", ["both", "frequency", "llm"])
     allow_api = st.checkbox("LLM抽出のAPI呼出しを許可（費用が発生します）", value=False)
+    if not allow_api:
+        st.success("API許可OFF: この設定変更および実行ではGemini APIを呼びません（0回）。")
     st.caption(
         "既存のexperiment.jsonとruns/を持つ実験も指定できます。単体のStudio CSVはこの評価の入力契約とは異なります。"
     )
@@ -907,11 +1221,17 @@ def render_eval9_settings(common: dict) -> dict:
     return {
         **common,
         "hestia_root": hestia_root,
-        "plan": plan,
+        "plan": str(base_plan_path),
+        "effective_plan": str(effective_plan_path),
+        "preset": preset,
+        "seeds": effective_plan.seeds,
+        "llm_runs": effective_plan.llm_runs,
         "experiment": experiment,
         "output_dir": output_dir,
         "method": method,
         "allow_api": allow_api,
+        "duration": duration,
+        "duration_train_days": list(DURATION_TRAIN_DAYS) if duration else [],
     }
 
 
@@ -927,7 +1247,9 @@ def render_eval10_settings(common: dict) -> dict:
         "中間成果物ディレクトリ", f"output/10_switchbot/{snapshot_name}"
     )
     results_dir = st.text_input(
-        "評価10の集計先", f"results/10_switchbot/{snapshot_name}"
+        "評価10の集計先",
+        f"{model_results_relative(common)}/10_switchbot/{snapshot_name}",
+        key=f"eval10_results_dir_{common['model_id']}",
     )
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -991,6 +1313,9 @@ def render_step(step: EvaluationStep, settings: dict) -> None:
     expanded = not (step.step_id.startswith("eval7_") and step.step_id != "eval7_evaluate")
     with st.expander(step.title, expanded=expanded):
         st.caption(step.description)
+        st.caption(
+            f"実行LLM: {settings['model_label']} / {model_environment_preview(settings)}"
+        )
         st.code(command_preview(step.command), language="bash")
 
         col1, col2 = st.columns(2)
@@ -1016,11 +1341,18 @@ def render_step(step: EvaluationStep, settings: dict) -> None:
                 "dry_run": settings["dry_run"],
                 "command": step.command,
                 "command_preview": command_preview(step.command),
+                "model_id": settings["model_id"],
+                "model_label": settings["model_label"],
+                "model_environment": settings["model_environment"],
                 "log_path": display_path(log_path),
             }
             append_history(LOG_ROOT, record)
             if settings["dry_run"]:
-                log_path.write_text(command_preview(step.command) + "\n", encoding="utf-8")
+                log_path.write_text(
+                    f"# 実行環境: {model_environment_preview(settings)}\n"
+                    f"$ {command_preview(step.command)}\n",
+                    encoding="utf-8",
+                )
                 st.info(f"dry-runとして記録しました: {display_path(log_path)}")
                 return
 
@@ -1030,7 +1362,13 @@ def render_step(step: EvaluationStep, settings: dict) -> None:
                 output_box.text_area("実行ログ", text, height=320)
 
             with st.spinner("実行中..."):
-                result = run_command(step.command, cwd=PROJECT_ROOT, log_path=log_path, on_output=update_output)
+                result = run_command(
+                    step.command,
+                    cwd=PROJECT_ROOT,
+                    log_path=log_path,
+                    on_output=update_output,
+                    environment_overrides=settings["model_environment"],
+                )
             if result.returncode == 0:
                 st.success(f"成功: {result.elapsed_seconds:.1f}s / log: {display_path(result.log_path)}")
             else:
@@ -1115,6 +1453,9 @@ def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
     completed = 0
     for index, step in enumerate(targets, start=1):
         st.markdown(f"**{index}. {step.title}**")
+        st.caption(
+            f"実行LLM: {settings['model_label']} / {model_environment_preview(settings)}"
+        )
         st.code(command_preview(step.command), language="bash")
         log_path = log_dir / f"{index:02d}_{step.step_id}.log"
 
@@ -1127,6 +1468,9 @@ def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
             "batch_mode": mode,
             "command": step.command,
             "command_preview": command_preview(step.command),
+            "model_id": settings["model_id"],
+            "model_label": settings["model_label"],
+            "model_environment": settings["model_environment"],
             "log_path": display_path(log_path),
         }
 
@@ -1134,6 +1478,7 @@ def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
         if missing_inputs and not settings["dry_run"]:
             missing_text = "\n".join(f"- {display_path(path)}" for path in missing_inputs)
             log_path.write_text(
+                f"# 実行環境: {model_environment_preview(settings)}\n"
                 f"$ {command_preview(step.command)}\n\nSTOPPED: missing required inputs.\n{missing_text}\n",
                 encoding="utf-8",
             )
@@ -1144,7 +1489,11 @@ def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
 
         append_history(LOG_ROOT, record)
         if settings["dry_run"]:
-            log_path.write_text(command_preview(step.command) + "\n", encoding="utf-8")
+            log_path.write_text(
+                f"# 実行環境: {model_environment_preview(settings)}\n"
+                f"$ {command_preview(step.command)}\n",
+                encoding="utf-8",
+            )
             completed += 1
             st.info(f"dry-runとして記録しました: {display_path(log_path)}")
             continue
@@ -1155,7 +1504,13 @@ def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
             output_box.text_area(f"実行ログ {step_index}: {step_id}", text, height=260)
 
         with st.spinner(f"実行中: {step.title}"):
-            result = run_command(step.command, cwd=PROJECT_ROOT, log_path=log_path, on_output=update_output)
+            result = run_command(
+                step.command,
+                cwd=PROJECT_ROOT,
+                log_path=log_path,
+                on_output=update_output,
+                environment_overrides=settings["model_environment"],
+            )
         if result.returncode == 0:
             completed += 1
             st.success(f"成功: {result.elapsed_seconds:.1f}s / log: {display_path(result.log_path)}")
@@ -1271,6 +1626,27 @@ def render_results(default_dirs: list[Path], current_evaluation: str | None = No
     if selected_file.suffix == ".csv":
         df = pd.read_csv(selected_file)
         filtered_df = render_csv_result_table(df, key_prefix=f"result_{selected_file}")
+        if selected_file.name == "evaluation9_duration_summary.csv":
+            llm_rows = df[df["method"] == "llm"] if "method" in df.columns else df
+            available = sorted(llm_rows["condition"].dropna().unique())
+            selected_conditions = st.multiselect(
+                "期間感度で表示するcondition",
+                available,
+                default=[value for value in available if value == "overall"] or available[:1],
+            )
+            for metric in (
+                "adl_macro_f1_mean",
+                "test_target_episode_coverage_mean",
+                "f1_mean",
+            ):
+                if metric in llm_rows.columns and selected_conditions:
+                    chart = (
+                        llm_rows[llm_rows["condition"].isin(selected_conditions)]
+                        .pivot(index="train_days", columns="condition", values=metric)
+                        .sort_index()
+                    )
+                    st.markdown(f"**{metric}**")
+                    st.line_chart(chart)
         if selected_file.name in {"evaluation8_by_frequency_band.csv", "evaluation8_by_frequency_band_by_method.csv"}:
             simple_columns = [
                 column
@@ -1405,6 +1781,10 @@ def main() -> None:
             settings = render_eval10_settings(common)
             steps = build_evaluation10_steps(settings)
 
+        st.info(
+            f"この評価のLLM: {common['model_label']}。LLM生成物と評価結果は "
+            f"`{model_results_relative(common)}/` に分離して保存します。"
+        )
         st.markdown("### ステップ")
         render_batch_runner(steps, settings)
         for step in steps:

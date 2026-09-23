@@ -10,9 +10,10 @@ from pathlib import Path
 import re
 import subprocess
 import time
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Mapping
 
 from app.command_builder import PROJECT_ROOT, command_preview, display_path
+from experiment_config import current_model_results_root
 
 
 SECRET_RE = re.compile(r"(?i)(api[_-]?key|token|secret|password)(=|:)\s*([^\s]+)")
@@ -65,14 +66,23 @@ def run_command(
     cwd: Path = PROJECT_ROOT,
     log_path: Path,
     on_output: Callable[[str], None] | None = None,
+    environment_overrides: Mapping[str, str] | None = None,
 ) -> CommandResult:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
+    if environment_overrides:
+        env.update(environment_overrides)
     output_parts: list[str] = []
     with log_path.open("w", encoding="utf-8") as log_file:
-        header = f"$ {command_preview(command)}\n\n"
+        override_preview = " ".join(
+            f"{key}={value}" for key, value in sorted((environment_overrides or {}).items())
+        )
+        header = f"$ {command_preview(command)}\n"
+        if override_preview:
+            header += f"# subprocess environment: {override_preview}\n"
+        header += "\n"
         log_file.write(header)
         process = subprocess.Popen(
             command,
@@ -84,13 +94,14 @@ def run_command(
             env=env,
         )
         assert process.stdout is not None
-        for raw_line in process.stdout:
-            line = redact_text(raw_line)
-            output_parts.append(line)
-            log_file.write(line)
-            log_file.flush()
-            if on_output is not None:
-                on_output("".join(output_parts))
+        with process.stdout:
+            for raw_line in process.stdout:
+                line = redact_text(raw_line)
+                output_parts.append(line)
+                log_file.write(line)
+                log_file.flush()
+                if on_output is not None:
+                    on_output("".join(output_parts))
         returncode = process.wait()
     elapsed = time.monotonic() - started
     return CommandResult(
@@ -120,13 +131,21 @@ def discover_result_files(base_dirs: Iterable[Path]) -> list[Path]:
     for base_dir in base_dirs:
         if not base_dir.exists():
             continue
-        for pattern in ("*.csv", "*.json", "*.png"):
+        for pattern in ("*.csv", "*.json", "*.png", "*.svg"):
             files.extend(base_dir.rglob(pattern))
     return sorted(set(files))
 
 
 def discover_result_dirs() -> list[Path]:
+    model_root = current_model_results_root()
     candidates = [
+        model_root / "9_hestia",
+        model_root / "5_pattern_quality_fixed",
+        model_root / "6_adl_match",
+        model_root / "7_param_search",
+        model_root / "8_vs_llm_own_id_fixed",
+        model_root / "8_proposed_own_id_fixed",
+        model_root / "10_switchbot",
         PROJECT_ROOT / "results" / "9_hestia",
         PROJECT_ROOT / "results" / "4_adl_detect",
         PROJECT_ROOT / "results" / "5_pattern_quality",

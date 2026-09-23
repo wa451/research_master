@@ -1,0 +1,113 @@
+"""Regression tests for dashboard-only LLM model selection."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+
+from app.command_builder import (
+    PROJECT_ROOT,
+    build_evaluation7_steps,
+    build_evaluation9_steps,
+    default_direct_path,
+    default_proposed_path,
+)
+from app.model_selection import (
+    DASHBOARD_MODELS,
+    DEFAULT_DASHBOARD_MODEL_ID,
+    dashboard_model,
+)
+from app.utils import run_command
+
+
+class DashboardModelSelectionTests(unittest.TestCase):
+    def test_gpt_sol_is_default_and_all_model_roots_are_distinct(self) -> None:
+        self.assertEqual(
+            DEFAULT_DASHBOARD_MODEL_ID,
+            "us.openai.gpt-5.6-sol",
+        )
+        roots = {model.results_root(PROJECT_ROOT) for model in DASHBOARD_MODELS}
+        self.assertEqual(len(roots), len(DASHBOARD_MODELS))
+        self.assertEqual(
+            dashboard_model(DEFAULT_DASHBOARD_MODEL_ID).results_root(PROJECT_ROOT),
+            PROJECT_ROOT / "results/gpt-5.6-sol",
+        )
+
+    def test_selected_root_is_used_for_default_llm_artifacts(self) -> None:
+        terra_root = dashboard_model("us.openai.gpt-5.6-terra").results_root(PROJECT_ROOT)
+        self.assertEqual(
+            default_proposed_path("aruba", 15, 0, 14, results_root=terra_root),
+            terra_root / "aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json",
+        )
+        self.assertEqual(
+            default_direct_path(15, 0, 14, results_root=terra_root),
+            terra_root / "llm_direct_15_0_14days/1.json",
+        )
+
+    def test_builders_use_the_selected_model_root_for_expected_outputs(self) -> None:
+        terra_root = dashboard_model("us.openai.gpt-5.6-terra").results_root(PROJECT_ROOT)
+        evaluation7 = build_evaluation7_steps(
+            {
+                "runner": "python",
+                "dataset": "aruba",
+                "days": 14,
+                "runs": 1,
+                "staged_search": False,
+                "n_states_list": [15],
+                "hamming_thresholds": [0],
+                "labeled_casas": "new_labeled_data/aruba.txt",
+                "sensor_map": "configs/aruba_sensor_map.json",
+                "adl_intervals": "output/adl_label_intervals.csv",
+                "output_dir": terra_root / "7_param_search",
+                "model_results_root": terra_root,
+                "min_overlap_ratio_for_true_label": 0.1,
+                "wake_window_minutes": 30.0,
+                "match_mode": "exact",
+                "max_skip_duration_minutes": 1.0,
+                "selection_metric": "mean_multilabel_f1",
+                "skip_missing_runs": False,
+                "skip_missing_conditions": True,
+                "show_preparation_steps": True,
+            }
+        )
+        llm_step = next(step for step in evaluation7 if step.step_id.endswith("_llm"))
+        self.assertEqual(
+            llm_step.expected_outputs,
+            [terra_root / "aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json"],
+        )
+
+        evaluation9 = build_evaluation9_steps(
+            {"runner": "python", "model_results_root": terra_root}
+        )
+        self.assertEqual(
+            evaluation9[-1].expected_outputs[0],
+            terra_root / "9_hestia/pilot/evaluation9_summary.csv",
+        )
+
+    def test_subprocess_receives_only_selected_model_override(self) -> None:
+        sol = dashboard_model(DEFAULT_DASHBOARD_MODEL_ID)
+        before = os.environ.get("BEDROCK_MODEL_ID")
+        with tempfile.TemporaryDirectory() as directory:
+            result = run_command(
+                [
+                    sys.executable,
+                    "-c",
+                    "import os; print(os.environ['LLM_PROVIDER']); print(os.environ['BEDROCK_MODEL_ID'])",
+                ],
+                log_path=Path(directory) / "command.log",
+                environment_overrides=sol.environment_overrides(),
+            )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(
+            result.output.splitlines(),
+            ["bedrock", "us.openai.gpt-5.6-sol"],
+        )
+        self.assertEqual(os.environ.get("BEDROCK_MODEL_ID"), before)
+
+
+if __name__ == "__main__":
+    unittest.main()

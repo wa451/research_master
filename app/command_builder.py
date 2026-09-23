@@ -6,16 +6,15 @@ entry points. This module only translates UI settings into subprocess argv.
 
 from __future__ import annotations
 
+import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
-import shlex
 from typing import Any
 
-from experiment_config import SMOOTHING_WINDOW_SEC
+from experiment_config import SMOOTHING_WINDOW_SEC, current_model_results_root
 from src.behavior_pattern_mining.evaluation.evaluation7_staged import (
     select_top_condition_rows,
 )
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -90,17 +89,38 @@ def short_suffix(n_states: int, hamming_threshold: int, days: int) -> str:
     return f"{n_states}_{hamming_threshold}_{days}days"
 
 
-def default_proposed_path(dataset: str, n_states: int, hamming_threshold: int, days: int, run: int = 1) -> Path:
+def default_proposed_path(
+    dataset: str,
+    n_states: int,
+    hamming_threshold: int,
+    days: int,
+    run: int = 1,
+    *,
+    results_root: Path | None = None,
+) -> Path:
     suffix = short_suffix(n_states, hamming_threshold, days)
-    return PROJECT_ROOT / "output" / f"{dataset}_{suffix}" / f"llm_sequences_modes_{suffix}_{run}.json"
+    return (results_root or current_model_results_root()) / f"{dataset}_{suffix}" / f"llm_sequences_modes_{suffix}_{run}.json"
 
 
 def default_state_table(dataset: str, n_states: int, hamming_threshold: int, days: int) -> Path:
     return PROJECT_ROOT / "state" / f"{dataset}_{short_suffix(n_states, hamming_threshold, days)}.txt"
 
 
-def default_direct_path(n_states: int, hamming_threshold: int, days: int, run: int = 1) -> Path:
-    return PROJECT_ROOT / "output" / f"llm_direct_{n_states}_{hamming_threshold}_{days}days" / f"{run}.json"
+def default_direct_path(
+    n_states: int,
+    hamming_threshold: int,
+    days: int,
+    run: int = 1,
+    *,
+    results_root: Path | None = None,
+) -> Path:
+    return (results_root or current_model_results_root()) / f"llm_direct_{n_states}_{hamming_threshold}_{days}days" / f"{run}.json"
+
+
+def settings_model_results_root(settings: dict[str, Any]) -> Path:
+    """Read an explicitly selected dashboard model root, if one was supplied."""
+    selected = as_path(settings.get("model_results_root"))
+    return selected or current_model_results_root()
 
 
 def default_eval_state_series_path(n_states: int, hamming_threshold: int, days: int) -> Path:
@@ -425,6 +445,7 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     state_series = as_path(settings["state_series"])
     intermediate_dir = as_path(settings["intermediate_output_dir"])
     output_dir = as_path(settings["output_dir"])
+    model_root = settings_model_results_root(settings)
 
     build_cmd = script_cmd(runner, "scripts/run_build_network_from_labeled_casas.py")
     add_arg(build_cmd, "--labeled-casas", labeled)
@@ -482,11 +503,11 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
 
     suffix = short_suffix(n_states, hamming, days)
     final_dir = output_dir if output_dir.name == suffix else output_dir / suffix
-    expected_proposed = [default_proposed_path(dataset, n_states, hamming, days, 1)]
-    expected_direct = [default_direct_path(n_states, hamming, days, 1)]
+    expected_proposed = [default_proposed_path(dataset, n_states, hamming, days, 1, results_root=model_root)]
+    expected_direct = [default_direct_path(n_states, hamming, days, 1, results_root=model_root)]
     if runs > 1:
-        expected_proposed.append(default_proposed_path(dataset, n_states, hamming, days, runs))
-        expected_direct.append(default_direct_path(n_states, hamming, days, runs))
+        expected_proposed.append(default_proposed_path(dataset, n_states, hamming, days, runs, results_root=model_root))
+        expected_direct.append(default_direct_path(n_states, hamming, days, runs, results_root=model_root))
 
     return [
         EvaluationStep(
@@ -670,6 +691,7 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     sensor_map = as_path(settings["sensor_map"])
     adl_intervals = as_path(settings["adl_intervals"])
     output_dir = as_path(settings["output_dir"])
+    model_root = settings_model_results_root(settings)
     if output_dir is None:
         raise ValueError("Evaluation 7 output_dir is required")
 
@@ -740,7 +762,7 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                             )
                         )
                     else:
-                        required.append(default_proposed_path(dataset, n_states, hamming, days, run=run_id))
+                        required.append(default_proposed_path(dataset, n_states, hamming, days, run=run_id, results_root=model_root))
         return required
 
     def evaluation_outputs(destination: Path) -> list[Path]:
@@ -770,7 +792,7 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                 first_pattern = (
                     template_path(patterns_template, dataset, n_states, hamming, days, run=1)
                     if patterns_template
-                    else default_proposed_path(dataset, n_states, hamming, days, run=1)
+                    else default_proposed_path(dataset, n_states, hamming, days, run=1, results_root=model_root)
                 )
                 build_cmd = script_cmd(runner, "scripts/run_build_network_from_labeled_casas.py")
                 add_arg(build_cmd, "--labeled-casas", labeled)
@@ -804,7 +826,7 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                     expected_patterns.append(
                         template_path(patterns_template, dataset, n_states, hamming, days, run=runs)
                         if patterns_template
-                        else default_proposed_path(dataset, n_states, hamming, days, run=runs)
+                        else default_proposed_path(dataset, n_states, hamming, days, run=runs, results_root=model_root)
                     )
                 steps.append(
                     EvaluationStep(
@@ -883,6 +905,7 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                 int(row["hamming_threshold"]),
                 days,
                 run=run_id,
+                results_root=model_root,
             )
             for row in selected_rows
             for run_id in range(2, total_runs + 1)
@@ -926,50 +949,69 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
 def build_evaluation9_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     hestia = as_path(settings.get("hestia_root", "Hestia"))
     experiment = as_path(settings.get("experiment", "output/9_hestia/pilot"))
-    output_dir = as_path(settings.get("output_dir", "results/9_hestia/pilot"))
+    output_dir = as_path(
+        settings.get("output_dir", settings_model_results_root(settings) / "9_hestia/pilot")
+    )
     assert hestia is not None and experiment is not None and output_dir is not None
-    plan = as_path(settings.get("plan")) or hestia / "examples/experiments/noise_free_pilot.yaml"
+    plan = (
+        as_path(settings.get("effective_plan"))
+        or as_path(settings.get("plan"))
+        or hestia / "examples/experiments/noise_free_pilot.yaml"
+    )
     allow_api = bool(settings.get("allow_api", False))
+    duration = bool(settings.get("duration", False))
+    duration_days = settings.get("duration_train_days", [3, 7, 14, 28])
     stages = [
         (
             "generate",
             "1. Hestiaログを生成・検証",
             "計画に従ってセンサー入力と正解ログを分離して生成します。",
             [plan],
-            [experiment / "experiment.json"],
+            [experiment / ("duration.json" if duration else "experiment.json")],
         ),
         (
             "prepare",
             "2. 代表状態・ネットワークを構築",
             "前半だけで構築し、後半を固定した状態表で写像します。",
-            [experiment / "experiment.json", PROJECT_ROOT / ".venv/bin/python"],
+            [
+                experiment / ("duration.json" if duration else "experiment.json"),
+                PROJECT_ROOT / ".venv/bin/python",
+            ],
             [],
         ),
         (
             "baseline",
             "3. 頻度対照を生成",
             "前半の連続状態系列だけから頻度上位候補を選びます。APIは使いません。",
-            [experiment / "experiment.json"],
+            [experiment / ("duration.json" if duration else "experiment.json")],
             [],
         ),
         (
             "extract" if allow_api else "budget",
             "4. LLM抽出" if allow_api else "4. LLM呼出し数を確認（APIなし）",
             "モデル・残り反復数を表示します。実際のAPI呼出しは画面で許可した場合のみです。",
-            [experiment / "experiment.json"],
+            [experiment / ("duration.json" if duration else "experiment.json")],
             [],
         ),
         (
             "evaluate",
             "5. 評価9を採点・集計",
             "系列回収とADL意味対応を後半で採点。LLM未実行はmissingとして記録します。",
-            [experiment / "experiment.json"],
-            [output_dir / "evaluation9_summary.csv", output_dir / "evaluation9_summary.json"],
+            [experiment / ("duration.json" if duration else "experiment.json")],
+            [
+                output_dir
+                / ("evaluation9_duration_summary.csv" if duration else "evaluation9_summary.csv"),
+                output_dir
+                / ("evaluation9_duration_summary.json" if duration else "evaluation9_summary.json"),
+            ],
         ),
     ]
     steps = []
     for stage, title, description, inputs, outputs in stages:
-        command = script_cmd(settings["runner"], "scripts/evaluate_9_hestia.py")
+        command = script_cmd(
+            settings["runner"],
+            "scripts/evaluate_9_duration.py" if duration else "scripts/evaluate_9_hestia.py",
+        )
         for flag, value in (
             ("--stage", stage),
             ("--hestia-root", hestia),
@@ -980,6 +1022,8 @@ def build_evaluation9_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
         ):
             add_arg(command, flag, value)
         add_flag(command, "--allow-api", stage == "extract" and allow_api)
+        if duration:
+            add_arg(command, "--train-days", ",".join(str(day) for day in duration_days))
         steps.append(
             EvaluationStep(
                 f"eval9_{stage}",
