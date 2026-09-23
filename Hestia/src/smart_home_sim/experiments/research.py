@@ -41,11 +41,22 @@ def research_provenance(root: Path) -> dict[str, Any]:
     }
 
 
-def _worker(action: str, run: Path, root: Path, run_id: int = 1) -> None:
+def _worker(
+    action: str,
+    run: Path,
+    root: Path,
+    run_id: int = 1,
+    llm_output_dir: Path | None = None,
+) -> None:
     environment = dict(os.environ)
+    runtime_root = (
+        llm_output_dir.parent.parent / "runtime"
+        if action == "extract" and llm_output_dir is not None
+        else run / "runtime"
+    )
     environment["MPLBACKEND"] = "Agg"
-    environment["MPLCONFIGDIR"] = str(run / "runtime/matplotlib")
-    log = run / "runtime" / f"{action}_{run_id}.log"
+    environment["MPLCONFIGDIR"] = str(runtime_root / "matplotlib")
+    log = runtime_root / f"{action}_{run_id}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     command = [
         str(root / ".venv/bin/python"),
@@ -58,6 +69,8 @@ def _worker(action: str, run: Path, root: Path, run_id: int = 1) -> None:
         "--run-id",
         str(run_id),
     ]
+    if llm_output_dir is not None:
+        command.extend(["--llm-output-dir", str(llm_output_dir)])
     with log.open("w", encoding="utf-8") as stream:
         result = subprocess.run(
             command, cwd=run, env=environment, stdout=stream, stderr=subprocess.STDOUT, check=False
@@ -92,7 +105,7 @@ def prepare(run: Path, research_root: Path) -> None:
     )
 
 
-def extraction_budget(run: Path) -> dict[str, Any]:
+def extraction_budget(run: Path, artifact_run: Path | None = None) -> dict[str, Any]:
     verify_prepared(run)
     modes = len(
         [
@@ -103,10 +116,11 @@ def extraction_budget(run: Path) -> dict[str, Any]:
     )
     repetitions = read_json(run / "run.json")["plan"]["llm_runs"]
     settings = read_json(run / "analysis/llm_settings.json")
+    artifact_run = artifact_run or run
     pending = [
         index
         for index in range(1, repetitions + 1)
-        if not (run / f"predictions/llm/complete_{index}.json").exists()
+        if not (artifact_run / f"predictions/llm/complete_{index}.json").exists()
     ]
     return {
         "run": str(run),
@@ -130,10 +144,10 @@ def verify_prepared(run: Path) -> None:
         )
 
 
-def llm_output(run: Path, index: int) -> Path:
+def llm_output(run: Path, index: int, artifact_run: Path | None = None) -> Path:
     plan = read_json(run / "run.json")["plan"]
     return (
-        run
+        (artifact_run or run)
         / "predictions/llm"
         / (
             f"llm_sequences_modes_{plan['n_states']}_{plan['hamming_threshold']}_"
@@ -142,15 +156,39 @@ def llm_output(run: Path, index: int) -> Path:
     )
 
 
-def extract(run: Path, research_root: Path) -> None:
+def extract(
+    run: Path,
+    research_root: Path,
+    artifact_run: Path | None = None,
+    model_id: str | None = None,
+) -> None:
     verify_prepared(run)
     root = research_root.resolve()
     if read_json(run / "prepared.json")["research"] != research_provenance(root):
         raise ValueError("research code/settings changed after preparation")
-    request = run / "predictions/llm/request.json"
-    fingerprint = {"prepared_sha256": file_hash(run / "prepared.json")}
+    artifact_run = artifact_run or run
+    request = artifact_run / "predictions/llm/request.json"
+    model_metadata_path = artifact_run / "predictions/llm/model_metadata.json"
+    if model_metadata_path.is_file() and model_id:
+        recorded_model = read_json(model_metadata_path).get("model_id")
+        if recorded_model != model_id:
+            raise ValueError(
+                f"LLM artifacts belong to a different model: {recorded_model!r} != {model_id!r}"
+            )
+    fingerprint = {
+        "prepared_sha256": file_hash(run / "prepared.json"),
+        "model_id": model_id,
+    }
     if request.exists():
-        if read_json(request) != fingerprint:
+        previous_request = read_json(request)
+        legacy_gemini_request = {
+            "prepared_sha256": fingerprint["prepared_sha256"],
+        }
+        if previous_request != fingerprint and not (
+            previous_request == legacy_gemini_request
+            and model_id == "gemini-2.5-pro"
+            and model_metadata_path.is_file()
+        ):
             raise ValueError("LLM checkpoints belong to different inputs/settings")
     elif request.parent.exists() and any(request.parent.iterdir()):
         raise ValueError("unbound LLM artifacts found; preserve them and use a new output")
@@ -158,19 +196,25 @@ def extract(run: Path, research_root: Path) -> None:
         write_json(request, fingerprint)
     settings = read_json(run / "run.json")["plan"]
     for index in range(1, settings["llm_runs"] + 1):
-        marker = run / f"predictions/llm/complete_{index}.json"
+        marker = artifact_run / f"predictions/llm/complete_{index}.json"
         if marker.exists():
-            verify_files(run, read_json(marker)["files"])
+            verify_files(artifact_run, read_json(marker)["files"])
             continue
-        _worker("extract", run, root, index)
-        output = llm_output(run, index)
+        _worker(
+            "extract",
+            run,
+            root,
+            index,
+            artifact_run / "predictions/llm",
+        )
+        output = llm_output(run, index, artifact_run)
         if not output.is_file() or not isinstance(read_json(output), list):
             raise ValueError(f"missing or invalid completed LLM output: {output}")
-        files = {output.relative_to(run).as_posix(): file_hash(output)}
-        checkpoints = run / f"predictions/llm/llm_mode_records_run{index}"
+        files = {output.relative_to(artifact_run).as_posix(): file_hash(output)}
+        checkpoints = artifact_run / f"predictions/llm/llm_mode_records_run{index}"
         files.update(
             {
-                path.relative_to(run).as_posix(): file_hash(path)
+                path.relative_to(artifact_run).as_posix(): file_hash(path)
                 for path in sorted(checkpoints.rglob("*"))
                 if path.is_file()
             }

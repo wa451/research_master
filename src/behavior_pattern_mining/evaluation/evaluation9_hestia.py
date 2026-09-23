@@ -25,6 +25,8 @@ def build_commands(
     output_dir: Path,
     method: str = "both",
     allow_api: bool = False,
+    llm_results_root: Path | None = None,
+    model_id: str | None = None,
 ) -> list[list[str]]:
     if stage not in STAGES:
         raise ValueError(f"unknown stage: {stage}")
@@ -35,6 +37,7 @@ def build_commands(
     root = resolve_path(hestia_root)
     experiment = resolve_path(experiment)
     output_dir = resolve_path(output_dir)
+    llm_results_root = resolve_path(llm_results_root or output_dir / "artifacts")
     # 生成先が空である契約を守り、生成途中に集計ファイルを混入させない。
     if output_dir == experiment or output_dir in experiment.parents:
         raise ValueError(
@@ -71,6 +74,10 @@ def build_commands(
             ]
             if action in ("prepare", "budget", "extract"):
                 command.extend(["--research-root", str(PROJECT_ROOT)])
+            if action in ("budget", "extract"):
+                command.extend(["--llm-results-root", str(llm_results_root)])
+                if model_id:
+                    command.extend(["--model-id", model_id])
             if action == "extract" and allow_api:
                 command.append("--allow-api")
             if action == "evaluate":
@@ -80,6 +87,8 @@ def build_commands(
                         method,
                         "--summary",
                         str(output_dir / "evaluation9_summary"),
+                        "--llm-results-root",
+                        str(llm_results_root),
                     ]
                 )
         commands.append(command)

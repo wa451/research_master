@@ -1,5 +1,7 @@
 # 評価9: Hestia合成ログによる系列回収・ADL意味対応
 
+> **モデル別保存:** `experiment.json`、生成ログ、truth、prepared state/networkは従来どおり `output/9_hestia/` に置く。LLM JSON・mode checkpoint・usage・LLM個別採点は `results/<model>/9_hestia/<experiment>/artifacts/`、集計は同experiment直下へ保存する。Hestia CLIにはmodel-specific artifact rootが自動で渡され、別モデルのcomplete markerを参照しない。
+
 ## 概要
 
 Hestiaで生成したセンサーログに提案手法（代表状態 → 状態遷移ネットワーク → LLM抽出）を適用し、生成時の正解を用いて系列回収とADLの意味対応を評価する。既存のHestia `experiment` 基盤をmaster-researchのCLIとWebアプリから実行する。評価1〜8の指標・前処理・データは変更しない。
@@ -65,12 +67,15 @@ fragment包含率、活動観測可能件数、ADLのmicro・ラベル別指標�
 | `Hestia/examples/experiments/noise_free_pilot.yaml` | 4条件 × 1seed × 4日、LLM各1反復の動作確認計画。前半2日・後半2日。 |
 | `Hestia/examples/experiments/controlled_gold_pilot.yaml` | 1人・2 target・4日・固定seed/揺らぎなしのAPI不要gold契約pilot。 |
 | `Hestia/examples/experiments/noise_free.yaml` | 本実験。3住宅 × 2条件（base / large variability）× 3seed = 18ログ。各ログ14日（train 7日/test 7日）、LLM各3反復。 |
+| `Hestia/examples/experiments/noise_free_duration.yaml` | 期間感度評価。既存本実験と同じ6条件・3seed・LLM各3反復で、各runの35日rawログを1回だけ生成する。 |
+| Webの「本実験・小規模確認」 | `noise_free.yaml`の全条件・全設定を継承し、seed=[11]、LLM 1反復だけへoverrideするeffective plan。6ログ、fresh最大24 API calls。 |
 | `output/9_hestia/pilot/experiment.json` | 確定した計画snapshot。 |
 | `output/9_hestia/pilot/runs/<condition>/seed_<seed>/` | 元ログ、正解、学習入力、代表状態・network、抽出結果、個別採点、再現用hash。 |
 | `results/9_hestia/pilot/evaluation9_summary.csv` | 条件・手法別の集計。最初に読むファイル。 |
 | `results/9_hestia/pilot/evaluation9_summary_runs.csv` | seed・LLM run・condition単位のstatusとPrimary指標。 |
 | `results/9_hestia/pilot/evaluation9_summary.json` | `runs` にseed・反復別statusと指標、`summary` に集計を保存。 |
 | `output/logs/evaluation_dashboard/` | Webのコマンド履歴と実行ログ。workerの詳細ログは各runの `runtime/`。 |
+| `output/logs/evaluation_dashboard/evaluation9_plans/` | Webで確定したseed・LLM run数を含む、内容hash付きのeffective plan。 |
 
 既にHestiaの `experiment generate` で作成した `experiment.json` と `runs/` のあるディレクトリも指定できる。生成を省いてprepare以降を個別実行する場合、以後の設定はそのディレクトリ内のsnapshotを使う。画面の計画ファイル指定はgenerateにだけ適用される。
 
@@ -79,14 +84,18 @@ Studioの `events.csv` / `casas_motion_door.txt` 単体には本評価が要求�
 ## Webアプリでの実行手順
 
 1. 左サイドバーで **評価9** を選ぶ。
-2. **3住宅のつながり** で compact / corridor / branched の部屋、接続、ドアセンサー、移動時間を確認し、計画、生成ログ・中間成果物ディレクトリ、集計先を設定する。base / large variability は同じ住宅構造を使う。既定はpilot。K・seed・日数・平滑化は計画ファイルで変更する。サイドバーの共通平滑化は評価9には適用しない。
-3. 詳細な配置を確認・変更する場合は **Hestia Studio** タブを開き、Studio内の compact / corridor / branched タブを切り替える。各住宅の未保存編集はページを開いている間保持される。編集は `Hestia/scenarios/` にYAML保存できるが、評価9の本実験planへは自動反映されない。**論文用SVG** / **論文用PNG** では部屋・接続・センサー／デバイス配置を論文向け画像として保存できる。この画像は住宅構造の説明用であり、ground truthや検出器入力には使用しない。
-4. 必要なら共通の **dry-run** でコマンドだけ記録する。実処理・API呼出しは行わない。
-5. **不足ファイル生成 + 評価本体** で一括実行する。API許可OFFでは、生成 → 前処理 → 頻度対照 → LLM予算表示 → 採点まで実行する。LLMはmissing、頻度対照は採点済みになる。
-6. 提案手法も採点する場合は、ステップ4のモデル・呼出し数を確認し、**LLM抽出のAPI呼出しを許可** をONにしてステップ4を実行し、続いてステップ5を実行する。master-researchの既存認証設定を使う。
-7. **結果比較** タブで `results/9_hestia/pilot` を選び、CSVとJSONを確認する。
+2. **実験プリセット** でPilot、本実験・小規模確認、または本実験を選び、seed一覧と同一condition・seedあたりのLLM run数を設定する。小規模確認は`noise_free.yaml`を読み、他の全項目を維持してseed=[11]、LLM 1反復だけをoverrideする。既定パスは`output/9_hestia/full_smoke`と`results/9_hestia/full_smoke`。画面はconditions、train/test日数、seed・反復数を表示する。K・日数・平滑化・condition詳細はこの画面では変更せず、サイドバーの共通平滑化も評価9には適用しない。
+3. **実行規模** でcondition数、seed数、LLM run数、4時間帯、Hestia生成run数、推定Gemini API呼び出し回数を確認する。未実行時のfresh推定は `condition数 × seed数 × llm_runs × 4時間帯`で、小規模確認は24回、本実験は216回。prepare済みの同一experimentがあれば、既存`extraction_budget()`によるcheckpoint反映後の残件数を優先する。JSON parse retryを含む上限も表示するが、backendのtransport retryは予測に含まれない。
+4. 詳細な配置を確認・変更する場合は **Hestia Studio** タブを開き、Studio内の compact / corridor / branched タブを切り替える。各住宅の未保存編集はページを開いている間保持される。編集は `Hestia/scenarios/` にYAML保存できるが、評価9の本実験planへは自動反映されない。**論文用SVG** / **論文用PNG** では部屋・接続・センサー／デバイス配置を論文向け画像として保存できる。この画像は住宅構造の説明用であり、ground truthや検出器入力には使用しない。
+5. 必要なら共通の **dry-run** でコマンドだけ記録する。コマンドには画面上に表示されたeffective planのパスが入り、実処理・API呼出しは行わない。
+6. **不足ファイル生成 + 評価本体** で一括実行する。API許可OFFでは、生成 → 前処理 → 頻度対照 → LLM予算表示 → 採点まで実行する。LLMはmissing、頻度対照は採点済みになる。
+7. 提案手法も採点する場合は、ステップ4のモデル・呼出し数を確認し、**LLM抽出のAPI呼出しを許可** をONにしてステップ4を実行し、続いてステップ5を実行する。master-researchの既存認証設定を使う。
+8. **結果比較** タブで `results/9_hestia/pilot` を選び、CSVとJSONを確認する。
 
 評価9は一括実行の各前段を毎回CLIに渡して、既存成果物のhashを検証する。ファイルの存在だけで前段を飛ばさない。完了済みの生成・前処理・LLM反復は既存CLIが検証して再利用する。「全ステップを再実行」も強制上書きではない。計画・コードの変更や不完全な生成が検出された場合は停止するため、新しい実験ディレクトリと集計先を指定する。
+
+画面で確定した設定はsourceの`noise_free_pilot.yaml` / `noise_free.yaml`を上書きせず、全ExperimentPlan項目を保持したeffective planとして保存する。同じ内容は同じhashのファイルを再利用する。同じexperiment出力先へ異なるeffective planを適用すると、従来どおり`experiment.json`との一致検証で停止するため、設定変更時は新しい実験ディレクトリを使う。
+比較はHestia生成処理と同じraw snapshot一致で行う。旧snapshotが後から追加された既定項目を欠く場合も既存成果物を暗黙に書き換えず、画面が実行前に停止する。表示される **推奨する新しい出力先へ切り替える** を押すと、hash付きの生成先・集計先へ一度に変更できる。同じパスを使いたい場合は確認チェック後に **既存成果物をバックアップして同じ出力先を再利用** を押す。既存の生成・集計成果物は削除せず`output/logs/evaluation_dashboard/evaluation9_backups/`へ退避し、空いた元パスを新しいplanで再利用する。hash検証自体は無効化しない。
 
 「不足ファイル生成のみ」は採点以外を実行する。API許可ONなら、このモードにもLLM抽出が含まれる。
 
@@ -138,6 +147,30 @@ large variability（`*_variable`）は開始時刻±45分、活動・step時間�
 Hestiaの汎用条件として維持するが、この本実験planには含めない。
 
 このコマンドもAPIなし。本実験の新規モード抽出は全4時間帯がある場合最大216回で、通信・解析retryによってAPIリクエストが増える場合がある。続きの個別ステップでも同じ `--experiment` と `--output-dir` を指定する。
+
+## train期間感度評価
+
+「過去何日分のセンサログで性能が安定するか」を調べる追加実験で、既存の7日train本実験は変更しない。3日は短期間、7日は現行baseline、14日は2週間、28日は4週間の履歴を表す。testは全条件で7日固定とし、曜日を一巡させつつ評価期間長の違いを交絡させない。
+
+各condition × seedについて35日ログを1回だけ生成し、Day 29〜35を共通testとする。trainはtest直前から遡るため、3日=Day 26〜28、7日=Day 22〜28、14日=Day 15〜28、28日=Day 1〜28である。同じrawログと同じtestを使うpaired comparisonであり、期間ごとのシミュレーション差を持ち込まない。`output/9_hestia/duration/raw/`が18個のraw run、`windows/train_{3,7,14,28}d/`が期間依存成果物である。派生windowにはraw生成markerのhash、window開始、train/test日数を保存し、状態表・network・checkpointを期間間で混同しない。
+
+各windowは対象train sliceだけで代表状態、canonical gold/catalog、状態遷移network、frequency候補、LLM入力を作る。testはそのwindowの代表状態表へ固定写像し、K、h、閾値、canonical選択、抽出には使用しない。28日状態表を短い条件へ流用しない。モデル、prompt、K=15、h=0、平滑化、targets、時間帯、採点は本実験と同一である。
+
+canonical goldはtrain期間ごとに変化し得る。このためexact-match `precision/recall/f1` は母集合が完全に同じ性能尺度とは限らず、単純な大小だけで結論を出さない。主比較では `adl_macro_f1`、`test_target_episode_coverage`、`test_visible_catalog_recall`を併読する。7日差分は同じcondition・seedを対応づけた「各期間の値 − 7日値」（相対変化率ではない差分）であり、LLM反復をseed内平均してからseed間平均・標本標準偏差を求める。
+
+```bash
+uv run python scripts/evaluate_9_duration.py --dry-run
+uv run python scripts/evaluate_9_duration.py --stage generate
+uv run python scripts/evaluate_9_duration.py --stage prepare
+uv run python scripts/evaluate_9_duration.py --stage baseline
+uv run python scripts/evaluate_9_duration.py --stage budget
+uv run python scripts/evaluate_9_duration.py --stage extract --allow-api
+uv run python scripts/evaluate_9_duration.py --stage evaluate --method both
+```
+
+`--train-days 3,7,14,28`でwindow一覧を明示できるが、7日baselineとraw planの最大train日数（28日）は必須である。API opt-inは既存評価と同じで、許可OFFは0 calls。fresh上限は `6 conditions × 3 seeds × 3 LLM runs × 4 time bands × 4 durations = 864 calls`、parse retry上限は現行3試行で2592回である。transport retryは含まない。raw生成は18回だけで、LLM抽出は異なるnetworkを持つ72 windowごとに行う。
+
+出力は `results/9_hestia/duration/evaluation9_duration_summary.csv`、`evaluation9_duration_summary_runs.csv`、`evaluation9_duration_summary.json`。summaryはtrain/test日数、condition（`overall`を含む）、method、model、各指標のmean/std/n_seeds、run status、主要指標のpaired `*_delta_vs_7d_*`を持つ。`adl_macro_f1`、`test_target_episode_coverage`、`f1`のcondition別・overall SVGも生成し、Webの結果比較では同CSVを期間軸の折れ線で表示できる。
 
 ## 比較と内部処理
 

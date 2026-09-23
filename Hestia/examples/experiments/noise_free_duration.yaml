@@ -1,0 +1,21 @@
+# 評価9 train期間感度: 同一35日ログの末尾7日を共通testにする。
+# rawは28日train + 7日testとして1回だけ生成し、3/7/14/28日windowを派生する。
+schema_version: 1
+observation_noise: false
+start_datetime: 2025-01-06T00:00:00+09:00
+train_days: 28
+test_days: 7
+seeds: [11, 22, 33]
+n_states: 15
+hamming_threshold: 0
+smoothing_window_sec: 0
+min_train_support: 2
+baseline_top_k: 20
+llm_runs: 3
+conditions:
+  - {id: compact_base, house: compact}
+  - {id: compact_variable, house: compact, variability: large}
+  - {id: corridor_base, house: corridor}
+  - {id: corridor_variable, house: corridor, variability: large}
+  - {id: branched_base, house: branched}
+  - {id: branched_variable, house: branched, variability: large}

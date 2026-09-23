@@ -66,9 +66,18 @@ def frequency_baseline(run: Path) -> None:
     write_json(path, payload)
 
 
-def score_runs(runs: list[Path], method: str) -> list[dict[str, Any]]:
+def score_runs(
+    runs: list[Path],
+    method: str,
+    artifact_runs: dict[Path, Path] | None = None,
+) -> list[dict[str, Any]]:
     rows = []
     for run in runs:
+        artifact_run = (artifact_runs or {}).get(run, run)
+        model_metadata_path = artifact_run / "predictions/llm/model_metadata.json"
+        model_metadata = (
+            read_json(model_metadata_path) if model_metadata_path.is_file() else {}
+        )
         settings = read_json(run / "run.json")
         count = settings["plan"]["llm_runs"] if method == "llm" else 1
         for index in range(1, count + 1):
@@ -82,9 +91,15 @@ def score_runs(runs: list[Path], method: str) -> list[dict[str, Any]]:
                     name: file_hash(Path(__file__).with_name(name))
                     for name in ("metrics.py", "evaluation.py")
                 },
+                "model": model_metadata.get("model_id") if method == "llm" else None,
+                "provider": model_metadata.get("provider") if method == "llm" else None,
             }
-            path = llm_output(run, index) if method == "llm" else run / "predictions/frequency.json"
-            marker = run / f"predictions/llm/complete_{index}.json"
+            path = (
+                llm_output(run, index, artifact_run)
+                if method == "llm"
+                else run / "predictions/frequency.json"
+            )
+            marker = artifact_run / f"predictions/llm/complete_{index}.json"
             if not path.exists() or (method == "llm" and not marker.exists()):
                 row.update(
                     status="missing",
@@ -95,7 +110,7 @@ def score_runs(runs: list[Path], method: str) -> list[dict[str, Any]]:
                 try:
                     verify_prepared(run)
                     if method == "llm":
-                        verify_files(run, read_json(marker)["files"])
+                        verify_files(artifact_run, read_json(marker)["files"])
                     metrics = evaluate_payload(run, read_json(path), semantic=method == "llm")
                     write_json(
                         run / "evaluation/gold_catalog.json",
@@ -109,7 +124,8 @@ def score_runs(runs: list[Path], method: str) -> list[dict[str, Any]]:
                     )
                 except (ValueError, OSError, KeyError, TypeError) as exc:
                     row.update(status="invalid", reason=str(exc), metrics=unscored_metrics())
-            write_json(run / "evaluation" / f"{method}_{index}.json", row)
+            evaluation_root = artifact_run if method == "llm" else run
+            write_json(evaluation_root / "evaluation" / f"{method}_{index}.json", row)
             rows.append(row)
     return rows
 
@@ -137,6 +153,14 @@ SUMMARY_METRICS = (
 )
 
 
+def summary_metric_value(metrics: dict[str, Any], metric: str) -> Any:
+    """Read one summary metric from the canonical nested metrics payload."""
+    if metric == "adl_macro_f1":
+        adl = metrics.get("adl")
+        return adl.get("macro_f1") if isinstance(adl, dict) else None
+    return metrics[metric]
+
+
 def aggregate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
@@ -161,6 +185,14 @@ def aggregate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "invalid_runs": sum(item["status"] == "invalid" for item in items),
             "expected_seeds": len(by_seed),
             "complete_seeds": len(complete_seeds),
+            "model": next(
+                (item.get("model") for item in items if item.get("model")),
+                None,
+            ),
+            "provider": next(
+                (item.get("provider") for item in items if item.get("provider")),
+                None,
+            ),
         }
         fragmentation_statuses = {
             item["metrics"]["fragmentation_status"]
@@ -180,11 +212,7 @@ def aggregate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 scores = []
                 for value in values:
                     metrics = value["metrics"]
-                    score = (
-                        (metrics["adl"] or {}).get("macro_f1")
-                        if metric == "adl_macro_f1"
-                        else metrics[metric]
-                    )
+                    score = summary_metric_value(metrics, metric)
                     if score is not None:
                         scores.append(score)
                 if len(scores) == len(values):
@@ -210,6 +238,8 @@ def write_summary(output: Path, rows: list[dict[str, Any]]) -> None:
         "missing",
         "invalid",
         "reason",
+        "model",
+        "provider",
         *SUMMARY_METRICS,
         "num_emitted_potential_fragments",
         "fragmentation_status",
@@ -236,7 +266,11 @@ def write_summary(output: Path, rows: list[dict[str, Any]]) -> None:
                     "missing": int(row["status"] == "missing"),
                     "invalid": int(row["status"] == "invalid"),
                     "reason": row.get("reason"),
-                    **{field: metrics.get(field) for field in detail_fields if field in metrics},
+                    **{
+                        field: summary_metric_value(metrics, field)
+                        for field in detail_fields
+                        if field == "adl_macro_f1" or field in metrics
+                    },
                 }
             )
     if summaries:

@@ -264,7 +264,8 @@ ADLを推測しないためADL指標はnullです。既存研究の頻度baselin
 集計stemが `evaluation9_summary` の場合、JSONはrun詳細とcondition/method集計、
 `evaluation9_summary_runs.csv` はseed・LLM run詳細、`evaluation9_summary.csv` はcondition/method
 集計です。詳細にはstatus（complete/missing/invalid）、TP/FP/FN、precision/recall/F1、gold・抽出件数、
-potential/emitted fragment件数、fragmentation rate/statusを保存します。集計は各seed内でLLM runを
+potential/emitted fragment件数、fragmentation rate/status、LLMの`adl_macro_f1`を保存します。
+`adl_macro_f1`はJSONの`metrics.adl.macro_f1`と同じ値で、ADL意味評価を行わないfrequencyではnullです。集計は各seed内でLLM runを
 平均してからseed間の平均・標本標準偏差を計算し、欠落/invalid runのあるseedを主集計から除外します。
 missing/invalid runの採点値は0ではなくnull、fragmentation statusは`not_evaluated`です。
 
@@ -272,6 +273,14 @@ missing/invalid runの採点値は0ではなくnull、fragmentation statusは`no
 出力先を使います。途中失敗した生成/準備ディレクトリを黙って削除・上書きしません。
 LLMは同一入力・同一snapshotの時間帯checkpointから再開し、完了した反復は再課金せず
 スキップします。シミュレーションのseed再現性と、外部LLM応答の非決定性は別です。
+
+## train期間感度プロトコル
+
+`noise_free_duration.yaml`は本実験と同じ6条件・3seed・モデル設定で28日train + 7日test、合計35日をraw生成する。`duration-generate`は各condition × seedのSimulationEngineを1回だけ実行し、Day 29〜35を共通testとする3/7/14/28日の末尾train windowを派生する。windowは独自の`experiment.json`、`run.json`、入力slice、raw marker hashを持ち、simulationディレクトリは複製しない。
+
+prepareは各windowの`input/train.txt`だけから状態表・networkを作り、当該windowのtrain+共通testセンサ列だけを固定表へ写像する。truthもwindow範囲へ限定し、canonical catalogはwindowごとにtrain episodeだけから再作成する。test開始・終了は全windowで同一で、trainとは重複しない。prepared hashとLLM request fingerprintはwindowディレクトリ別であるため、異なるtrain期間のcheckpointを再利用しない。
+
+期間集計も通常評価と同じくLLM反復→seed内平均→seed間平均・標本標準偏差の順で行う。`overall`は同じseed内で6 conditionを平均してからseed間集計する。7日差分は共通seedを対応づけた「各期間の値 − 7日値」（相対変化率ではない差分）である。canonical goldはtrain期間ごとに変わり得るのでexact-match F1だけを同一母集団のように解釈せず、ADL macro-F1、test target episode coverage、test-visible catalog recallを併記する。
 
 ## 既知の制約
 

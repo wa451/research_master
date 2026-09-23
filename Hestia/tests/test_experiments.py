@@ -5,6 +5,7 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -14,13 +15,21 @@ from smart_home_sim.cli import app
 from smart_home_sim.engine import SimulationEngine, hash_output_directory
 from smart_home_sim.experiments.artifacts import (
     activity_truth,
+    file_hash,
     generate,
     read_json,
     select_runs,
     tree_hashes,
     write_json,
 )
+from smart_home_sim.experiments.duration import (
+    DEFAULT_TRAIN_DAYS,
+    aggregate_duration,
+    generate_duration,
+    write_duration_summary,
+)
 from smart_home_sim.experiments.evaluation import (
+    SUMMARY_METRICS,
     aggregate,
     frequency_baseline,
     score_runs,
@@ -142,6 +151,153 @@ def test_full_evaluation_plan_has_only_base_and_large_variability() -> None:
     controlled = load_plan(examples / "controlled_gold_pilot.yaml")
     assert (controlled.train_days, controlled.test_days, controlled.seeds) == (2, 2, [11])
     assert [condition.id for condition in controlled.conditions] == ["compact_controlled"]
+
+
+def test_duration_plan_changes_only_generation_duration() -> None:
+    examples = Path(__file__).resolve().parents[1] / "examples/experiments"
+    regular = load_plan(examples / "noise_free.yaml")
+    duration = load_plan(examples / "noise_free_duration.yaml")
+    payload = regular.model_dump(mode="json")
+    payload.update(train_days=28, test_days=7)
+    assert duration.model_dump(mode="json") == payload
+
+
+def test_duration_windows_share_raw_log_and_fixed_test(tmp_path: Path) -> None:
+    plan = ExperimentPlan(
+        train_days=28,
+        test_days=7,
+        seeds=[11],
+        llm_runs=1,
+        conditions=[Condition(id="compact_base", house="compact")],
+    )
+    runs = generate_duration(plan, tmp_path, list(DEFAULT_TRAIN_DAYS))
+    assert len(runs) == 4
+    assert len(list((tmp_path / "raw").glob("runs/*/seed_*/simulation/events.csv"))) == 1
+    common_test: list[str] | None = None
+    raw_hashes = set()
+    expected_test_start = plan.start_datetime + timedelta(days=28)
+    expected_end = expected_test_start + timedelta(days=7)
+    for days, run in zip(DEFAULT_TRAIN_DAYS, runs, strict=True):
+        settings = read_json(run / "run.json")["plan"]
+        start = datetime.fromisoformat(settings["start_datetime"])
+        split = start + timedelta(days=settings["train_days"])
+        end = split + timedelta(days=settings["test_days"])
+        assert settings["train_days"] == days
+        assert split == expected_test_start
+        assert end == expected_end
+        assert (split - start).days == days
+        assert not (run / "simulation").exists()
+        train_lines = (run / "input/train.txt").read_text(encoding="utf-8").splitlines()
+        sensor_lines = (run / "input/sensors.txt").read_text(encoding="utf-8").splitlines()
+        train_times = [
+            datetime.fromisoformat("T".join(line.split()[:2])).replace(tzinfo=start.tzinfo)
+            for line in train_lines
+        ]
+        assert train_times and min(train_times) >= start and max(train_times) < split
+        test_lines = [
+            line
+            for line in sensor_lines
+            if datetime.fromisoformat("T".join(line.split()[:2])).replace(tzinfo=start.tzinfo)
+            >= split
+        ]
+        common_test = test_lines if common_test is None else common_test
+        assert test_lines == common_test
+        source = read_json(run / "duration_source.json")
+        raw_hashes.add(source["raw_generated_sha256"])
+        assert source["train_days"] == days
+        assert all(
+            start <= datetime.fromisoformat(item["start"])
+            and datetime.fromisoformat(item["end"]) <= end
+            for item in read_json(run / "truth/target_episodes.json")
+        )
+    assert len(raw_hashes) == 1
+    assert (
+        len({read_json(run / "generated.json")["duration_source"]["train_days"] for run in runs})
+        == 4
+    )
+    assert len({file_hash(run / "generated.json") for run in runs}) == 4
+
+
+def test_duration_aggregation_is_seed_paired_and_writes_contract(tmp_path: Path) -> None:
+    rows = []
+    for days in DEFAULT_TRAIN_DAYS:
+        for seed in (11, 22):
+            for run_id in (1, 2):
+                metrics: dict[str, Any] = dict.fromkeys(SUMMARY_METRICS)
+                metrics.update(
+                    f1=days / 28 + seed / 1000 + run_id / 10000,
+                    test_target_episode_coverage=days / 35,
+                    test_visible_catalog_recall=days / 35,
+                    adl={"macro_f1": days / 35 + seed / 1000},
+                )
+                rows.append(
+                    {
+                        "train_days": days,
+                        "test_days": 7,
+                        "condition": "compact_base",
+                        "seed": seed,
+                        "method": "llm",
+                        "model": "fixed-model",
+                        "run_id": run_id,
+                        "status": "complete",
+                        "metrics": metrics,
+                    }
+                )
+    summaries = aggregate_duration(rows)
+    assert {row["condition"] for row in summaries} == {"overall", "compact_base"}
+    fourteen = next(
+        row for row in summaries if row["condition"] == "compact_base" and row["train_days"] == 14
+    )
+    assert fourteen["f1_delta_vs_7d_mean"] == pytest.approx(0.25)
+    assert fourteen["f1_delta_vs_7d_n_seeds"] == 2
+    assert fourteen["expected_runs"] == 4
+    assert fourteen["_n_seeds"] == 2
+    write_duration_summary(tmp_path, rows)
+    assert (tmp_path / "evaluation9_duration_summary.csv").is_file()
+    assert (tmp_path / "evaluation9_duration_summary_runs.csv").is_file()
+    assert (tmp_path / "evaluation9_duration_summary.json").is_file()
+    with (tmp_path / "evaluation9_duration_summary.csv").open(
+        encoding="utf-8", newline=""
+    ) as stream:
+        summary_fields = set(next(csv.DictReader(stream)).keys())
+    assert {
+        "train_days",
+        "test_days",
+        "condition",
+        "method",
+        "model",
+        "expected_runs",
+        "complete_runs",
+        "missing_runs",
+        "invalid_runs",
+        "_n_seeds",
+        "f1_mean",
+        "f1_std",
+        "f1_delta_vs_7d_mean",
+        "f1_delta_vs_7d_std",
+        "f1_delta_vs_7d_n_seeds",
+    } <= summary_fields
+    with (tmp_path / "evaluation9_duration_summary_runs.csv").open(
+        encoding="utf-8", newline=""
+    ) as stream:
+        run_fields = set(next(csv.DictReader(stream)).keys())
+    assert {
+        "train_days",
+        "test_days",
+        "condition",
+        "seed",
+        "method",
+        "model",
+        "status",
+        "complete",
+        "missing",
+        "invalid",
+        "adl_macro_f1",
+    } <= run_fields
+    for metric in ("adl_macro_f1", "test_target_episode_coverage", "f1"):
+        chart = tmp_path / f"evaluation9_duration_{metric}.svg"
+        assert chart.is_file()
+        assert chart.read_text(encoding="utf-8").startswith("<svg")
 
 
 @pytest.mark.parametrize(
@@ -632,6 +788,50 @@ def test_summary_writes_aggregate_and_run_status_contract(tmp_path: Path) -> Non
     assert "precision_mean" in summary
     payload = read_json(output.with_suffix(".json"))
     assert {row["status"] for row in payload["runs"]} == {"complete", "missing"}
+
+
+def test_adl_macro_f1_matches_across_json_summary_and_run_csv(tmp_path: Path) -> None:
+    run = controlled_gold_run(tmp_path / "run")
+    llm_metrics = evaluate_payload(run, [], semantic=True)
+    llm_metrics["adl"]["macro_f1"] = 0.123
+    frequency_metrics = evaluate_payload(run, [], semantic=False)
+    rows = [
+        {
+            "condition": "controlled",
+            "seed": 11,
+            "method": "llm",
+            "run_id": 1,
+            "status": "complete",
+            "metrics": llm_metrics,
+        },
+        {
+            "condition": "controlled",
+            "seed": 11,
+            "method": "frequency",
+            "run_id": 1,
+            "status": "complete",
+            "metrics": frequency_metrics,
+        },
+    ]
+    output = tmp_path / "results/evaluation9_summary"
+    write_summary(output, rows)
+
+    with output.with_name("evaluation9_summary_runs.csv").open(newline="") as stream:
+        detail_by_method = {row["method"]: row for row in csv.DictReader(stream)}
+    with output.with_suffix(".csv").open(newline="") as stream:
+        summary_by_method = {row["method"]: row for row in csv.DictReader(stream)}
+    payload = read_json(output.with_suffix(".json"))
+    json_run_by_method = {row["method"]: row for row in payload["runs"]}
+    json_summary_by_method = {row["method"]: row for row in payload["summary"]}
+
+    assert detail_by_method["llm"]["adl_macro_f1"] == "0.123"
+    assert summary_by_method["llm"]["adl_macro_f1_mean"] == "0.123"
+    assert json_run_by_method["llm"]["metrics"]["adl"]["macro_f1"] == 0.123
+    assert json_summary_by_method["llm"]["adl_macro_f1_mean"] == 0.123
+    assert detail_by_method["frequency"]["adl_macro_f1"] == ""
+    assert summary_by_method["frequency"]["adl_macro_f1_mean"] == ""
+    assert json_run_by_method["frequency"]["metrics"]["adl"] is None
+    assert json_summary_by_method["frequency"]["adl_macro_f1_mean"] is None
 
 
 def test_extract_cli_defaults_to_no_api(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

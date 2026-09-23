@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Evaluation 9: staged synthetic-log recovery and ADL evaluation."""
+"""Evaluation 9 train-duration sensitivity with one shared 35-day raw log."""
 
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import shlex
 import subprocess
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -15,11 +15,13 @@ if str(ROOT) not in sys.path:
 
 from experiment_config import current_model_identity, current_model_results_root
 
-from src.behavior_pattern_mining.evaluation.evaluation9_hestia import (
+from src.behavior_pattern_mining.evaluation.evaluation9_duration import (
+    DEFAULT_TRAIN_DAYS,
     STAGES,
-    build_commands,
-    execute,
+    build_duration_commands,
+    parse_train_days,
 )
+from src.behavior_pattern_mining.evaluation.evaluation9_hestia import execute
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -27,30 +29,25 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--stage", choices=STAGES, default="run")
     parser.add_argument("--hestia-root", type=Path, default=Path("Hestia"))
     parser.add_argument(
-        "--plan", type=Path, help="JSON/YAML plan; default: Hestia noise-free pilot"
+        "--plan",
+        type=Path,
+        default=Path("Hestia/examples/experiments/noise_free_duration.yaml"),
     )
     parser.add_argument(
-        "--experiment", type=Path, default=Path("output/9_hestia/pilot")
+        "--experiment", type=Path, default=Path("output/9_hestia/duration")
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
         default=None,
-        help="Summary/LLM output; default: results/<model>/9_hestia/pilot",
+        help="Summary/LLM output; default: results/<model>/9_hestia/duration",
     )
+    parser.add_argument("--train-days", default=",".join(map(str, DEFAULT_TRAIN_DAYS)))
     parser.add_argument(
         "--method", choices=("frequency", "llm", "both"), default="both"
     )
-    parser.add_argument(
-        "--allow-api",
-        action="store_true",
-        help="Permit paid LLM calls during extract/run",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print commands without executing or writing",
-    )
+    parser.add_argument("--allow-api", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -58,13 +55,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
         identity = current_model_identity()
-        output_dir = args.output_dir or current_model_results_root() / "9_hestia/pilot"
-        commands = build_commands(
+        output_dir = args.output_dir or current_model_results_root() / "9_hestia/duration"
+        commands = build_duration_commands(
             stage=args.stage,
             hestia_root=args.hestia_root,
-            plan=args.plan,
             experiment=args.experiment,
+            plan=args.plan,
             output_dir=output_dir,
+            train_days=parse_train_days(args.train_days),
             method=args.method,
             allow_api=args.allow_api,
             model_id=identity.model_id,
@@ -75,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
             execute(commands, args.hestia_root)
     except subprocess.CalledProcessError as exc:
         return exc.returncode
-    except (ValueError, OSError) as exc:
+    except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
     return 0

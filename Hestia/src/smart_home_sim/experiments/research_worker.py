@@ -21,6 +21,7 @@ def main() -> None:
     parser.add_argument("--research-root", type=Path, required=True)
     parser.add_argument("--run", type=Path, required=True)
     parser.add_argument("--run-id", type=int, default=1)
+    parser.add_argument("--llm-output-dir", type=Path, default=None)
     args = parser.parse_args()
     sys.path.insert(0, str(args.research_root))
     from experiment_config import SAMPLING_INTERVAL, TIME_MODES  # type: ignore
@@ -129,7 +130,7 @@ def main() -> None:
         pattern_extractor.main(
             days=plan["train_days"],
             input_modes_dir=analysis / "networks",
-            output_dir=args.run / "predictions/llm",
+            output_dir=args.llm_output_dir or args.run / "predictions/llm",
             run_ids=[args.run_id],
             n_states=plan["n_states"],
             hamming_threshold=plan["hamming_threshold"],
