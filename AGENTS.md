@@ -39,3 +39,7 @@
 
 - Run focused syntax/import checks, safe relevant `--help` commands, and the narrowest applicable tests. For evaluation changes, also verify output headers/keys and deterministic behavior where applicable.
 - Inspect the diff for unrelated edits. Report changed files, checks, research/compatibility impact, unresolved conflicts and unverified behavior.
+
+## Git
+
+- When any repository file is modified, finish the task by creating focused Git commit(s). Split independent changes by purpose, verify the staged diff before each commit, and include the relevant tests and documentation in the same commit.
