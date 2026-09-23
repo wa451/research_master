@@ -6,6 +6,7 @@
 |---|---|
 | 実装・テスト・仕様への最短経路 | [CODEBASE_MAP.md](CODEBASE_MAP.md) |
 | 評価ごとの文書・CLI・実装・テスト | [EVALUATION_ROUTES.md](EVALUATION_ROUTES.md) の該当節のみ |
+| 評価4〜10をAIへ説明・引継ぎする | [evaluations/README.md](evaluations/README.md) |
 | 採用済みの実装上の判断 | [DECISIONS.md](DECISIONS.md) |
 | 研究上の不一致への入口 | [KNOWN_ISSUES.md](KNOWN_ISSUES.md) |
 | 前回の作業を再開するときだけ | [CURRENT_STATE.md](CURRENT_STATE.md) |

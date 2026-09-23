@@ -26,49 +26,49 @@
 
 ## eval4 ADL区間・検出指標
 
-- 文書: [評価4](../docs/evaluations/evaluation_4_labeled_casas_adl.md)。
+- 文書: [評価4](../docs/evaluations/evaluation_4_labeled_casas_adl.md)、AI説明: [eval4](evaluations/eval4_adl_interval.md)。
 - 入口/実装: [evaluate_adl_labels.py](../scripts/evaluate_adl_labels.py) → [adl.py](../src/behavior_pattern_mining/evaluation/adl.py)。
 - テスト: [test_adl_evaluation.py](../tests/test_adl_evaluation.py)。
 - 注意: KI-06/07。状態系列生成は後続評価も利用する。
 
 ## eval5 有用性・断片化・無文脈
 
-- 文書: [評価5](../docs/evaluations/evaluation_5_adl_correspondence.md)。
+- 文書: [評価5](../docs/evaluations/evaluation_5_adl_correspondence.md)、AI説明: [eval5](evaluations/eval5_pattern_quality.md)。
 - 入口/実装: [evaluate_adl_correspondence.py](../scripts/evaluate_adl_correspondence.py)（cache・run集計も保持） → [adl_correspondence.py](../src/behavior_pattern_mining/evaluation/adl_correspondence.py)（FP-Growth/遷移baseline生成も保持）。
 - テスト: [test_adl_correspondence.py](../tests/test_adl_correspondence.py)。
 - 注意: low-informationは診断専用。旧引数・空列互換とpair=0の解釈は [DECISIONS](DECISIONS.md)。
 
 ## eval6 ADL解釈ラベル集合・LLM使用量
 
-- 文書: [評価6](../docs/evaluations/evaluation_6_adl_interpretation_set.md)。
+- 文書: [評価6](../docs/evaluations/evaluation_6_adl_interpretation_set.md)、AI説明: [eval6](evaluations/eval6_adl_label_sets.md)。
 - 入口/実装: [evaluate_6_compare_adl_interpretation_set.py](../scripts/evaluate_6_compare_adl_interpretation_set.py)（run集計も保持） → [adl_interpretation_set.py](../src/behavior_pattern_mining/evaluation/adl_interpretation_set.py)、[llm_usage.py](../src/behavior_pattern_mining/evaluation/llm_usage.py)。
 - テスト: [test_evaluation6_adl_interpretation_set.py](../tests/test_evaluation6_adl_interpretation_set.py)、[test_evaluation6_default_days.py](../tests/test_evaluation6_default_days.py)。
 - 注意: KI-06/08/09。ラベル集合指標はeval7/8も利用し、details CSVはeval8の入力。
 
 ## eval7 K/h探索・上位条件の追加run
 
-- 文書: [評価7](../docs/evaluations/evaluation_7_parameter_sensitivity_adl_interpretation.md)。
+- 文書: [評価7](../docs/evaluations/evaluation_7_parameter_sensitivity_adl_interpretation.md)、AI説明: [eval7](evaluations/eval7_parameter_sensitivity.md)。
 - 入口/実装: [evaluate_7_parameter_sensitivity_adl_interpretation.py](../scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py)、[run_evaluation7_top_condition_repeats.py](../scripts/run_evaluation7_top_condition_repeats.py) → [evaluation7_staged.py](../src/behavior_pattern_mining/evaluation/evaluation7_staged.py)、eval6の集合指標。
 - テスト: [test_evaluation7_parameter_sensitivity.py](../tests/test_evaluation7_parameter_sensitivity.py)、[test_evaluation7_staged_workflow.py](../tests/test_evaluation7_staged_workflow.py)（Web配線も含む）。
 - 注意: KI-06。初回探索→選抜→追加run→最終集計の順序とmanifestを保持。
 
 ## eval8 頻度層別ADL整合性
 
-- 文書: [評価8](../docs/evaluations/evaluation_8_frequency_stratified_adl_consistency.md)。
+- 文書: [評価8](../docs/evaluations/evaluation_8_frequency_stratified_adl_consistency.md)、AI説明: [eval8](evaluations/eval8_frequency_stratified.md)。
 - 入口/実装: [evaluate_8_frequency_stratified_adl_consistency.py](../scripts/evaluate_8_frequency_stratified_adl_consistency.py) 内に集計本体。`attach_own_id_occurrences` / `occurrence_weight_validation`、eval6の集合指標。
 - テスト: [test_evaluation8_frequency_stratified.py](../tests/test_evaluation8_frequency_stratified.py)（Web配線も含む）。
 - 注意: KI-10。own-ID→物理区間一意化→ID間所有権の対策は [KNOWN_ISSUES](KNOWN_ISSUES.md)。系列fallbackを復活させない。
 
 ## eval9 Hestia合成ログ
 
-- 文書: [評価9](../docs/evaluations/evaluation_9_hestia.md)。
+- 文書: [評価9](../docs/evaluations/evaluation_9_hestia.md)、AI説明: [eval9](evaluations/eval9_hestia.md)。
 - 入口/実装: [evaluate_9_hestia.py](../scripts/evaluate_9_hestia.py) → [evaluation9_hestia.py](../src/behavior_pattern_mining/evaluation/evaluation9_hestia.py) → 独立repo `Hestia/` のexperiment CLI（別uv環境）。指標を親側に再実装しない。
 - テスト: [test_evaluation9_hestia.py](../tests/test_evaluation9_hestia.py)（CLI・Web配線、外部repoの全実験は保証しない）。
 - 注意: Webの `build_evaluation9_steps` / `render_eval9_settings`、`verify_on_batch` で既存出力もCLIへhash検証を委譲。APIはopt-in。
 
 ## eval10 SwitchBot実宅ログ
 
-- 文書: [評価10](../docs/evaluations/evaluation_10_switchbot_holdout.md)、入力連携は [SwitchBot Logger](../docs/integrations/switchbot_logger.md)。
+- 文書: [評価10](../docs/evaluations/evaluation_10_switchbot_holdout.md)、AI説明: [eval10](evaluations/eval10_switchbot_holdout.md)、入力連携は [SwitchBot Logger](../docs/integrations/switchbot_logger.md)。
 - 入口/実装: [evaluate_10_switchbot.py](../scripts/evaluate_10_switchbot.py) → [evaluation10_switchbot.py](../src/behavior_pattern_mining/evaluation/evaluation10_switchbot.py)。trainだけで代表状態・候補を作り、固定写像したtestの再出現を採点する。
 - テスト: [test_evaluation10_switchbot.py](../tests/test_evaluation10_switchbot.py)（入力hash、test-onlyセンサー、CSV/JSON契約、CLI・Web配線）。
 - 注意: 正解ADLなし。再出現診断をPrecision/Recallと呼ばない。入力・中間・結果はGit管理外で、LLM APIはopt-in。
