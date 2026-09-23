@@ -18,9 +18,13 @@
    - ラベル付きCASAS: `new_labeled_data/aruba.txt`
    - センサー対応: `configs/aruba_sensor_map.json`
 
-3. LLM処理を行う場合だけ、リポジトリ直下の `.env` に `GEMINI_API_KEY` を設定する。APIキーと生データはGitへ追加しない。
+3. LLM処理を行う場合だけ、リポジトリ直下の `.env` でproviderを選ぶ。Geminiは `LLM_PROVIDER=google_gemini` と `GEMINI_API_KEY`、Bedrockは `LLM_PROVIDER=bedrock`、`AWS_REGION`、`BEDROCK_MODEL_ID` を設定する。BedrockのAWS認証情報は `.env` やソースコードへ書かず、`aws configure`、`AWS_PROFILE`、IAMロール等の標準credential chainを使う。詳細はリポジトリREADMEを参照する。APIキーと生データはGitへ追加しない。
 
-4. 再実行前に、同じ条件名の `state/`, `picture/`, `output/`, `results/` が存在しないか確認する。既存成果物を消したり上書きしたりせず、必要なら別の出力先を使う。
+   LLM生成物と評価5〜10の結果はmodel IDから自動的に `results/<model>/` へ分離される。対応は `src/behavior_pattern_mining/llm/result_paths.py` の `MODEL_RESULT_NAMES` が正本であり、Claude Haiku 4.5、Claude Sonnet 4.6、GPT-5.6 Luna/Terra/Sol、Gemini 2.5 Proを短い固定名へ写像する。checkpointは同じモデル・同じ条件・同じrunだけで再利用され、異なるmodel IDでは共有されない。
+
+   Bedrockの実行前には `scripts/run_llm_extraction.py --run-ids <未生成run> --estimate-cost` で、推論を行わず未生成分の入力token数・想定出力・`maxTokens` 基準の最大側料金を確認できる。評価5〜10を既存checkpointなしで完全再実行する費用は `scripts/estimate_evaluation_costs.py --run-ids 5 6 7 8 9 10` で一括確認し、`output/cost_estimates/` のCSV/JSONへ保存する。評価9は通常本実験に加えて `output/9_hestia/duration/duration.json` に列挙された全train期間windowを含む。複数model IDは `--models <ID...>` で指定し、modelごとに独立したCountTokensと単価を使う。比較TOTALは `model_comparison_summary.csv` にも保存する。この専用見積もりはcheckpointをread-onlyのまま無視し、Converseを呼ばない。料金単価は `configs/llm_pricing.json` の研究用設定であり、実験時点のAWS料金と一致することを確認する。
+
+4. 再実行前に、同じ条件名の `state/`, `picture/`, `output/`, `results/<model>/` が存在しないか確認する。既存成果物を消したり上書きしたりせず、同一モデルのcheckpoint再開か新規条件かを確認する。
 
 ## 2. 共通の処理順序
 
@@ -111,9 +115,10 @@ uv run python scripts/run_all.py
 | 遷移図 | `picture/aruba_{K}_{h}_{days}days/state_transition_*.png`, `.eps` |
 | timeline | `picture/aruba_{K}_{h}_{days}days/timeline_*.png` |
 | 通常baseline | `output/aruba_{K}_{h}_{days}days/{prob_threshold_sequences,state_sequence_counts}_*.json` |
-| 提案手法 | `output/aruba_{K}_{h}_{days}days/llm_sequences_modes_*_{run}.json` |
-| direct-log | 明示条件時は `output/llm_direct_{K}_{h}_{days}days/{run}.json`、無引数の共通既定日数では互換形式 `output/llm_direct_{days}/{run}.json` |
-| 後段評価 | `results/{evaluation-specific directory}/` |
+| 提案手法 | `results/<model>/aruba_{K}_{h}_{days}days/llm_sequences_modes_*_{run}.json` |
+| 提案手法checkpoint/usage | `results/<model>/aruba_{K}_{h}_{days}days/{llm_mode_records_run*,llm_modes_metrics*}` |
+| direct-log | 明示条件時は `results/<model>/llm_direct_{K}_{h}_{days}days/{run}.json`、無引数の共通既定日数では互換suffixをモデル配下で維持 |
+| 後段評価 | `results/<model>/{evaluation-specific directory}/` |
 
 成果物の保存方針は [artifact_policy.md](artifact_policy.md) を参照する。ファイル名やCSV/JSON schemaを文書整理のために変更しない。
 
