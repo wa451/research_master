@@ -5,7 +5,7 @@ description: Change comparison baseline extraction, filtering, algorithms, or fa
 
 # Baseline Implementation
 
-- Use the baseline row in [CODEBASE_MAP.md](../../../docs/codex_memory/CODEBASE_MAP.md) and the consuming [evaluation route](../../../docs/codex_memory/EVALUATION_ROUTES.md). FP-Growth/ADL baselines live in the evaluation package, outside the baseline directory.
+- Use the baseline row in [CODEBASE_MAP.md](../../../ai/CODEBASE_MAP.md) and the consuming [evaluation route](../../../ai/EVALUATION_ROUTES.md). FP-Growth/ADL baselines live in the evaluation package, outside the baseline directory.
 - Read the consuming evaluation document, relevant [known issues](../../../docs/research/known_issues.md), producer, consumer, CLI and focused tests. Compare nearby implementations only when needed.
 - Establish period, split, state settings, sequence constraints, method ID, record shape and failure handling. Preserve compatibility; use the compared methods' inputs/split unless the research specification differs.
 - Put reusable extraction/filtering outside the CLI. Prevent test labels from influencing generation, thresholds, filtering, caches or train-side label assignment. Expose meaningful thresholds as CLI arguments and record them in the existing summary convention.

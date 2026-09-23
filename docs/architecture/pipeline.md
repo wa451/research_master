@@ -1,5 +1,7 @@
 # Pipeline
 
+この文書は、[研究の概要](../overview.md)で説明した処理を、入出力と実装の対応まで掘り下げるための技術的な説明です。初めて読む場合は、先に概要の用語表と流れを確認してください。
+
 ## 1. Raw sensor log loading
 
 - 入力: `data/{DATASET_NAME}.csv`

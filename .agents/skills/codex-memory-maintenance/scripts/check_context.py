@@ -51,7 +51,7 @@ def anchors(text: str) -> set[str]:
 def check(root: Path, stats: bool = False) -> int:
     root = root.resolve()
     files = [root / "AGENTS.md"]
-    files += sorted((root / "docs/codex_memory").glob("*.md"))
+    files += sorted((root / "ai").glob("*.md"))
     files += sorted((root / ".agents/skills").glob("*/SKILL.md"))
     errors, checked_links, warnings = [], 0, 0
     for path in files:

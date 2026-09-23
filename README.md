@@ -2,7 +2,7 @@
 
 スマートホームのセンサログから代表状態と状態遷移ネットワークを構築し、LLMによる生活行動系列の抽出、ベースライン比較、ADLラベルを用いた評価を行う研究コードです。
 
-文書の分類は [docs/README.md](docs/README.md) を入口にしてください。処理の全体像は [docs/architecture/pipeline.md](docs/architecture/pipeline.md)、実装の責務は [docs/architecture/code_inventory.md](docs/architecture/code_inventory.md)、再現手順は [docs/operations/experiment_reproduction.md](docs/operations/experiment_reproduction.md) を参照してください。研究判断が未確定の挙動は [docs/research/known_issues.md](docs/research/known_issues.md) に分離しています。
+初めて内容を読む方は、用語と研究の流れを説明した[研究の概要](docs/overview.md)から始めてください。人向け文書とAI向け内部索引の区分は[文書案内](docs/README.md)にあります。処理の全体像は [docs/architecture/pipeline.md](docs/architecture/pipeline.md)、実装の責務は [docs/architecture/code_inventory.md](docs/architecture/code_inventory.md)、再現手順は [docs/operations/experiment_reproduction.md](docs/operations/experiment_reproduction.md) を参照してください。研究判断が未確定の挙動は [docs/research/known_issues.md](docs/research/known_issues.md) に分離しています。
 
 ## セットアップ
 
