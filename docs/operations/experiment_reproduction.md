@@ -18,7 +18,7 @@
    - ラベル付きCASAS: `new_labeled_data/aruba.txt`
    - センサー対応: `configs/aruba_sensor_map.json`
 
-3. LLM処理を行う場合だけ、リポジトリ直下の `.env` でproviderを選ぶ。Geminiは `LLM_PROVIDER=google_gemini` と `GEMINI_API_KEY`、Bedrockは `LLM_PROVIDER=bedrock`、`AWS_REGION`、`BEDROCK_MODEL_ID` を設定する。BedrockのAWS認証情報は `.env` やソースコードへ書かず、`aws configure`、`AWS_PROFILE`、IAMロール等の標準credential chainを使う。詳細はリポジトリREADMEを参照する。APIキーと生データはGitへ追加しない。
+3. LLM処理を行う場合だけ、リポジトリ直下の `.env` でproviderを選ぶ。既定は `LLM_PROVIDER=bedrock` と `BEDROCK_MODEL_ID=us.openai.gpt-5.6-sol` である。Geminiは `LLM_PROVIDER=google_gemini` と `GEMINI_API_KEY`、Bedrockは `AWS_REGION`、`BEDROCK_MODEL_ID` を設定する。BedrockのAWS認証情報は `.env` やソースコードへ書かず、`aws configure`、`AWS_PROFILE`、IAMロール等の標準credential chainを使う。詳細はリポジトリREADMEを参照する。APIキーと生データはGitへ追加しない。
 
    LLM生成物と評価5〜10の結果はmodel IDから自動的に `results/<model>/` へ分離される。対応は `src/behavior_pattern_mining/llm/result_paths.py` の `MODEL_RESULT_NAMES` が正本であり、Claude Haiku 4.5、Claude Sonnet 4.6、GPT-5.6 Luna/Terra/Sol、Gemini 2.5 Proを短い固定名へ写像する。checkpointは同じモデル・同じ条件・同じrunだけで再利用され、異なるmodel IDでは共有されない。
 
@@ -117,6 +117,7 @@ uv run python scripts/run_all.py
 | 通常baseline | `output/aruba_{K}_{h}_{days}days/{prob_threshold_sequences,state_sequence_counts}_*.json` |
 | 提案手法 | `results/<model>/aruba_{K}_{h}_{days}days/llm_sequences_modes_*_{run}.json` |
 | 提案手法checkpoint/usage | `results/<model>/aruba_{K}_{h}_{days}days/{llm_mode_records_run*,llm_modes_metrics*}` |
+| API疎通・形式テスト | `results/<model>/api_smoke_tests/<condition>/<mode>_<timestamp>/{request.json,response_validation.json,raw_response.txt,parsed_records.json}`（論文評価には使用しない） |
 | direct-log | 明示条件時は `results/<model>/llm_direct_{K}_{h}_{days}days/{run}.json`、無引数の共通既定日数では互換suffixをモデル配下で維持 |
 | 後段評価 | `results/<model>/{evaluation-specific directory}/` |
 

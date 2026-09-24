@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import unittest
 from unittest.mock import Mock, patch
 
+from src.behavior_pattern_mining.config import get_config_value, load_config
 from src.behavior_pattern_mining.llm.client import (
     call_bedrock,
     call_llm,
@@ -12,6 +14,14 @@ from src.behavior_pattern_mining.llm.client import (
 
 
 class LlmClientTests(unittest.TestCase):
+    def test_default_config_uses_bedrock_gpt_sol(self) -> None:
+        config = load_config(Path(__file__).resolve().parents[1] / "configs" / "default.yaml")
+        self.assertEqual(get_config_value(config, "llm.provider"), "bedrock")
+        self.assertEqual(
+            get_config_value(config, "llm.bedrock.model_id"),
+            "us.openai.gpt-5.6-sol",
+        )
+
     def test_bedrock_settings_do_not_require_gemini_key(self) -> None:
         with patch.dict(
             os.environ,

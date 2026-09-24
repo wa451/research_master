@@ -134,6 +134,8 @@ macOSでは、リポジトリ直下の `start_dashboard.command` をダブルク
 4. 全28条件をrun 1--5で評価
    `scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py --days 14 --runs 5` を実行し、各条件の平均と標準偏差から最適条件を選びます。
 
+正式評価とは別に、画面下部の「API疎通・JSON形式テスト」では任意の正式K/h条件・1時間帯（既定: `K=15, hamming=0, Morning`）を選び、明示許可後に**実APIを1回だけ**呼び出せます。通常抽出と同じプロンプトとLLM adapterを使うが、retryやcheckpoint再利用は行わず、JSON配列・4必須キー・許可ADLラベル・系列長の厳密な契約を検証します。結果は `results/<model>/api_smoke_tests/` に分離され、評価7の入力・checkpoint・集計には使いません。
+
 主な出力は `evaluation7_condition_summary.csv`, `evaluation7_condition_summary_by_run.csv`, `evaluation7_pattern_set_details.csv`, `evaluation7_by_pred_label.csv`, `evaluation7_by_true_label.csv`, `evaluation7_by_time_band.csv`, `evaluation7_summary.json` です。
 
 Streamlit画面は正式条件（14日・全28条件・各5 run）を固定で表示する。一括実行の「不足ファイル生成 + 評価本体」は、条件ごとの不足runだけを生成して全条件を5回平均する。新しい結果は `results/<model>/7_param_search_14d_5runs/` に保存し、旧30日・二段階探索の成果物を上書きしない。

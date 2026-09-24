@@ -21,6 +21,7 @@
 results/
 └── <model>/
     ├── aruba_{K}_{h}_{days}days/       # 提案手法JSON、mode checkpoint、usage
+    ├── api_smoke_tests/                 # 1 API requestの疎通・JSON形式検証（論文評価外）
     ├── llm_direct_{K}_{h}_{days}days/  # direct-log JSON、usage
     ├── 5_pattern_quality_without_low_information_judgment/
     ├── 6_adl_match/

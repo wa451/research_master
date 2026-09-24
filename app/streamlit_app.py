@@ -22,6 +22,7 @@ from app.command_builder import (  # noqa: E402
     build_evaluation8_steps,
     build_evaluation9_steps,
     build_evaluation10_steps,
+    build_llm_response_smoke_test_step,
     command_preview,
     default_direct_path,
     default_proposed_path,
@@ -64,6 +65,7 @@ from app.utils import (  # noqa: E402
     file_status_rows,
     load_history,
     metric_columns,
+    now_stamp,
     run_command,
 )
 from experiment_config import (  # noqa: E402
@@ -820,6 +822,43 @@ def render_eval7_settings(common: dict) -> dict:
     skip_missing_conditions = st.checkbox("skip-missing-conditions", value=False)
     show_preparation_steps = st.checkbox("不足ファイル作成ステップを表示", value=True)
 
+    st.markdown("**API疎通・出力形式テスト（正式評価とは別）**")
+    st.caption(
+        "1条件 × 1 run × 1時間帯だけを送信するため、実APIリクエストは厳密に1回です。"
+        "通常の評価7成果物・checkpointは利用も更新もしません。"
+    )
+    smoke_col1, smoke_col2, smoke_col3 = st.columns(3)
+    with smoke_col1:
+        smoke_n_states = st.selectbox(
+            "テスト用 K",
+            list(FORMAL_EVALUATION7_N_STATES),
+            index=list(FORMAL_EVALUATION7_N_STATES).index(15),
+        )
+    with smoke_col2:
+        smoke_hamming = st.selectbox(
+            "テスト用 hamming",
+            list(FORMAL_EVALUATION7_HAMMING),
+            index=0,
+        )
+    with smoke_col3:
+        smoke_mode = st.selectbox("テスト用時間帯", ["Morning", "Daytime", "Night", "Midnight"])
+    smoke_output_dir = st.text_input(
+        "APIテスト出力ディレクトリ",
+        (
+            f"{model_results_relative(common)}/api_smoke_tests/"
+            f"aruba_{smoke_n_states}_{smoke_hamming}_{FORMAL_EVALUATION7_DAYS}days/"
+            f"{smoke_mode}_{now_stamp()}"
+        ),
+        key=(
+            f"eval7_smoke_output_{common['model_id']}_{smoke_n_states}_"
+            f"{smoke_hamming}_{smoke_mode}"
+        ),
+    )
+    smoke_test_allow_api = st.checkbox(
+        "APIテストの1リクエストを許可（費用が発生します）",
+        value=False,
+    )
+
     st.markdown("**出力**")
     output_dir = st.text_input(
         "output-dir",
@@ -851,6 +890,12 @@ def render_eval7_settings(common: dict) -> dict:
         "skip_missing_runs": skip_missing_runs,
         "skip_missing_conditions": skip_missing_conditions,
         "show_preparation_steps": show_preparation_steps,
+        "smoke_test_days": FORMAL_EVALUATION7_DAYS,
+        "smoke_test_n_states": int(smoke_n_states),
+        "smoke_test_hamming_threshold": int(smoke_hamming),
+        "smoke_test_mode": smoke_mode,
+        "smoke_test_output_dir": smoke_output_dir,
+        "smoke_test_allow_api": smoke_test_allow_api,
     }
 
 
@@ -1358,6 +1403,32 @@ def render_step(step: EvaluationStep, settings: dict) -> None:
                 st.text_area("ログ末尾", result.output[-8000:], height=260)
 
 
+def render_eval7_llm_response_smoke_test(settings: dict) -> None:
+    """Render the separately opted-in, one-request LLM response check."""
+    st.markdown("### API疎通・JSON形式テスト")
+    step = build_llm_response_smoke_test_step(settings)
+    st.warning(
+        "このテストは評価7の全28条件・各5 runには含めません。"
+        "指定した1時間帯に対して実APIを1回だけ呼びます。"
+    )
+    if not settings["smoke_test_allow_api"]:
+        st.info(
+            "API許可OFF: コマンドは実行できません。上のチェックボックスで1リクエストを明示許可してください。"
+        )
+        st.code(command_preview(step.command), language="bash")
+        return
+
+    render_step(step, settings)
+    validation_path = step.expected_outputs[0]
+    if validation_path.exists():
+        try:
+            validation = json.loads(validation_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        st.markdown("**直近の形式検証結果**")
+        st.json(validation)
+
+
 FINAL_EVALUATION_STEP_IDS = {
     "eval4_evaluate",
     "eval5_evaluate",
@@ -1720,7 +1791,10 @@ def default_result_dirs(settings: dict) -> list[Path]:
     if evaluation == "評価5":
         return [PROJECT_ROOT / settings["output_dir"]]
     if evaluation == "評価7":
-        return [PROJECT_ROOT / settings["output_dir"]]
+        return [
+            PROJECT_ROOT / settings["output_dir"],
+            PROJECT_ROOT / settings["smoke_test_output_dir"],
+        ]
     if evaluation in ("評価8", "評価9"):
         return [PROJECT_ROOT / settings["output_dir"]]
     if evaluation == "評価10":
@@ -1769,6 +1843,8 @@ def main() -> None:
         )
         st.markdown("### ステップ")
         render_batch_runner(steps, settings)
+        if common["evaluation"] == "評価7":
+            render_eval7_llm_response_smoke_test(settings)
         for step in steps:
             render_step(step, settings)
 

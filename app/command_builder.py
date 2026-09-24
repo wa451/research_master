@@ -946,6 +946,45 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     return steps
 
 
+def build_llm_response_smoke_test_step(settings: dict[str, Any]) -> EvaluationStep:
+    """Build the isolated one-request API/format check shown on Evaluation 7."""
+    runner = settings["runner"]
+    dataset = settings["dataset"]
+    days = int(settings["smoke_test_days"])
+    n_states = int(settings["smoke_test_n_states"])
+    hamming = int(settings["smoke_test_hamming_threshold"])
+    mode = str(settings["smoke_test_mode"])
+    output_dir = as_path(settings["smoke_test_output_dir"])
+    if output_dir is None:
+        raise ValueError("LLM smoke-test output_dir is required")
+
+    command = script_cmd(runner, "scripts/test_llm_pattern_response.py")
+    add_arg(command, "--days", days)
+    add_arg(command, "--n-states", n_states)
+    add_arg(command, "--hamming-threshold", hamming)
+    add_arg(command, "--mode", mode)
+    add_arg(command, "--output-dir", output_dir)
+    add_flag(command, "--allow-api", settings.get("smoke_test_allow_api", False))
+
+    input_dir = PROJECT_ROOT / "picture" / condition_suffix(dataset, n_states, hamming, days)
+    mode_path = input_dir / f"state_transition_{mode}.json"
+    return EvaluationStep(
+        "eval7_llm_response_smoke_test",
+        "API疎通・JSON形式テスト（1条件 × 1 run × 1時間帯）",
+        (
+            "既存抽出と同じプロンプト／LLM adapterで1回だけ実APIを呼びます。"
+            "retry・checkpoint再利用は行わず、トップレベルJSON配列と4キーの厳密契約を検証します。"
+        ),
+        command,
+        [mode_path],
+        [
+            output_dir / "response_validation.json",
+            output_dir / "raw_response.txt",
+            output_dir / "parsed_records.json",
+        ],
+    )
+
+
 def build_evaluation9_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     hestia = as_path(settings.get("hestia_root", "Hestia"))
     experiment = as_path(settings.get("experiment", "output/9_hestia/pilot"))

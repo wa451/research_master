@@ -12,7 +12,7 @@ Python 3.9以上と `uv` を使用します。
 uv sync
 ```
 
-LLM providerはリポジトリ直下の `.env` の `LLM_PROVIDER` で切り替えます。既定のGeminiを使う場合は、従来どおりAPIキーを設定します。
+既定のLLMはBedrock経由の GPT-5.6 Sol です。リポジトリ直下の `.env` の `LLM_PROVIDER` でGeminiを含むproviderを切り替えられます。Geminiを使う場合は、従来どおりAPIキーを設定します。
 
 ```text
 LLM_PROVIDER=google_gemini
@@ -31,7 +31,7 @@ aws configure
 ```text
 LLM_PROVIDER=bedrock
 AWS_REGION=us-east-2
-BEDROCK_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0
+BEDROCK_MODEL_ID=us.openai.gpt-5.6-sol
 # BEDROCK_MAX_TOKENS=8192
 # BEDROCK_ESTIMATED_OUTPUT_TOKENS=1000
 ```
@@ -170,8 +170,9 @@ Pythonファイル単位の台帳は [docs/architecture/python_file_inventory.md
 | 分析期間 | `154`日 |
 | サンプリング間隔 | `1s` |
 | 遅延OFF窓幅 | `5`秒 |
-| LLM provider | `google_gemini` |
-| LLMモデル | `gemini-2.5-pro` |
+| LLM provider | `bedrock` |
+| Bedrock model ID | `us.openai.gpt-5.6-sol` |
+| Gemini model（Gemini選択時） | `gemini-2.5-pro` |
 | Temperature | `0.2` |
 
 論文採用条件では `K=15, h=0` を使う評価があります。共通既定値と論文採用条件を混同せず、[docs/research/paper_parameters.md](docs/research/paper_parameters.md) と各評価文書の明示引数を確認してください。この差は [KI-01](docs/research/known_issues.md#ki-01) として判断保留です。

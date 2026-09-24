@@ -114,7 +114,7 @@ uv run python scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py \
 uv run streamlit run app/streamlit_app.py
 ```
 
-左サイドバーで「評価7」を選び、`代表状態数 K` と `ハミング距離閾値` をカンマ区切りまたは空白区切りで入力する。`チャタリング除去時間（秒）` は全条件の代表状態・状態遷移ネットワーク作成コマンドへ共通で渡される。
+左サイドバーで「評価7」を選ぶ。正式条件の `days=14`、全28の `K/hamming` 条件、各5 runは画面で固定される。`チャタリング除去時間（秒）` は全条件の代表状態・状態遷移ネットワーク作成コマンドへ共通で渡される。
 
 画面では、以下の正式手順を表示する。
 
@@ -126,6 +126,8 @@ uv run streamlit run app/streamlit_app.py
 「不足ファイル生成 + 評価本体」を使うと、不足しているステップだけを上から実行し、最後に全条件の5回平均を計算する。各ステップには入力/出力ファイルの存在チェックも出るため、一部だけ再実行したい場合は個別ボタンで実行できる。Streamlitは内部処理を重複実装せず、既存CLIと評価7スクリプトを呼び出す。
 
 結果タブでは `evaluation7_condition_summary.csv` と `evaluation7_summary.json` を確認でき、最適な代表状態数・ハミング距離も表示される。
+
+同じ画面の「API疎通・JSON形式テスト」は、評価実験と切り離した事前確認用である。`K=15, hamming=0, Morning` を既定として、選んだ1条件・1 run・1時間帯のプロンプトを実APIへ1回だけ送り、初回応答がJSON配列のみで返り、各要素が `パターン名`、`ADL系列ラベル`、`解釈の根拠`、`遷移のパターン` の4キーとプロンプトの値制約を満たすかを検証する。API許可は既定OFFで、失敗時もraw responseと検証JSONを `results/<model>/api_smoke_tests/` に保存する。これは正式な評価7の5 runやcheckpointを更新しない。
 
 ## 注意点
 
