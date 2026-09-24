@@ -7,6 +7,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+from scripts import evaluate_7_parameter_sensitivity_adl_interpretation as evaluation7
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -67,6 +70,17 @@ def write_adl_intervals(path: Path) -> None:
 
 
 class Evaluation7ParameterSensitivityTests(unittest.TestCase):
+    def test_cli_defaults_to_the_formal_14_day_full_grid_and_five_runs(self) -> None:
+        argv = ["evaluate_7_parameter_sensitivity_adl_interpretation.py"]
+        with patch.object(sys, "argv", argv):
+            args = evaluation7.parse_args()
+
+        self.assertEqual(args.days, 14)
+        self.assertEqual(args.n_states_list, [10, 15, 20, 25, 30, 35, 40])
+        self.assertEqual(args.hamming_thresholds, [0, 1, 2, 3])
+        self.assertEqual(args.runs, 5)
+        self.assertEqual(args.output_dir.name, "7_param_search_14d_5runs")
+
     def test_cli_writes_condition_summary_and_best_condition(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)

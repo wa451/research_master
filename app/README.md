@@ -13,7 +13,7 @@ macOSでは、リポジトリ直下の `start_dashboard.command` をダブルク
 
 一括実行では、不足ファイル生成のみ、不足ファイル生成 + 評価本体、全ステップ再実行を選べます。
 
-評価7では、代表状態数Kとハミング距離を複数指定して `scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py` を実行できます。不足している条件別ファイルがある場合は、一括実行で不足分を生成してから評価7本体まで続けて実行できます。
+評価7は14日・K=`10,15,20,25,30,35,40`・hamming=`0,1,2,3` の全28条件を各5 runで実行します。不足している条件別ファイルがある場合は、一括実行で不足分を生成してから評価7本体まで続けて実行できます。
 
 評価5では、Useful non-redundant pattern rate、Fragmentation rate、Contextless useless rateを表示できます。transition_probability baselineとfragmentation閾値を画面から指定できます。low-information閾値は互換引数として残りますが、診断値だけを保存する現評価には影響しません。
 評価5の `runs` は既定で5です。提案手法を5回分評価し、平均summaryとrun別summaryを確認できます。frequency / rule / FP-Growth / transition_probability baselineはrunに依存しないため最初の評価runだけで計算し、FP-Growth / transition_probability の生成済みパターンは修正前のキャッシュと分離した `output/5_adl_correspondence_baselines_fixed/` から再利用します。

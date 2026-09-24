@@ -1,6 +1,6 @@
-# 評価7: 提案手法のADL解釈ラベル精度パラメータ感度分析
+# 評価7: 14日・全28条件・各5 runのADL解釈ラベル精度パラメータ感度分析
 
-> **モデル別保存:** 条件別LLM JSON/checkpointは `results/<model>/aruba_{K}_{h}_{days}days/`、screening・top条件manifest・複数run集計は `results/<model>/7_param_search/` に保存する。state seriesとnetworkは `output/` / `picture/` に残し、全モデルで共有する。staged repeatも同じモデル配下だけを探索する。
+> **モデル別保存:** 条件別LLM JSON/checkpointは `results/<model>/aruba_{K}_{h}_{days}days/`、正式な複数run集計は `results/<model>/7_param_search_14d_5runs/` に保存する。state seriesとnetworkは `output/` / `picture/` に残し、全モデルで共有する。
 
 ## 目的
 
@@ -43,19 +43,17 @@
 
 | 実行区分 | 条件 | run | state series | 出力先 |
 |---|---|---:|---|---|
-| CLI既定 | `K=15`, `hamming=1`, `days=30` | `1` | `output/6_adl_evaluation_30/state_series.csv` | `results/7_param_search/` |
-| 正式一次スクリーニング | コマンドで指定したKとhammingの直積、`days=30` | `1` | 条件別パス | `results/7_param_search/` |
-| 正式上位条件評価 | `--conditions-file` の上位10条件、`days=30` | `1--5` | 条件別パス | `results/7_param_search/top10_5runs/` |
+| 正式評価 | `K=10,15,20,25,30,35,40` と `hamming=0,1,2,3` の全28条件、`days=14` | 各条件 `1--5` | 条件別パス | `results/<model>/7_param_search_14d_5runs/` |
 
-`(K, hamming, days)=(15,1,30)` だけは、テンプレート未指定時に上表のlegacyパス `output/6_adl_evaluation_30/state_series.csv` を使う。それ以外は `output/6_adl_evaluation_{K}_{hamming}_{days}days/state_series.csv` を使う。正式な感度分析ではコマンドに探索条件を明示し、CLI既定の単一条件と区別する。評価5・6の正式条件 `hamming=0` との不一致は [KI-01](../research/known_issues.md#ki-01)、state seriesの前処理差は [KI-06](../research/known_issues.md#ki-06) で追跡している。
+`output/6_adl_evaluation_{K}_{hamming}_{days}days/state_series.csv` を各条件の入力に使う。全条件を同じ5 runで評価し、条件ごとの平均と標準偏差から最適条件を選ぶ。評価5・6の正式条件 `hamming=0` との不一致は [KI-01](../research/known_issues.md#ki-01)、state seriesの前処理差は [KI-06](../research/known_issues.md#ki-06) で追跡している。
 
 ## 実行コマンド
 
-`--days 30` は状態遷移ネットワークの構築およびLLM入力に使う先頭30日を表す。各条件の `evaluate_adl_labels.py --write-state-series` は、その30日条件で作成した代表状態定義を固定して全220日を写像した照合系列を生成し、評価7のADL集合整合性は全220日で算出する。
+`--days 14` は状態遷移ネットワークの構築およびLLM入力に使う先頭14日を表す。各条件の `evaluate_adl_labels.py --write-state-series` は、その14日条件で作成した代表状態定義を固定して全220日を写像した照合系列を生成し、評価7のADL集合整合性は全220日で算出する。
 
 `evaluate_adl_labels.py` のstate-series前処理を明示しない現行フローは `event-driven` 既定を使う。抽出系と同じ1秒Sample-and-Hold・遅延OFFへ統一するかは [KI-06](../research/known_issues.md#ki-06) の未解決事項である。
 
-小さい設定で既存出力だけを使って確認する例:
+小さい設定で既存出力だけを使って確認する例（正式条件外）:
 
 ```bash
 uv run python scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py \
@@ -70,69 +68,23 @@ uv run python scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py \
   --skip-missing-conditions
 ```
 
-代表状態数とハミング距離を総当たりする例:
+正式な全条件・5 runの実行:
 
 ```bash
 uv run python scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py \
   --n-states-list 10,15,20,25,30,35,40 \
   --hamming-thresholds 0,1,2,3 \
-  --days 30 \
-  --runs 1 \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/7_param_search \
-  --skip-missing-conditions
-```
-
-複数runを平均する場合:
-
-```bash
-uv run python scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py \
-  --n-states-list 15 30 \
-  --hamming-thresholds 1 \
-  --days 30 \
+  --days 14 \
   --runs 5 \
-  --skip-missing-runs \
-  --skip-missing-conditions
-```
-
-## 推奨の二段階実行（全条件1回 + 上位10条件を合計5回）
-
-API料金と実行時間を抑えつつ1回のLLM出力だけで最適条件を決めないため、Streamlitの既定は次の二段階実行とする。
-
-1. Kとハミング距離の全組み合わせをrun 1で1回評価する。
-2. `evaluation7_condition_summary.csv` の順位から上位10条件を選ぶ。
-3. 上位10条件だけについて、未実行のrun 2--5を追加生成する。
-4. 初回run 1を含むrun 1--5の5回平均と標準偏差で最適条件を選ぶ。
-
-反復生成はrun JSON単位で再開する。例えばrun 2が存在してrun 3が存在しない条件では、run 2を再生成せず不足runだけを実行する。上位10条件のrun 2--5がすべて存在する場合、LLM反復生成ステップ全体をスキップして既存JSONを最終評価に利用する。
-
-初回summaryが既に `results/7_param_search/evaluation7_condition_summary.csv` に存在する場合、Streamlitの一括実行はネットワーク生成、run 1生成、初回評価を表示・再実行せず、上位10条件の反復生成へ進む。
-
-CLIで上位条件の反復を生成する場合:
-
-```bash
-uv run python scripts/run_evaluation7_top_condition_repeats.py \
-  --screening-summary results/7_param_search/evaluation7_condition_summary.csv \
-  --manifest results/7_param_search/evaluation7_top10_5runs_conditions.csv \
-  --top-n 10 \
-  --total-runs 5 \
-  --days 30
-```
-
-生成した上位10条件をrun 1--5で比較する場合:
-
-```bash
-uv run python scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py \
-  --conditions-file results/7_param_search/evaluation7_top10_5runs_conditions.csv \
-  --condition-summary-copy results/7_param_search/evaluation7_top10_5runs_conditions.csv \
-  --run-ids 1 2 3 4 5 \
-  --days 30 \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/7_param_search/top10_5runs \
-  --selection-metric mean_multilabel_f1
+  --output-dir results/<model>/7_param_search_14d_5runs
 ```
 
-`--conditions-file` はKとハミング距離の直積ではなく、CSVに記録された条件ペアだけを評価する。`--run-ids` は指定したrunだけを平均するため、初回スクリーニングを含む合計5回を明示できる。
+上記の条件はCLI既定でも使われる。既存の30日・二段階探索の成果物を上書きしないよう、正式出力先は `7_param_search_14d_5runs/` とする。
+
+## 旧二段階探索との互換性
+
+`--conditions-file` と `run_evaluation7_top_condition_repeats.py` は、過去の30日・上位10条件二段階探索を再評価するために残す。正式な評価7の入力・出力・見積もりには使わない。
 
 ## 出力
 
@@ -148,7 +100,7 @@ uv run python scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py \
 | `evaluation7_by_time_band.csv` | 条件別・時間帯別集計。 |
 | `evaluation7_summary.json` | 入力条件、閾値、skipped条件、最適条件、出力ファイル一覧。 |
 
-二段階実行では、初回結果を従来どおり `results/7_param_search/` に残し、最終5回平均を `results/7_param_search/top10_5runs/` に分離して保存する。`results/7_param_search/evaluation7_top10_5runs_conditions.csv` は、run 2--5生成直後には上位10条件の初回指標を保持し、最終評価後には `top10_5runs/evaluation7_condition_summary.csv` と同じ5回平均・標準偏差・順位へ更新される。
+正式結果は `results/<model>/7_param_search_14d_5runs/` に保存する。各条件のsummaryには `num_runs=5`、run別summaryにはrun 1--5が記録される。旧二段階探索の結果は比較用に既存ディレクトリへ残す。
 
 ## 最適条件の判断
 
@@ -164,18 +116,14 @@ uv run streamlit run app/streamlit_app.py
 
 左サイドバーで「評価7」を選び、`代表状態数 K` と `ハミング距離閾値` をカンマ区切りまたは空白区切りで入力する。`チャタリング除去時間（秒）` は全条件の代表状態・状態遷移ネットワーク作成コマンドへ共通で渡される。
 
-既定の「二段階実行」をONにすると、以下のステップが表示される。
+画面では、以下の正式手順を表示する。
 
 1. 代表状態・状態遷移ネットワークを作成
-2. 全条件の提案手法LLM run 1を生成
+2. 全条件の提案手法LLM run 1--5を生成
 3. 評価7用 `state_series.csv` を作成
-4. 全条件をrun 1で評価
-5. 上位10条件の不足分run 2--5を生成
-6. 上位10条件のrun 1--5平均で評価7を実行
+4. 全28条件をrun 1--5で評価し、条件ごとの平均と標準偏差を集計
 
-「不足ファイル生成 + 評価本体」を使うと、不足しているステップだけを上から実行し、最後に5回平均を計算する。初回summaryが既に存在するときはステップ1〜4をスキップする。各ステップには入力/出力ファイルの存在チェックも出るため、一部だけ再実行したい場合は個別ボタンで実行できる。Streamlitは内部処理を重複実装せず、既存CLIと評価7スクリプトを呼び出す。
-
-ステップ5の期待出力には、条件一覧CSVに加えて上位10条件それぞれのrun 2--5 JSONを含む。いずれかが不足している場合だけステップ5を実行し、スクリプト内部でも存在するrunをスキップして不足runだけをAPI生成する。
+「不足ファイル生成 + 評価本体」を使うと、不足しているステップだけを上から実行し、最後に全条件の5回平均を計算する。各ステップには入力/出力ファイルの存在チェックも出るため、一部だけ再実行したい場合は個別ボタンで実行できる。Streamlitは内部処理を重複実装せず、既存CLIと評価7スクリプトを呼び出す。
 
 結果タブでは `evaluation7_condition_summary.csv` と `evaluation7_summary.json` を確認でき、最適な代表状態数・ハミング距離も表示される。
 
@@ -187,4 +135,4 @@ uv run streamlit run app/streamlit_app.py
 - time-band awareレコードは、半開区間 `[start,end)` 全体が同じ時間帯に含まれるexact出現だけを使う。境界横断は除外し、件数・割合を保存する。
 - 感度分析で未生成条件を含めたい場合は、先に `run_build_network_from_labeled_casas.py`, `run_llm_extraction.py`, `evaluate_adl_labels.py --write-state-series` で条件別入力を作成する。
 - `--skip-missing-conditions` を付けると、入力がない条件をsummary JSONへ記録してスキップする。
-- 二段階実行の反復生成は標準の `output/aruba_{K}_{hamming}_{days}days/` 命名を使う。カスタム `patterns-template` は従来の一括run評価で使う。
+- `--conditions-file` は過去の選抜条件を再評価する互換用であり、正式な全28条件評価には使用しない。

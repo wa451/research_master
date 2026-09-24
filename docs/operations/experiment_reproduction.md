@@ -22,7 +22,7 @@
 
    LLM生成物と評価5〜10の結果はmodel IDから自動的に `results/<model>/` へ分離される。対応は `src/behavior_pattern_mining/llm/result_paths.py` の `MODEL_RESULT_NAMES` が正本であり、Claude Haiku 4.5、Claude Sonnet 4.6、GPT-5.6 Luna/Terra/Sol、Gemini 2.5 Proを短い固定名へ写像する。checkpointは同じモデル・同じ条件・同じrunだけで再利用され、異なるmodel IDでは共有されない。
 
-   Bedrockの実行前には `scripts/run_llm_extraction.py --run-ids <未生成run> --estimate-cost` で、推論を行わず未生成分の入力token数・想定出力・`maxTokens` 基準の最大側料金を確認できる。評価5〜10を既存checkpointなしで完全再実行する費用は `scripts/estimate_evaluation_costs.py --run-ids 5 6 7 8 9 10` で一括確認し、`output/cost_estimates/` のCSV/JSONへ保存する。評価9は通常本実験に加えて `output/9_hestia/duration/duration.json` に列挙された全train期間windowを含む。複数model IDは `--models <ID...>` で指定し、modelごとに独立したCountTokensと単価を使う。比較TOTALは `model_comparison_summary.csv` にも保存する。この専用見積もりはcheckpointをread-onlyのまま無視し、Converseを呼ばない。料金単価は `configs/llm_pricing.json` の研究用設定であり、実験時点のAWS料金と一致することを確認する。
+   Bedrockの実行前には `scripts/run_llm_extraction.py --run-ids <未生成run> --estimate-cost` で、推論を行わず未生成分の入力token数・想定出力・`maxTokens` 基準の最大側料金を確認できる。評価5〜10を既存checkpointなしで完全再実行する費用は `scripts/estimate_evaluation_costs.py --run-ids 5 6 7 8 9 10` で一括確認し、`output/cost_estimates/` のCSV/JSONへ保存する。評価7は14日・全28条件・各5 runを計上するため、準備済みの28条件networkが必要である。評価9は通常本実験に加えて `output/9_hestia/duration/duration.json` に列挙された全train期間windowを含む。複数model IDは `--models <ID...>` で指定し、modelごとに独立したCountTokensと単価を使う。比較TOTALは `model_comparison_summary.csv` にも保存する。この専用見積もりはcheckpointをread-onlyのまま無視し、Converseを呼ばない。料金単価は `configs/llm_pricing.json` の研究用設定であり、実験時点のAWS料金と一致することを確認する。
 
 4. 再実行前に、同じ条件名の `state/`, `picture/`, `output/`, `results/<model>/` が存在しないか確認する。既存成果物を消したり上書きしたりせず、同一モデルのcheckpoint再開か新規条件かを確認する。
 

@@ -56,7 +56,7 @@ results/
 └── gpt-5.6-sol/
 ```
 
-各モデル配下には、`aruba_<K>_<h>_<days>days/`（提案手法の統合JSON・mode checkpoint・usage）、`llm_direct_.../`、`5_pattern_quality_fixed/`、`6_adl_match/`、`7_param_search/`、`8_.../`、`9_hestia/`、`10_switchbot/` が従来の下位構造を保って作成されます。同じモデルではcheckpointを再利用し、別モデルは別ディレクトリになるため再利用しません。明示的な `--output-dir` を使う場合も `model_metadata.json` と実行モデルが一致しなければ停止します。
+各モデル配下には、`aruba_<K>_<h>_<days>days/`（提案手法の統合JSON・mode checkpoint・usage）、`llm_direct_.../`、`5_pattern_quality_fixed/`、`6_adl_match/`、`7_param_search_14d_5runs/`、`8_.../`、`9_hestia/`、`10_switchbot/` が従来の下位構造を保って作成されます。同じモデルではcheckpointを再利用し、別モデルは別ディレクトリになるため再利用しません。明示的な `--output-dir` を使う場合も `model_metadata.json` と実行モデルが一致しなければ停止します。
 
 | provider model ID | result directory |
 |---|---|
@@ -108,7 +108,7 @@ uv run python scripts/estimate_evaluation_costs.py \
     --evaluation10-output-dir output/10_switchbot/2026-09-01_2026-09-08
 ```
 
-`--models` を省略すると `BEDROCK_MODEL_ID` の1モデルだけを計算します。複数指定時もinput tokenを共通値として使い回さず、各model IDでCountTokensを実行します。CountTokensを利用できないモデルは個別にfallbackへ切り替わります。一括見積もりでは想定出力料金も必須項目なので、`BEDROCK_ESTIMATED_OUTPUT_TOKENS` を設定してください。実行前に、評価7のtop-10 manifest、評価9の通常本実験とtrain期間感度実験のprepared Hestia experiment、評価10の`preparation.json`と`network/`が必要です。評価9・10が未準備なら、推論を許可せずに前処理まで実行します。
+`--models` を省略すると `BEDROCK_MODEL_ID` の1モデルだけを計算します。複数指定時もinput tokenを共通値として使い回さず、各model IDでCountTokensを実行します。CountTokensを利用できないモデルは個別にfallbackへ切り替わります。一括見積もりでは想定出力料金も必須項目なので、`BEDROCK_ESTIMATED_OUTPUT_TOKENS` を設定してください。実行前に、評価7の14日・全28条件のprepared network、評価9の通常本実験とtrain期間感度実験のprepared Hestia experiment、評価10の`preparation.json`と`network/`が必要です。評価9・10が未準備なら、推論を許可せずに前処理まで実行します。
 
 ```bash
 uv run python scripts/evaluate_9_hestia.py \
@@ -129,7 +129,7 @@ uv run python scripts/evaluate_10_switchbot.py \
     --stage prepare
 ```
 
-既定の保存先は、全モデル・全評価とモデル別TOTALを持つ `output/cost_estimates/evaluation_5_10_cost_estimate.csv`、同名のJSON、およびTOTALだけを比較する `output/cost_estimates/model_comparison_summary.csv` です。評価8は評価5の154日出力と評価6の14日出力を再利用する後段分析なので、5〜10を一連で実行するTOTALでは追加LLMリクエストを0件として重複課金を避けます。評価9は通常本実験216件に加え、`duration.json` に列挙されたtrain期間windowをそれぞれ独立に数えます。既定の3/7/14/28日では864件が追加され、評価9全体は1080件です。評価7のrun 2〜5は指定したtop-10 manifestを使う条件付き見積もりであり、Bedrockによるrun 1の順位が変われば対象条件とtoken数も変わり得ます。
+既定の保存先は、全モデル・全評価とモデル別TOTALを持つ `output/cost_estimates/evaluation_5_10_cost_estimate.csv`、同名のJSON、およびTOTALだけを比較する `output/cost_estimates/model_comparison_summary.csv` です。評価8は評価5の154日出力と評価6の14日出力を再利用する後段分析なので、5〜10を一連で実行するTOTALでは追加LLMリクエストを0件として重複課金を避けます。評価7は14日・全28条件・各5 runで、4時間帯ごとにLLMを呼ぶため560リクエストを計上します。評価9は通常本実験216件に加え、`duration.json` に列挙されたtrain期間windowをそれぞれ独立に数えます。既定の3/7/14/28日では864件が追加され、評価9全体は1080件です。
 
 モデル別単価は [`configs/llm_pricing.json`](configs/llm_pricing.json) の `bedrock` オブジェクトへmodel IDごとに登録します。現在のClaude Haiku 4.5の値は研究資料上の通常推論単価（入力 `$1.00` / 1M tokens、出力 `$5.00` / 1M tokens）です。AWSの料金や利用tierを実験前に確認し、変更があればこのファイルを更新してください。未登録model IDには別モデルの単価を流用しません。通常の単一run見積もりはエラーで停止し、複数モデル比較ではtoken数を記録しつつ料金をN/Aとして明示します。
 

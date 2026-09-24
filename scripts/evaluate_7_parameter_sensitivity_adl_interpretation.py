@@ -39,11 +39,16 @@ from src.behavior_pattern_mining.evaluation.adl_interpretation_set import (
     aggregate_by_time_band,
 )
 from src.behavior_pattern_mining.evaluation.evaluation7_staged import (
+    FORMAL_EVALUATION7_DAYS,
+    FORMAL_EVALUATION7_HAMMING,
+    FORMAL_EVALUATION7_N_STATES,
+    FORMAL_EVALUATION7_RESULTS_DIRNAME,
+    FORMAL_EVALUATION7_RUNS,
     condition_pairs_from_file,
 )
 
 
-DEFAULT_DAYS = 30
+DEFAULT_DAYS = FORMAL_EVALUATION7_DAYS
 
 DETAIL_FIELDNAMES = [
     "condition_id",
@@ -169,18 +174,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--n-states-list",
         nargs="+",
-        default=["15"],
+        default=[str(value) for value in FORMAL_EVALUATION7_N_STATES],
         help="Representative-state counts K. Accepts space or comma separated values, e.g. 10 15 20 or 10,15,20.",
     )
     parser.add_argument(
         "--hamming-thresholds",
         nargs="+",
-        default=["1"],
+        default=[str(value) for value in FORMAL_EVALUATION7_HAMMING],
         help="Hamming thresholds. Accepts space or comma separated values, e.g. 0 1 2 or 0,1,2.",
     )
     parser.add_argument("--days", type=int, default=DEFAULT_DAYS)
     run_group = parser.add_mutually_exclusive_group()
-    run_group.add_argument("--runs", type=int, default=1)
+    run_group.add_argument("--runs", type=int, default=FORMAL_EVALUATION7_RUNS)
     run_group.add_argument(
         "--run-ids",
         nargs="+",
@@ -237,7 +242,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=current_model_results_root() / "7_param_search",
+        default=current_model_results_root() / FORMAL_EVALUATION7_RESULTS_DIRNAME,
     )
     parser.add_argument("--min-overlap-ratio-for-true-label", type=float, default=0.10)
     parser.add_argument(

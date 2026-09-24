@@ -51,12 +51,6 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--evaluation7-top-conditions",
-        type=Path,
-        default=Path("results/7_param_search/evaluation7_top10_5runs_conditions.csv"),
-        help="Top-10 manifest used for Evaluation 7 runs 2-5.",
-    )
-    parser.add_argument(
         "--evaluation9-experiment",
         type=Path,
         default=Path("output/9_hestia/full"),
@@ -115,7 +109,6 @@ def main(argv: list[str] | None = None) -> int:
     plans = build_evaluation_plans(
         root=ROOT_DIR,
         evaluations=args.evaluations,
-        evaluation7_top_conditions=_resolve(args.evaluation7_top_conditions),
         evaluation9_experiment=_resolve(args.evaluation9_experiment),
         evaluation9_duration_experiment=_resolve(
             args.evaluation9_duration_experiment

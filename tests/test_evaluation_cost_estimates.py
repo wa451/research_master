@@ -37,32 +37,12 @@ class EvaluationCostEstimateTests(unittest.TestCase):
         _write_mode(self.root / "picture/aruba_15_0_154days", marker="eval5")
         _write_mode(self.root / "picture/aruba_15_0_14days", marker="eval6")
 
-        manifest = self.root / "results/7_param_search/top10.csv"
-        manifest.parent.mkdir(parents=True)
-        with manifest.open("w", encoding="utf-8", newline="") as handle:
-            writer = csv.DictWriter(
-                handle,
-                fieldnames=["rank", "n_states", "hamming_threshold", "days"],
-            )
-            writer.writeheader()
-            rank = 1
-            for n_states in (10, 15, 20, 25, 30, 35, 40):
-                for hamming in (0, 1, 2, 3):
-                    _write_mode(
-                        self.root / f"picture/aruba_{n_states}_{hamming}_30days",
-                        marker=f"{n_states}-{hamming}",
-                    )
-                    if rank <= 10:
-                        writer.writerow(
-                            {
-                                "rank": rank,
-                                "n_states": n_states,
-                                "hamming_threshold": hamming,
-                                "days": 30,
-                            }
-                        )
-                    rank += 1
-        self.eval7_manifest = manifest
+        for n_states in (10, 15, 20, 25, 30, 35, 40):
+            for hamming in (0, 1, 2, 3):
+                _write_mode(
+                    self.root / f"picture/aruba_{n_states}_{hamming}_14days",
+                    marker=f"{n_states}-{hamming}",
+                )
 
         self.hestia = self.root / "output/9_hestia/full"
         self.hestia.mkdir(parents=True)
@@ -138,7 +118,6 @@ class EvaluationCostEstimateTests(unittest.TestCase):
         return build_evaluation_plans(
             root=self.root,
             evaluations=[5, 6, 7, 8, 9, 10],
-            evaluation7_top_conditions=self.eval7_manifest,
             evaluation9_experiment=self.hestia,
             evaluation9_duration_experiment=self.hestia_duration,
             evaluation10_output_dir=self.switchbot,
@@ -170,7 +149,11 @@ class EvaluationCostEstimateTests(unittest.TestCase):
         self.assertEqual([plan.evaluation for plan in plans], [5, 6, 7, 8, 9, 10])
         self.assertEqual(
             [plan.request_count for plan in plans],
-            [5, 10, 68, 0, 6, 1],
+            [5, 10, 140, 0, 6, 1],
+        )
+        self.assertEqual(
+            plans[2].run_plan,
+            "28 conditions, days=14, runs=1-5 for every condition",
         )
         self.assertIn("2 duration windows", plans[4].run_plan)
         self.assertEqual(checkpoint.read_bytes(), before)
@@ -220,7 +203,7 @@ class EvaluationCostEstimateTests(unittest.TestCase):
         self.assertEqual([row["evaluation"] for row in csv_rows], ["5", "6", "7", "8", "9", "10", "TOTAL"])
         self.assertEqual(payload["settings"]["checkpoint_policy"], "ignored (read-only)")
         self.assertFalse(payload["settings"]["inference_executed"])
-        self.assertEqual(payload["total"]["requests"], 90)
+        self.assertEqual(payload["total"]["requests"], 162)
         self.assertEqual(payload["model_id"], MODEL_ID)
 
     def test_fallback_is_recorded_per_evaluation(self) -> None:

@@ -9,7 +9,7 @@
 - `run_build_network_from_labeled_casas.py`: ラベル付きCASAS txtだけから前処理、代表状態抽出、状態遷移ネットワーク構築、図出力。評価6では `--days 14` を使い、条件変更時は `--n-states`、`--hamming-threshold`、`--smoothing-window-sec` を追加する。
 - `run_baselines.py`: 遷移確率ベースラインと頻度ベースラインを実行。
 - `run_llm_extraction.py`: 提案手法のLLM抽出のみ実行。評価6では `--days 14` を使い、条件変更時は `--n-states` と `--hamming-threshold`、5回分を作る場合は `--runs 5` を追加する。特定runだけを追加生成する場合は `--run-ids 2 3` を使う。
-- `run_evaluation7_top_condition_repeats.py`: 評価7の初回summaryから上位条件を選び、初回run 1を含む合計run数まで不足するLLM出力だけを生成して条件manifestを保存する。
+- `run_evaluation7_top_condition_repeats.py`: 旧30日・上位条件二段階探索を再評価する互換用。正式な評価7は14日・全28条件・各5 runであり、このスクリプトを使わない。
 - `run_llm_eval_batch.py`: 提案手法を複数回実行し、評価をExcelに集計。
 - `run_direct_log_baseline.py`: ラベル付きCASAS txt由来の代表状態系列を、ネットワーク化せず直接LLMへ入力するベースラインと評価を実行。代表状態の最終写像には未解決の条件差があるため `docs/research/known_issues.md` のKI-04を参照する。評価6では `--log-days 14 --extract-only` を使い、条件変更時は `--n-states` と `--hamming-threshold`、5回分を作る場合は `--runs 5` を追加する。
 - `run_evaluation.py`: 既存LLM出力に対するベースライン比較評価。

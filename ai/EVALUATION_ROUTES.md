@@ -45,12 +45,12 @@
 - テスト: [test_evaluation6_adl_interpretation_set.py](../tests/test_evaluation6_adl_interpretation_set.py)、[test_evaluation6_default_days.py](../tests/test_evaluation6_default_days.py)。
 - 注意: KI-06/08/09。ラベル集合指標はeval7/8も利用し、details CSVはeval8の入力。
 
-## eval7 K/h探索・上位条件の追加run
+## eval7 14日・全28条件・各5 runのK/h感度分析
 
 - 文書: [評価7](../docs/evaluations/evaluation_7_parameter_sensitivity_adl_interpretation.md)、AI説明: [eval7](evaluations/eval7_parameter_sensitivity.md)。
-- 入口/実装: [evaluate_7_parameter_sensitivity_adl_interpretation.py](../scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py)、[run_evaluation7_top_condition_repeats.py](../scripts/run_evaluation7_top_condition_repeats.py) → [evaluation7_staged.py](../src/behavior_pattern_mining/evaluation/evaluation7_staged.py)、eval6の集合指標。
+- 入口/実装: [evaluate_7_parameter_sensitivity_adl_interpretation.py](../scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py)（既定: days=14、K=10--40の7値、hamming=0--3、runs=5）→ [evaluation7_staged.py](../src/behavior_pattern_mining/evaluation/evaluation7_staged.py)、eval6の集合指標。`run_evaluation7_top_condition_repeats.py` は旧30日・二段階探索成果物の再現専用。
 - テスト: [test_evaluation7_parameter_sensitivity.py](../tests/test_evaluation7_parameter_sensitivity.py)、[test_evaluation7_staged_workflow.py](../tests/test_evaluation7_staged_workflow.py)（Web配線も含む）。
-- 注意: KI-06。初回探索→選抜→追加run→最終集計の順序とmanifestを保持。
+- 注意: KI-06。正式結果は全28条件を同じ5 runで集計する。旧二段階探索のmanifestは互換再現時だけ利用する。
 
 ## eval8 頻度層別ADL整合性
 

@@ -125,24 +125,18 @@ macOSでは、リポジトリ直下の `start_dashboard.command` をダブルク
 1. 条件別の代表状態・状態遷移ネットワークを作成  
    `scripts/run_build_network_from_labeled_casas.py` を条件ごとに実行します。`state/aruba_{K}_{hamming}_{days}days.txt` や `picture/aruba_{K}_{hamming}_{days}days/state_transition_all.json` がない場合に使います。
 
-2. 条件別の提案手法LLM run 1を生成
-   `scripts/run_llm_extraction.py` を条件ごとに実行します。`output/aruba_{K}_{hamming}_{days}days/llm_sequences_modes_{K}_{hamming}_{days}days_1.json` がない場合に使います。
+2. 条件別の提案手法LLM run 1--5を生成
+   `scripts/run_llm_extraction.py --runs 5` を条件ごとに実行します。正式条件は14日、K=`10,15,20,25,30,35,40`、hamming=`0,1,2,3` の全28条件です。
 
 3. 条件別の `state_series.csv` を作成  
    `scripts/evaluate_adl_labels.py --write-state-series` を条件ごとに実行します。`output/6_adl_evaluation_{K}_{hamming}_{days}days/state_series.csv` がない場合に使います。
 
-4. 全条件をrun 1で評価
-   `scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py` を実行し、上位条件を決めるための初回summaryを作成します。
-
-5. 上位10条件を合計5回まで実行
-   `scripts/run_evaluation7_top_condition_repeats.py` が初回summaryの上位10条件を選び、不足分のrun 2--5だけを生成します。run JSONごとに存在確認し、生成済みrunはスキップしてそのまま利用します。全40ファイルが存在する場合は、このステップ自体が一括実行対象から外れます。
-
-6. 上位10条件の5回平均を評価
-   `--conditions-file` と `--run-ids 1 2 3 4 5` を使い、選抜に使ったrun 1も含めて平均と標準偏差を計算します。最終評価後、`evaluation7_top10_5runs_conditions.csv` も `evaluation7_condition_summary.csv` と同じ指標列・5回平均値へ更新します。
+4. 全28条件をrun 1--5で評価
+   `scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py --days 14 --runs 5` を実行し、各条件の平均と標準偏差から最適条件を選びます。
 
 主な出力は `evaluation7_condition_summary.csv`, `evaluation7_condition_summary_by_run.csv`, `evaluation7_pattern_set_details.csv`, `evaluation7_by_pred_label.csv`, `evaluation7_by_true_label.csv`, `evaluation7_by_time_band.csv`, `evaluation7_summary.json` です。
 
-Streamlit画面では、`代表状態数 K` と `ハミング距離閾値` をカンマ区切りまたは空白区切りで指定できます。「二段階実行」は既定でON、上位条件数は10、合計実行回数は5です。一括実行の「不足ファイル生成 + 評価本体」では、初回summaryが既に存在すれば初回生成・評価をスキップし、上位10条件の不足分run 2--5と最終平均へ進みます。初回結果は `results/7_param_search/`、最終結果は `results/7_param_search/top10_5runs/` に分けて保存します。
+Streamlit画面は正式条件（14日・全28条件・各5 run）を固定で表示する。一括実行の「不足ファイル生成 + 評価本体」は、条件ごとの不足runだけを生成して全条件を5回平均する。新しい結果は `results/<model>/7_param_search_14d_5runs/` に保存し、旧30日・二段階探索の成果物を上書きしない。
 
 ## 評価8のステップ
 

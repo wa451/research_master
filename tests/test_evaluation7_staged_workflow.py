@@ -47,6 +47,31 @@ def staged_settings(output_dir: Path) -> dict:
 
 
 class Evaluation7StagedWorkflowTests(unittest.TestCase):
+    def test_dashboard_builds_the_formal_full_grid_with_five_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings = staged_settings(Path(tmpdir) / "results")
+            settings.update(
+                {
+                    "days": 14,
+                    "runs": 5,
+                    "staged_search": False,
+                    "n_states_list": [10, 15, 20, 25, 30, 35, 40],
+                    "hamming_thresholds": [0, 1, 2, 3],
+                }
+            )
+            steps = build_evaluation7_steps(settings)
+
+        llm_steps = [step for step in steps if step.step_id.endswith("_llm")]
+        self.assertEqual(len(llm_steps), 28)
+        for step in llm_steps:
+            runs_index = step.command.index("--runs")
+            self.assertEqual(step.command[runs_index + 1], "5")
+            self.assertTrue(step.expected_outputs[-1].name.endswith("_5.json"))
+        evaluation_step = steps[-1]
+        self.assertEqual(evaluation_step.step_id, "eval7_evaluate")
+        runs_index = evaluation_step.command.index("--runs")
+        self.assertEqual(evaluation_step.command[runs_index + 1], "5")
+
     def test_repeat_runner_defaults_to_five_total_runs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

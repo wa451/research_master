@@ -24,7 +24,7 @@ results/
     ├── llm_direct_{K}_{h}_{days}days/  # direct-log JSON、usage
     ├── 5_pattern_quality_without_low_information_judgment/
     ├── 6_adl_match/
-    ├── 7_param_search/
+    ├── 7_param_search_14d_5runs/      # 評価7の正式な14日・全28条件・各5 run集計
     ├── 8_vs_llm_own_id_fixed/
     ├── 8_proposed_own_id_fixed/
     ├── 9_hestia/

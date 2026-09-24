@@ -70,6 +70,13 @@ from experiment_config import (  # noqa: E402
     SMOOTHING_WINDOW_SEC,
     current_model_results_root,
 )
+from src.behavior_pattern_mining.evaluation.evaluation7_staged import (  # noqa: E402
+    FORMAL_EVALUATION7_DAYS,
+    FORMAL_EVALUATION7_HAMMING,
+    FORMAL_EVALUATION7_N_STATES,
+    FORMAL_EVALUATION7_RESULTS_DIRNAME,
+    FORMAL_EVALUATION7_RUNS,
+)
 
 
 LOG_ROOT = PROJECT_ROOT / "output" / "logs" / "evaluation_dashboard"
@@ -747,27 +754,17 @@ def render_eval6_settings(common: dict) -> dict:
 
 
 def render_eval7_settings(common: dict) -> dict:
-    st.subheader("評価7: 提案手法のパラメータ感度分析")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        days = st.number_input("使用日数", min_value=1, value=30, step=1)
-    with col2:
-        n_states_text = st.text_input("代表状態数 K（複数指定）", "10,15,20,25,30,35,40")
-    with col3:
-        hamming_text = st.text_input("ハミング距離閾値（複数指定）", "0,1,2,3")
-    try:
-        n_states_list = parse_int_list(n_states_text)
-        hamming_thresholds = parse_int_list(hamming_text)
-    except ValueError:
-        st.error("代表状態数Kとハミング距離閾値は整数で指定してください。")
-        n_states_list = [DEFAULT_N_STATES]
-        hamming_thresholds = [DEFAULT_HAMMING_THRESHOLD]
-    if not n_states_list:
-        st.warning(f"代表状態数Kが空なので、既定値 {DEFAULT_N_STATES} を使います。")
-        n_states_list = [DEFAULT_N_STATES]
-    if not hamming_thresholds:
-        st.warning(f"ハミング距離閾値が空なので、既定値 {DEFAULT_HAMMING_THRESHOLD} を使います。")
-        hamming_thresholds = [DEFAULT_HAMMING_THRESHOLD]
+    st.subheader("評価7: 14日・全28条件・各5 runのパラメータ感度分析")
+    st.caption(
+        "正式条件は固定です: "
+        f"days={FORMAL_EVALUATION7_DAYS}, "
+        f"K={','.join(str(value) for value in FORMAL_EVALUATION7_N_STATES)}, "
+        f"hamming={','.join(str(value) for value in FORMAL_EVALUATION7_HAMMING)}, "
+        f"runs={FORMAL_EVALUATION7_RUNS}。"
+    )
+    days = FORMAL_EVALUATION7_DAYS
+    n_states_list = list(FORMAL_EVALUATION7_N_STATES)
+    hamming_thresholds = list(FORMAL_EVALUATION7_HAMMING)
 
     st.markdown("**入力パス**")
     labeled = st.text_input("ラベル付きCASAS", "new_labeled_data/aruba.txt")
@@ -791,21 +788,10 @@ def render_eval7_settings(common: dict) -> dict:
         )
 
     st.markdown("**評価パラメータ**")
-    staged_search = st.checkbox(
-        "二段階実行（全条件を1回評価 → 上位条件だけ反復）",
-        value=True,
-    )
     col1, col2, col3 = st.columns(3)
     with col1:
-        if staged_search:
-            top_n = st.number_input("上位条件数", min_value=1, value=10, step=1)
-            total_runs = st.number_input("上位条件の合計実行回数", min_value=2, value=5, step=1)
-            runs = 1
-            st.caption("初回run 1を平均に含め、不足するrun 2以降だけを追加生成します。")
-        else:
-            runs = st.number_input("runs", min_value=1, value=1, step=1)
-            top_n = 10
-            total_runs = 5
+        runs = FORMAL_EVALUATION7_RUNS
+        st.caption("全28条件についてrun 1〜5を生成し、各条件ごとに平均と標準偏差を算出します。")
         min_ratio = st.number_input("min-overlap-ratio-for-true-label", min_value=0.0, max_value=1.0, value=0.10)
         selection_metric = st.selectbox(
             "selection-metric",
@@ -831,15 +817,13 @@ def render_eval7_settings(common: dict) -> dict:
         match_mode = st.selectbox("match-mode", ["exact", "skip-other"], index=0)
         max_skip = st.number_input("max-skip-duration-minutes", min_value=0.0, value=1.0)
     skip_missing_runs = st.checkbox("skip-missing-runs", value=False)
-    skip_missing_conditions = st.checkbox("skip-missing-conditions", value=True)
+    skip_missing_conditions = st.checkbox("skip-missing-conditions", value=False)
     show_preparation_steps = st.checkbox("不足ファイル作成ステップを表示", value=True)
-    if staged_search and patterns_template:
-        st.warning("二段階実行の反復生成は標準のoutput命名を使います。patterns-templateは空にしてください。")
 
     st.markdown("**出力**")
     output_dir = st.text_input(
         "output-dir",
-        f"{model_results_relative(common)}/7_param_search",
+        f"{model_results_relative(common)}/{FORMAL_EVALUATION7_RESULTS_DIRNAME}",
         key=f"eval7_output_dir_{common['model_id']}",
     )
 
@@ -849,9 +833,7 @@ def render_eval7_settings(common: dict) -> dict:
         "n_states_list": n_states_list,
         "hamming_thresholds": hamming_thresholds,
         "runs": int(runs),
-        "staged_search": staged_search,
-        "top_n": int(top_n),
-        "total_runs": int(total_runs),
+        "staged_search": False,
         "labeled_casas": labeled,
         "sensor_map": sensor_map,
         "adl_intervals": adl_intervals,

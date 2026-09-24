@@ -14,7 +14,10 @@ from typing import Callable, Sequence
 
 from experiment_config import DATASET_NAME, ROOT_DIR
 from src.behavior_pattern_mining.evaluation.evaluation7_staged import (
-    condition_pairs_from_file,
+    FORMAL_EVALUATION7_DAYS,
+    FORMAL_EVALUATION7_HAMMING,
+    FORMAL_EVALUATION7_N_STATES,
+    FORMAL_EVALUATION7_RUNS,
 )
 from src.behavior_pattern_mining.llm import direct_log_extractor, pattern_extractor
 from src.behavior_pattern_mining.llm.client import LLMRuntimeConfig
@@ -33,9 +36,10 @@ from src.behavior_pattern_mining.visualization import state_transition_visualize
 
 
 DEFAULT_EVALUATIONS = (5, 6, 7, 8, 9, 10)
-EVALUATION7_N_STATES = (10, 15, 20, 25, 30, 35, 40)
-EVALUATION7_HAMMING = (0, 1, 2, 3)
-EVALUATION7_DAYS = 30
+EVALUATION7_N_STATES = FORMAL_EVALUATION7_N_STATES
+EVALUATION7_HAMMING = FORMAL_EVALUATION7_HAMMING
+EVALUATION7_DAYS = FORMAL_EVALUATION7_DAYS
+EVALUATION7_RUNS = FORMAL_EVALUATION7_RUNS
 
 
 @dataclass(frozen=True)
@@ -244,47 +248,25 @@ def _evaluation6_plan(
     )
 
 
-def _evaluation7_plan(root: Path, top_conditions: Path) -> EvaluationRequestPlan:
+def _evaluation7_plan(root: Path) -> EvaluationRequestPlan:
     messages: list[str] = []
-    source_paths: list[str] = [str(top_conditions)]
+    source_paths: list[str] = []
     for n_states in EVALUATION7_N_STATES:
         for hamming in EVALUATION7_HAMMING:
             input_dir = root / "picture" / (
                 f"{DATASET_NAME}_{n_states}_{hamming}_{EVALUATION7_DAYS}days"
             )
-            messages.extend(_mode_messages(input_dir, repetitions=1))
+            messages.extend(_mode_messages(input_dir, repetitions=EVALUATION7_RUNS))
             source_paths.append(str(input_dir))
-
-    selected = condition_pairs_from_file(
-        top_conditions,
-        expected_days=EVALUATION7_DAYS,
-    )
-    if len(selected) != 10:
-        raise ValueError(
-            f"Evaluation 7 repeat manifest must contain exactly 10 conditions: {top_conditions}"
-        )
-    screening_pairs = {
-        (n_states, hamming)
-        for n_states in EVALUATION7_N_STATES
-        for hamming in EVALUATION7_HAMMING
-    }
-    unknown = [pair for pair in selected if pair not in screening_pairs]
-    if unknown:
-        raise ValueError(f"Evaluation 7 manifest contains non-screening conditions: {unknown}")
-    for n_states, hamming in selected:
-        input_dir = root / "picture" / (
-            f"{DATASET_NAME}_{n_states}_{hamming}_{EVALUATION7_DAYS}days"
-        )
-        messages.extend(_mode_messages(input_dir, repetitions=4))
 
     return EvaluationRequestPlan(
         evaluation=7,
-        scope="28-condition screening + selected top-10 repeats",
+        scope="28-condition full 5-run parameter sensitivity",
         user_messages=tuple(messages),
-        run_plan="28 conditions run 1; manifest top 10 conditions runs 2-5",
+        run_plan="28 conditions, days=14, runs=1-5 for every condition",
         source_paths=tuple(dict.fromkeys(source_paths)),
         notes=(
-            "Repeat prompts use the supplied top-10 manifest; a new Bedrock screening may select different conditions.",
+            "Every K/hamming condition is evaluated across the same five LLM runs.",
         ),
     )
 
@@ -450,7 +432,6 @@ def build_evaluation_plans(
     *,
     root: Path = ROOT_DIR,
     evaluations: Sequence[int] = DEFAULT_EVALUATIONS,
-    evaluation7_top_conditions: Path | None = None,
     evaluation9_experiment: Path | None = None,
     evaluation9_duration_experiment: Path | None = None,
     evaluation10_output_dir: Path | None = None,
@@ -462,9 +443,6 @@ def build_evaluation_plans(
         raise ValueError("evaluations must be selected from 5, 6, 7, 8, 9, 10")
     if len(set(selected)) != len(selected):
         raise ValueError("evaluation IDs must be unique")
-    eval7_manifest = evaluation7_top_conditions or (
-        root / "results/7_param_search/evaluation7_top10_5runs_conditions.csv"
-    )
     hestia_experiment = evaluation9_experiment or root / "output/9_hestia/full"
     hestia_duration_experiment = evaluation9_duration_experiment or (
         root / "output/9_hestia/duration"
@@ -475,7 +453,7 @@ def build_evaluation_plans(
     builders = {
         5: lambda: _evaluation5_plan(root),
         6: lambda: _evaluation6_plan(root, direct_message_builder),
-        7: lambda: _evaluation7_plan(root, eval7_manifest),
+        7: lambda: _evaluation7_plan(root),
         8: _evaluation8_plan,
         9: lambda: _evaluation9_plan(
             hestia_experiment,

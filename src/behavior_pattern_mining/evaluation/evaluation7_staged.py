@@ -1,4 +1,4 @@
-"""Helpers for Evaluation 7 staged parameter selection."""
+"""Shared Evaluation 7 protocol constants and optional staged-selection helpers."""
 
 from __future__ import annotations
 
@@ -7,6 +7,14 @@ from pathlib import Path
 
 
 REQUIRED_CONDITION_FIELDS = {"n_states", "hamming_threshold"}
+
+# Formal Evaluation 7 protocol.  The optional staged helpers below are retained
+# only for reproducing earlier exploratory runs.
+FORMAL_EVALUATION7_N_STATES = (10, 15, 20, 25, 30, 35, 40)
+FORMAL_EVALUATION7_HAMMING = (0, 1, 2, 3)
+FORMAL_EVALUATION7_DAYS = 14
+FORMAL_EVALUATION7_RUNS = 5
+FORMAL_EVALUATION7_RESULTS_DIRNAME = "7_param_search_14d_5runs"
 
 
 def load_condition_rows(path: Path) -> list[dict[str, str]]:
