@@ -327,8 +327,8 @@ def model_environment_preview(settings: dict) -> str:
 def common_sidebar() -> dict:
     st.sidebar.header("共通設定")
     evaluation = st.sidebar.radio(
-        "評価を選択",
-        ["評価4", "評価5", "評価6", "評価7", "評価8", "評価9", "評価10"],
+        "評価・テストを選択",
+        ["評価4", "評価5", "評価6", "評価7", "評価8", "評価9", "評価10", "APIテスト"],
         horizontal=True,
     )
     model_id = st.sidebar.selectbox(
@@ -353,7 +353,7 @@ def common_sidebar() -> dict:
         value=SMOOTHING_WINDOW_SEC,
         step=1,
         help="同じセンサの遅延OFF窓幅です。0で無効化します。",
-        disabled=evaluation == "評価9",
+        disabled=evaluation in {"評価9", "APIテスト"},
     )
     dry_run = st.sidebar.checkbox("dry-run（実行せずコマンドだけ記録）", value=False)
     st.sidebar.caption(
@@ -365,7 +365,7 @@ def common_sidebar() -> dict:
             "評価9のseedとLLM run数は評価9画面で編集できます。"
             "日数・平滑化は選択した実験planを使い、共通の平滑化設定は適用しません。"
         )
-    else:
+    elif evaluation != "APIテスト":
         st.sidebar.caption("seed / overwrite は既存CLI引数がないためUI化していません。")
     return {
         "evaluation": evaluation,
@@ -822,43 +822,6 @@ def render_eval7_settings(common: dict) -> dict:
     skip_missing_conditions = st.checkbox("skip-missing-conditions", value=False)
     show_preparation_steps = st.checkbox("不足ファイル作成ステップを表示", value=True)
 
-    st.markdown("**API疎通・出力形式テスト（正式評価とは別）**")
-    st.caption(
-        "1条件 × 1 run × 1時間帯だけを送信するため、実APIリクエストは厳密に1回です。"
-        "通常の評価7成果物・checkpointは利用も更新もしません。"
-    )
-    smoke_col1, smoke_col2, smoke_col3 = st.columns(3)
-    with smoke_col1:
-        smoke_n_states = st.selectbox(
-            "テスト用 K",
-            list(FORMAL_EVALUATION7_N_STATES),
-            index=list(FORMAL_EVALUATION7_N_STATES).index(15),
-        )
-    with smoke_col2:
-        smoke_hamming = st.selectbox(
-            "テスト用 hamming",
-            list(FORMAL_EVALUATION7_HAMMING),
-            index=0,
-        )
-    with smoke_col3:
-        smoke_mode = st.selectbox("テスト用時間帯", ["Morning", "Daytime", "Night", "Midnight"])
-    smoke_output_dir = st.text_input(
-        "APIテスト出力ディレクトリ",
-        (
-            f"{model_results_relative(common)}/api_smoke_tests/"
-            f"aruba_{smoke_n_states}_{smoke_hamming}_{FORMAL_EVALUATION7_DAYS}days/"
-            f"{smoke_mode}_{now_stamp()}"
-        ),
-        key=(
-            f"eval7_smoke_output_{common['model_id']}_{smoke_n_states}_"
-            f"{smoke_hamming}_{smoke_mode}"
-        ),
-    )
-    smoke_test_allow_api = st.checkbox(
-        "APIテストの1リクエストを許可（費用が発生します）",
-        value=False,
-    )
-
     st.markdown("**出力**")
     output_dir = st.text_input(
         "output-dir",
@@ -890,6 +853,51 @@ def render_eval7_settings(common: dict) -> dict:
         "skip_missing_runs": skip_missing_runs,
         "skip_missing_conditions": skip_missing_conditions,
         "show_preparation_steps": show_preparation_steps,
+    }
+
+
+def render_api_smoke_test_settings(common: dict) -> dict:
+    """Render the standalone one-request API response-format test."""
+    st.subheader("APIテスト: 1条件 × 1 run × 1時間帯の疎通・JSON形式確認")
+    st.warning(
+        "実APIを1回だけ呼びます。正式な評価4〜10、一括実行、通常checkpointには含まれません。"
+    )
+    st.caption(
+        "通常の提案手法抽出と同じプロンプト／LLM adapterを使い、retryなしで初回応答を検証します。"
+    )
+    smoke_col1, smoke_col2, smoke_col3 = st.columns(3)
+    with smoke_col1:
+        smoke_n_states = st.selectbox(
+            "テスト用 K",
+            list(FORMAL_EVALUATION7_N_STATES),
+            index=list(FORMAL_EVALUATION7_N_STATES).index(15),
+        )
+    with smoke_col2:
+        smoke_hamming = st.selectbox(
+            "テスト用 hamming",
+            list(FORMAL_EVALUATION7_HAMMING),
+            index=0,
+        )
+    with smoke_col3:
+        smoke_mode = st.selectbox("テスト用時間帯", ["Morning", "Daytime", "Night", "Midnight"])
+    smoke_output_dir = st.text_input(
+        "APIテスト出力ディレクトリ",
+        (
+            f"{model_results_relative(common)}/api_smoke_tests/"
+            f"aruba_{smoke_n_states}_{smoke_hamming}_{FORMAL_EVALUATION7_DAYS}days/"
+            f"{smoke_mode}_{now_stamp()}"
+        ),
+        key=(
+            f"api_smoke_output_{common['model_id']}_{smoke_n_states}_"
+            f"{smoke_hamming}_{smoke_mode}"
+        ),
+    )
+    smoke_test_allow_api = st.checkbox(
+        "APIテストの1リクエストを許可（費用が発生します）",
+        value=False,
+    )
+    return {
+        **common,
         "smoke_test_days": FORMAL_EVALUATION7_DAYS,
         "smoke_test_n_states": int(smoke_n_states),
         "smoke_test_hamming_threshold": int(smoke_hamming),
@@ -1403,12 +1411,12 @@ def render_step(step: EvaluationStep, settings: dict) -> None:
                 st.text_area("ログ末尾", result.output[-8000:], height=260)
 
 
-def render_eval7_llm_response_smoke_test(settings: dict) -> None:
+def render_llm_response_smoke_test(settings: dict) -> None:
     """Render the separately opted-in, one-request LLM response check."""
     st.markdown("### API疎通・JSON形式テスト")
     step = build_llm_response_smoke_test_step(settings)
     st.warning(
-        "このテストは評価7の全28条件・各5 runには含めません。"
+        "このテストは評価4〜10の実験・一括実行には含めません。"
         "指定した1時間帯に対して実APIを1回だけ呼びます。"
     )
     if not settings["smoke_test_allow_api"]:
@@ -1791,10 +1799,9 @@ def default_result_dirs(settings: dict) -> list[Path]:
     if evaluation == "評価5":
         return [PROJECT_ROOT / settings["output_dir"]]
     if evaluation == "評価7":
-        return [
-            PROJECT_ROOT / settings["output_dir"],
-            PROJECT_ROOT / settings["smoke_test_output_dir"],
-        ]
+        return [PROJECT_ROOT / settings["output_dir"]]
+    if evaluation == "APIテスト":
+        return [PROJECT_ROOT / settings["smoke_test_output_dir"]]
     if evaluation in ("評価8", "評価9"):
         return [PROJECT_ROOT / settings["output_dir"]]
     if evaluation == "評価10":
@@ -1807,7 +1814,7 @@ def default_result_dirs(settings: dict) -> list[Path]:
 def main() -> None:
     st.set_page_config(page_title="研究評価ダッシュボード", layout="wide")
     st.title("研究評価ダッシュボード")
-    st.caption("評価4〜10とHestia Studioを1つにまとめたローカル研究Webアプリです。")
+    st.caption("評価4〜10、APIテスト、Hestia Studioを1つにまとめたローカル研究Webアプリです。")
 
     common = common_sidebar()
     run_tab, studio_tab, result_tab, log_tab = st.tabs(
@@ -1815,7 +1822,10 @@ def main() -> None:
     )
 
     with run_tab:
-        if common["evaluation"] == "評価4":
+        if common["evaluation"] == "APIテスト":
+            settings = render_api_smoke_test_settings(common)
+            steps = []
+        elif common["evaluation"] == "評価4":
             settings = render_eval4_settings(common)
             steps = build_evaluation4_steps(settings)
         elif common["evaluation"] == "評価5":
@@ -1842,9 +1852,10 @@ def main() -> None:
             f"`{model_results_relative(common)}/` に分離して保存します。"
         )
         st.markdown("### ステップ")
-        render_batch_runner(steps, settings)
-        if common["evaluation"] == "評価7":
-            render_eval7_llm_response_smoke_test(settings)
+        if common["evaluation"] == "APIテスト":
+            render_llm_response_smoke_test(settings)
+        else:
+            render_batch_runner(steps, settings)
         for step in steps:
             render_step(step, settings)
 
