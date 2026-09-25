@@ -12,6 +12,11 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from src.behavior_pattern_mining.llm import pattern_extractor
+from src.behavior_pattern_mining.data.sensor_representation import (
+    DEFAULT_SENSOR_REPRESENTATION,
+    SENSOR_REPRESENTATIONS,
+    artifact_dataset_name,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -51,6 +56,12 @@ def parse_args() -> argparse.Namespace:
         help="Hamming distance threshold used in the input/output directory suffix.",
     )
     parser.add_argument(
+        "--sensor-representation",
+        choices=SENSOR_REPRESENTATIONS,
+        default=DEFAULT_SENSOR_REPRESENTATION,
+        help="Aruba feature representation used to select namespaced network and output artifacts.",
+    )
+    parser.add_argument(
         "--estimate-cost",
         action="store_true",
         help="Estimate Bedrock tokens and USD cost without running model inference.",
@@ -75,6 +86,7 @@ if __name__ == "__main__":
         run_ids=args.run_ids,
         n_states=args.n_states,
         hamming_threshold=args.hamming_threshold,
+        dataset_name=artifact_dataset_name("aruba", args.sensor_representation),
         estimate_cost=args.estimate_cost,
         output_dir=args.output_dir,
     )

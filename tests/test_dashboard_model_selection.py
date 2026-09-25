@@ -43,7 +43,7 @@ class DashboardModelSelectionTests(unittest.TestCase):
             terra_root / "aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json",
         )
         self.assertEqual(
-            default_direct_path(15, 0, 14, results_root=terra_root),
+            default_direct_path("aruba", 15, 0, 14, results_root=terra_root),
             terra_root / "llm_direct_15_0_14days/1.json",
         )
 
@@ -59,7 +59,7 @@ class DashboardModelSelectionTests(unittest.TestCase):
                 "n_states_list": [15],
                 "hamming_thresholds": [0],
                 "labeled_casas": "new_labeled_data/aruba.txt",
-                "sensor_map": "configs/aruba_sensor_map.json",
+                "sensor_map": "configs/aruba_sensor_map_individual.json",
                 "adl_intervals": "output/adl_label_intervals.csv",
                 "output_dir": terra_root / "7_param_search",
                 "model_results_root": terra_root,
@@ -76,7 +76,7 @@ class DashboardModelSelectionTests(unittest.TestCase):
         llm_step = next(step for step in evaluation7 if step.step_id.endswith("_llm"))
         self.assertEqual(
             llm_step.expected_outputs,
-            [terra_root / "aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json"],
+            [terra_root / "aruba_individual_15_0_14days/llm_sequences_modes_15_0_14days_1.json"],
         )
 
         evaluation9 = build_evaluation9_steps(

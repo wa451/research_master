@@ -53,7 +53,7 @@ class RunBuildNetworkFromLabeledCasasTests(unittest.TestCase):
                 "hamming_thresholds": [0],
                 "smoothing_window_sec": 7,
                 "labeled_casas": "new_labeled_data/aruba.txt",
-                "sensor_map": "configs/aruba_sensor_map.json",
+                "sensor_map": "configs/aruba_sensor_map_individual.json",
                 "adl_intervals": "output/adl_label_intervals.csv",
                 "patterns_template": "",
                 "state_series_template": "",

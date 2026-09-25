@@ -603,6 +603,7 @@ def main(
     run_ids: list[int] | None = None,
     n_states: int | None = None,
     hamming_threshold: int | None = None,
+    dataset_name: str = DATASET_NAME,
     estimate_cost: bool = False,
 ) -> None:
     effective_days = days if days is not None else DAYS
@@ -643,7 +644,7 @@ def main(
         input_modes_dir
         or ROOT_DIR
         / "picture"
-        / f"{DATASET_NAME}_{effective_n_states}_{effective_hamming_threshold}_{effective_days}days"
+        / f"{dataset_name}_{effective_n_states}_{effective_hamming_threshold}_{effective_days}days"
     )
     mode_files = find_mode_json_files(effective_input_modes_dir)
 
@@ -653,7 +654,7 @@ def main(
         or model_result_path(
             ROOT_DIR,
             identity,
-            f"{DATASET_NAME}_{effective_n_states}_{effective_hamming_threshold}_{effective_days}days",
+            f"{dataset_name}_{effective_n_states}_{effective_hamming_threshold}_{effective_days}days",
         )
     )
     if estimate_cost:

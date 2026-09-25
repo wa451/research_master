@@ -1,6 +1,6 @@
 # 評価7: 14日・全28条件・各5 runのADL解釈ラベル精度パラメータ感度分析
 
-> **モデル別保存:** 条件別LLM JSON/checkpointは `results/<model>/aruba_{K}_{h}_{days}days/`、正式な複数run集計は `results/<model>/7_param_search_14d_5runs/` に保存する。state seriesとnetworkは `output/` / `picture/` に残し、全モデルで共有する。
+> **モデル別保存:** 個別センサ条件のLLM JSON/checkpointは `results/<model>/aruba_individual_{K}_{h}_{days}days/`、正式な複数run集計は `results/<model>/7_param_search_14d_5runs_individual/` に保存する。部屋統合条件は互換の `aruba_{K}_{h}_{days}days/` と `7_param_search_14d_5runs/` を使う。state seriesとnetworkは `output/` / `picture/` に残すが、表現名を含むパスで分離する。
 
 ## 目的
 
@@ -35,6 +35,7 @@
 
 | 入力 | 既定・例 | 役割 |
 |---|---|---|
+| センサ表現 | `individual`（既定） | 物理センサ34個を `Bedroom_M001` のように個別特徴量として保持する。`room` は従来の10部屋・場所ラベルへの統合条件であり、比較用に明示指定する。 |
 | 提案手法LLM JSON | `output/aruba_{K}_{hamming}_{days}days/llm_sequences_modes_{K}_{hamming}_{days}days_1.json` | `ADL系列ラベル` を持つ提案手法出力。 |
 | 状態系列CSV | `output/6_adl_evaluation_{K}_{hamming}_{days}days/state_series.csv` | 当該入力条件の代表状態定義を固定して全220日を写像し、パターン出現区間を検索する照合系列。 |
 | ADL正解データ | `new_labeled_data/aruba.txt` | CASAS activity `begin/end` からADL正解区間を内部生成する。 |
@@ -50,6 +51,8 @@
 ## 実行コマンド
 
 `--days 14` は状態遷移ネットワークの構築およびLLM入力に使う先頭14日を表す。各条件の `evaluate_adl_labels.py --write-state-series` は、その14日条件で作成した代表状態定義を固定して全220日を写像した照合系列を生成し、評価7のADL集合整合性は全220日で算出する。
+
+個別センサ条件の state table・network・LLM成果物は `aruba_individual_{K}_{h}_{days}days` を含むパスへ保存され、従来の部屋統合条件は既存互換の `aruba_{K}_{h}_{days}days` を使う。両条件の成果物を同一パスに混在させない。
 
 `evaluate_adl_labels.py` のstate-series前処理を明示しない現行フローは `event-driven` 既定を使う。抽出系と同じ1秒Sample-and-Hold・遅延OFFへ統一するかは [KI-06](../research/known_issues.md#ki-06) の未解決事項である。
 
@@ -76,9 +79,24 @@ uv run python scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py \
   --hamming-thresholds 0,1,2,3 \
   --days 14 \
   --runs 5 \
+  --sensor-representation individual \
   --labeled-casas new_labeled_data/aruba.txt \
   --output-dir results/<model>/7_param_search_14d_5runs
 ```
+
+前段の構築・LLM抽出・state series作成も、個別センサを明示する場合は同じ指定を使う。
+
+```bash
+uv run python scripts/run_build_network_from_labeled_casas.py \
+  --sensor-representation individual \
+  --days 14 --n-states 15 --hamming-threshold 0
+
+uv run python scripts/run_llm_extraction.py \
+  --sensor-representation individual \
+  --days 14 --n-states 15 --hamming-threshold 0 --runs 5
+```
+
+従来の部屋統合条件を再現・比較する時だけ、両コマンドと `evaluate_adl_labels.py` に `--sensor-representation room` を指定する。表現間で特徴量数が異なるため、ハミング距離の絶対値を同じ意味として扱わず、各表現内でK・hの感度分析を完結させる。
 
 上記の条件はCLI既定でも使われる。既存の30日・二段階探索の成果物を上書きしないよう、正式出力先は `7_param_search_14d_5runs/` とする。
 

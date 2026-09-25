@@ -45,10 +45,16 @@ from src.behavior_pattern_mining.evaluation.adl import (
     write_evaluation_outputs,
     write_state_series_csv,
 )
+from src.behavior_pattern_mining.data.sensor_representation import (
+    DEFAULT_SENSOR_REPRESENTATION,
+    SENSOR_REPRESENTATIONS,
+    sensor_map_path,
+)
 
 
-def default_output_dir() -> Path:
-    return ROOT_DIR / "results" / "4_adl_detect"
+def default_output_dir(representation: str) -> Path:
+    suffix = "" if representation == "room" else f"_{representation}"
+    return ROOT_DIR / "results" / f"4_adl_detect{suffix}"
 
 
 def parse_args() -> argparse.Namespace:
@@ -81,8 +87,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sensor-map",
         type=Path,
-        default=ROOT_DIR / "configs" / "aruba_sensor_map.json",
-        help="JSON map from labeled CASAS sensor IDs to representative-state sensor names",
+        default=None,
+        help="Optional JSON map overriding --sensor-representation.",
+    )
+    parser.add_argument(
+        "--sensor-representation",
+        choices=SENSOR_REPRESENTATIONS,
+        default=DEFAULT_SENSOR_REPRESENTATION,
+        help="Aruba feature representation used to rebuild the state series.",
     )
     parser.add_argument(
         "--patterns",
@@ -93,8 +105,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=default_output_dir(),
-        help="Directory for ADL evaluation outputs",
+        default=None,
+        help="Directory for ADL evaluation outputs. Defaults to a representation-specific path.",
     )
     parser.add_argument(
         "--iou-thresholds",
@@ -201,6 +213,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    if args.sensor_map is None:
+        args.sensor_map = sensor_map_path(ROOT_DIR, args.sensor_representation)
+    if args.output_dir is None:
+        args.output_dir = default_output_dir(args.sensor_representation)
     if args.state_series_only and args.write_state_series is None:
         raise ValueError("--state-series-only requires --write-state-series")
 
@@ -323,6 +339,7 @@ def main() -> None:
         "state_table_path": str(args.state_table),
         "event_log_path": str(args.event_log) if args.event_log else None,
         "sensor_map_path": str(args.sensor_map) if args.sensor_map else None,
+        "sensor_representation": args.sensor_representation,
         "output_dir": str(args.output_dir),
         "match_mode": args.match_mode,
         "max_skip_duration_minutes": args.max_skip_duration_minutes,

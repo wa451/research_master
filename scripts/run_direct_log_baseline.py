@@ -14,6 +14,12 @@ if str(ROOT_DIR) not in sys.path:
 from experiment_config import DAYS
 from src.behavior_pattern_mining.evaluation import direct_log
 from src.behavior_pattern_mining.llm import direct_log_extractor
+from src.behavior_pattern_mining.data.sensor_representation import (
+    DEFAULT_SENSOR_REPRESENTATION,
+    SENSOR_REPRESENTATIONS,
+    artifact_dataset_name,
+    sensor_map_path,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -56,6 +62,12 @@ def parse_args() -> argparse.Namespace:
         help="Hamming distance threshold used by the state table and direct-log state mapping.",
     )
     parser.add_argument(
+        "--sensor-representation",
+        choices=SENSOR_REPRESENTATIONS,
+        default=DEFAULT_SENSOR_REPRESENTATION,
+        help="Aruba feature representation shared with the proposed method.",
+    )
+    parser.add_argument(
         "--estimate-cost",
         action="store_true",
         help="Estimate Bedrock tokens and USD cost without model inference or evaluation.",
@@ -91,6 +103,8 @@ def main() -> None:
         runs=args.runs,
         n_states=args.n_states,
         hamming_threshold=args.hamming_threshold,
+        dataset_name=artifact_dataset_name("aruba", args.sensor_representation),
+        sensor_map_path=sensor_map_path(ROOT_DIR, args.sensor_representation),
         estimate_cost=args.estimate_cost,
         output_dir=args.output_dir,
     )

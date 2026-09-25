@@ -79,11 +79,36 @@ from src.behavior_pattern_mining.evaluation.evaluation7_staged import (  # noqa:
     FORMAL_EVALUATION7_RESULTS_DIRNAME,
     FORMAL_EVALUATION7_RUNS,
 )
+from src.behavior_pattern_mining.data.sensor_representation import (  # noqa: E402
+    DEFAULT_SENSOR_REPRESENTATION,
+    SENSOR_REPRESENTATIONS,
+    artifact_dataset_name,
+    sensor_map_path,
+)
 
 
 LOG_ROOT = PROJECT_ROOT / "output" / "logs" / "evaluation_dashboard"
 DEFAULT_N_STATES = 15
 DEFAULT_HAMMING_THRESHOLD = 0
+
+
+def render_sensor_representation(scope: str) -> tuple[str, str, str]:
+    """Return representation, namespaced dataset, and its default sensor-map path."""
+    representation = st.selectbox(
+        "センサ表現",
+        SENSOR_REPRESENTATIONS,
+        index=SENSOR_REPRESENTATIONS.index(DEFAULT_SENSOR_REPRESENTATION),
+        format_func=lambda value: (
+            "個別センサ（既定・34特徴量）"
+            if value == "individual"
+            else "部屋統合（従来・10特徴量）"
+        ),
+        key=f"{scope}_sensor_representation",
+        help="個別センサと部屋統合では代表状態・LLM出力を別の成果物パスへ保存します。",
+    )
+    dataset = artifact_dataset_name("aruba", representation)
+    map_path = sensor_map_path(PROJECT_ROOT, representation)
+    return representation, dataset, rel_default(map_path)
 
 
 def model_results_relative(common: dict | None = None) -> str:
@@ -391,23 +416,24 @@ def render_eval4_settings(common: dict) -> dict:
     with col3:
         hamming = st.number_input("ハミング距離閾値", min_value=0, value=DEFAULT_HAMMING_THRESHOLD, step=1)
 
-    default_state = default_state_table("aruba", int(n_states), int(hamming), int(days))
+    representation, dataset, default_sensor_map = render_sensor_representation("eval4")
+    default_state = default_state_table(dataset, int(n_states), int(hamming), int(days))
     model_root = Path(common["model_results_root"])
     model_key = common["model_id"]
     default_patterns = default_proposed_path(
-        "aruba", int(n_states), int(hamming), int(days), results_root=model_root
+        dataset, int(n_states), int(hamming), int(days), results_root=model_root
     )
 
     st.markdown("**入力パス**")
     labeled = st.text_input("ラベル付きCASAS", "new_labeled_data/aruba.txt")
-    sensor_map = st.text_input("センサーマップ", "configs/aruba_sensor_map.json")
-    state_table = st.text_input("代表状態テーブル", rel_default(default_state))
+    sensor_map = st.text_input("センサーマップ", default_sensor_map, key=f"eval4_sensor_map_{representation}")
+    state_table = st.text_input("代表状態テーブル", rel_default(default_state), key=f"eval4_state_table_{representation}")
     patterns = st.text_input(
         "評価対象パターンJSON",
         rel_default(default_patterns),
-        key=f"eval4_patterns_{model_key}",
+        key=f"eval4_patterns_{model_key}_{representation}",
     )
-    state_series = st.text_input("既存state_series CSV（任意）", "")
+    state_series = st.text_input("既存state_series CSV（任意）", "", key=f"eval4_state_series_{representation}")
     event_log = st.text_input("event-log（任意。未指定ならlabeled-casasから再構築）", "")
 
     st.markdown("**評価パラメータ**")
@@ -426,15 +452,18 @@ def render_eval4_settings(common: dict) -> dict:
         min_duration = st.text_input("min-duration-config（任意）", "configs/adl_min_duration.json")
 
     st.markdown("**出力**")
+    default_eval4_output = f"{model_results_relative(common)}/4_adl_detect"
+    if representation != "room":
+        default_eval4_output += f"_{representation}"
     output_dir = st.text_input(
         "output-dir",
-        f"{model_results_relative(common)}/4_adl_detect",
-        key=f"eval4_output_dir_{model_key}",
+        default_eval4_output,
+        key=f"eval4_output_dir_{model_key}_{representation}",
     )
     write_state = st.text_input(
         "write-state-series",
-        f"{model_results_relative(common)}/4_adl_detect/state_series.csv",
-        key=f"eval4_write_state_series_{model_key}",
+        f"{default_eval4_output}/state_series.csv",
+        key=f"eval4_write_state_series_{model_key}_{representation}",
     )
 
     return {
@@ -442,6 +471,7 @@ def render_eval4_settings(common: dict) -> dict:
         "days": int(days),
         "n_states": int(n_states),
         "hamming_threshold": int(hamming),
+        "sensor_representation": representation,
         "labeled_casas": labeled,
         "sensor_map": sensor_map,
         "state_table": state_table,
@@ -474,17 +504,27 @@ def render_eval5_settings(common: dict) -> dict:
     with col4:
         runs = st.number_input("runs", min_value=1, value=5, step=1)
 
+    representation, dataset, default_sensor_map = render_sensor_representation("eval5")
     suffix = short_suffix(int(n_states), int(hamming), int(days))
-    default_eval5_intermediate = f"output/5_adl_evaluation_{suffix}_fixed"
+    default_eval5_intermediate = (
+        f"output/5_adl_evaluation_{suffix}_fixed"
+        if dataset == "aruba"
+        else f"output/5_adl_evaluation_{dataset}_{suffix}_fixed"
+    )
     st.markdown("**入力パス**")
     labeled = st.text_input("ラベル付きCASAS", "new_labeled_data/aruba.txt")
     state_series = st.text_input(
         "state-series",
         f"{default_eval5_intermediate}/state_series_220days.csv",
+        key=f"eval5_state_series_{representation}",
     )
-    state_table = st.text_input("代表状態テーブル", rel_default(default_state_table("aruba", int(n_states), int(hamming), int(days))))
-    sensor_map = st.text_input("センサーマップ", "configs/aruba_sensor_map.json")
-    patterns_frequency = st.text_input("patterns-frequency", f"output/aruba_{suffix}/state_sequence_counts_{suffix}.json")
+    state_table = st.text_input(
+        "代表状態テーブル",
+        rel_default(default_state_table(dataset, int(n_states), int(hamming), int(days))),
+        key=f"eval5_state_table_{representation}",
+    )
+    sensor_map = st.text_input("センサーマップ", default_sensor_map, key=f"eval5_sensor_map_{representation}")
+    patterns_frequency = st.text_input("patterns-frequency", f"output/{dataset}_{suffix}/state_sequence_counts_{suffix}.json", key=f"eval5_frequency_{representation}")
     patterns_rule_light = st.text_input("patterns-rule-light", "output/5_rule_filter/frequency_rule_light.csv")
     patterns_rule_medium = st.text_input("patterns-rule-medium", "output/5_rule_filter/frequency_rule_medium.csv")
     patterns_rule_strong = st.text_input("patterns-rule-strong", "output/5_rule_filter/frequency_rule_strong.csv")
@@ -494,10 +534,10 @@ def render_eval5_settings(common: dict) -> dict:
         "patterns-proposed",
         rel_default(
             default_proposed_path(
-                "aruba", int(n_states), int(hamming), int(days), results_root=model_root
+                dataset, int(n_states), int(hamming), int(days), results_root=model_root
             )
         ),
-        key=f"eval5_patterns_proposed_{model_key}",
+        key=f"eval5_patterns_proposed_{model_key}_{representation}",
     )
     with st.expander("複数run用テンプレート（任意）"):
         st.caption("使用可能: {dataset}, {n_states}, {hamming_threshold}, {hamming}, {days}, {run}, {suffix}")
@@ -505,10 +545,10 @@ def render_eval5_settings(common: dict) -> dict:
             "patterns-proposed-template",
             "",
             placeholder=(
-                f"{model_results_relative(common)}/aruba_{{suffix}}/"
+                f"{model_results_relative(common)}/{dataset}_{{suffix}}/"
                 "llm_sequences_modes_{suffix}_{run}.json"
             ),
-            key=f"eval5_patterns_template_{model_key}",
+            key=f"eval5_patterns_template_{model_key}_{representation}",
         )
         skip_missing_runs = st.checkbox("skip-missing-runs", value=False)
         proposed_base_path = PROJECT_ROOT / patterns_proposed if not Path(patterns_proposed).is_absolute() else Path(patterns_proposed)
@@ -516,7 +556,7 @@ def render_eval5_settings(common: dict) -> dict:
             proposed_run_path(
                 proposed_base_path,
                 patterns_proposed_template,
-                "aruba",
+                dataset,
                 int(n_states),
                 int(hamming),
                 int(days),
@@ -555,7 +595,11 @@ def render_eval5_settings(common: dict) -> dict:
         use_baseline_cache = st.checkbox("use-baseline-cache", value=True)
         baseline_cache_dir = st.text_input(
             "baseline-cache-dir",
-            "output/5_adl_correspondence_baselines_fixed",
+            (
+                "output/5_adl_correspondence_baselines_fixed"
+                if dataset == "aruba"
+                else f"output/5_adl_correspondence_baselines_{representation}_fixed"
+            ),
         )
         st.caption("FP-Growth / transition_probability の生成済みパターンを保存し、同じ条件では再利用します。")
         fp1, fp2, fp3 = st.columns(3)
@@ -596,10 +640,13 @@ def render_eval5_settings(common: dict) -> dict:
             )
 
     st.markdown("**出力**")
+    default_eval5_output = f"{model_results_relative(common)}/5_pattern_quality_fixed"
+    if representation != "room":
+        default_eval5_output = f"{model_results_relative(common)}/5_pattern_quality_{representation}_fixed"
     output_dir = st.text_input(
         "output-dir",
-        f"{model_results_relative(common)}/5_pattern_quality_fixed",
-        key=f"eval5_output_dir_{model_key}",
+        default_eval5_output,
+        key=f"eval5_output_dir_{model_key}_{representation}",
     )
 
     return {
@@ -607,6 +654,7 @@ def render_eval5_settings(common: dict) -> dict:
         "days": int(days),
         "n_states": int(n_states),
         "hamming_threshold": int(hamming),
+        "sensor_representation": representation,
         "runs": int(runs),
         "labeled_casas": labeled,
         "state_series": state_series,
@@ -670,33 +718,39 @@ def render_eval6_settings(common: dict) -> dict:
     with col4:
         runs = st.number_input("runs", min_value=1, value=1, step=1)
 
+    representation, dataset, default_sensor_map = render_sensor_representation("eval6")
     suffix = short_suffix(int(n_states), int(hamming), int(days))
-    default_intermediate = f"output/6_adl_evaluation_{suffix}"
+    default_intermediate = (
+        f"output/6_adl_evaluation_{suffix}"
+        if dataset == "aruba"
+        else f"output/6_adl_evaluation_{dataset}_{suffix}"
+    )
     st.markdown("**入力パス**")
     labeled = st.text_input("ラベル付きCASAS", "new_labeled_data/aruba.txt")
-    sensor_map = st.text_input("センサーマップ", "configs/aruba_sensor_map.json")
-    state_table = st.text_input("代表状態テーブル", rel_default(default_state_table("aruba", int(n_states), int(hamming), int(days))))
+    sensor_map = st.text_input("センサーマップ", default_sensor_map, key=f"eval6_sensor_map_{representation}")
+    state_table = st.text_input("代表状態テーブル", rel_default(default_state_table(dataset, int(n_states), int(hamming), int(days))), key=f"eval6_state_table_{representation}")
     model_root = Path(common["model_results_root"])
     model_key = common["model_id"]
     proposed = st.text_input(
         "patterns-proposed",
         rel_default(
             default_proposed_path(
-                "aruba", int(n_states), int(hamming), int(days), results_root=model_root
+                dataset, int(n_states), int(hamming), int(days), results_root=model_root
             )
         ),
-        key=f"eval6_patterns_proposed_{model_key}",
+        key=f"eval6_patterns_proposed_{model_key}_{representation}",
     )
     direct = st.text_input(
         "patterns-direct",
         rel_default(
             default_direct_path(
+                dataset,
                 int(n_states), int(hamming), int(days), results_root=model_root
             )
         ),
-        key=f"eval6_patterns_direct_{model_key}",
+        key=f"eval6_patterns_direct_{model_key}_{representation}",
     )
-    state_series = st.text_input("state-series", f"{default_intermediate}/state_series.csv")
+    state_series = st.text_input("state-series", f"{default_intermediate}/state_series.csv", key=f"eval6_state_series_{representation}")
     adl_intervals = st.text_input("adl-intervals（任意。なければlabeled-casasから生成）", "output/adl_label_intervals.csv")
 
     with st.expander("複数run用テンプレート（任意）"):
@@ -720,11 +774,14 @@ def render_eval6_settings(common: dict) -> dict:
     unknown_pred = "Other"
 
     st.markdown("**出力**")
-    intermediate_dir = st.text_input("中間output-dir", default_intermediate)
+    intermediate_dir = st.text_input("中間output-dir", default_intermediate, key=f"eval6_intermediate_{representation}")
+    default_eval6_output = f"{model_results_relative(common)}/6_adl_match"
+    if representation != "room":
+        default_eval6_output += f"_{representation}"
     output_dir = st.text_input(
         "比較output-dir",
-        f"{model_results_relative(common)}/6_adl_match",
-        key=f"eval6_output_dir_{model_key}",
+        default_eval6_output,
+        key=f"eval6_output_dir_{model_key}_{representation}",
     )
 
     return {
@@ -732,6 +789,7 @@ def render_eval6_settings(common: dict) -> dict:
         "days": int(days),
         "n_states": int(n_states),
         "hamming_threshold": int(hamming),
+        "sensor_representation": representation,
         "runs": int(runs),
         "labeled_casas": labeled,
         "sensor_map": sensor_map,
@@ -768,9 +826,10 @@ def render_eval7_settings(common: dict) -> dict:
     n_states_list = list(FORMAL_EVALUATION7_N_STATES)
     hamming_thresholds = list(FORMAL_EVALUATION7_HAMMING)
 
+    representation, dataset, default_sensor_map = render_sensor_representation("eval7")
     st.markdown("**入力パス**")
     labeled = st.text_input("ラベル付きCASAS", "new_labeled_data/aruba.txt")
-    sensor_map = st.text_input("センサーマップ", "configs/aruba_sensor_map.json")
+    sensor_map = st.text_input("センサーマップ", default_sensor_map, key=f"eval7_sensor_map_{representation}")
     adl_intervals = st.text_input("adl-intervals（任意。labeled-casasが存在すればそちらを優先）", "output/adl_label_intervals.csv")
     with st.expander("条件別パステンプレート（任意）"):
         st.caption("使用可能: {dataset}, {n_states}, {hamming_threshold}, {hamming}, {days}, {run}, {suffix}")
@@ -778,15 +837,20 @@ def render_eval7_settings(common: dict) -> dict:
             "patterns-template",
             "",
             placeholder=(
-                f"{model_results_relative(common)}/aruba_{{suffix}}/"
+                f"{model_results_relative(common)}/{dataset}_{{suffix}}/"
                 "llm_sequences_modes_{suffix}_{run}.json"
             ),
-            key=f"eval7_patterns_template_{common['model_id']}",
+            key=f"eval7_patterns_template_{common['model_id']}_{representation}",
         )
         state_series_template = st.text_input(
             "state-series-template",
             "",
-            placeholder="output/6_adl_evaluation_{suffix}/state_series.csv",
+            placeholder=(
+                "output/6_adl_evaluation_{suffix}/state_series.csv"
+                if dataset == "aruba"
+                else "output/6_adl_evaluation_aruba_individual_{suffix}/state_series.csv"
+            ),
+            key=f"eval7_state_series_template_{representation}",
         )
 
     st.markdown("**評価パラメータ**")
@@ -823,10 +887,13 @@ def render_eval7_settings(common: dict) -> dict:
     show_preparation_steps = st.checkbox("不足ファイル作成ステップを表示", value=True)
 
     st.markdown("**出力**")
+    default_eval7_output = f"{model_results_relative(common)}/{FORMAL_EVALUATION7_RESULTS_DIRNAME}"
+    if representation != "room":
+        default_eval7_output += f"_{representation}"
     output_dir = st.text_input(
         "output-dir",
-        f"{model_results_relative(common)}/{FORMAL_EVALUATION7_RESULTS_DIRNAME}",
-        key=f"eval7_output_dir_{common['model_id']}",
+        default_eval7_output,
+        key=f"eval7_output_dir_{common['model_id']}_{representation}",
     )
 
     return {
@@ -835,6 +902,7 @@ def render_eval7_settings(common: dict) -> dict:
         "n_states_list": n_states_list,
         "hamming_thresholds": hamming_thresholds,
         "runs": int(runs),
+        "sensor_representation": representation,
         "staged_search": False,
         "labeled_casas": labeled,
         "sensor_map": sensor_map,

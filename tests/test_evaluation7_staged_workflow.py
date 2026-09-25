@@ -27,7 +27,7 @@ def staged_settings(output_dir: Path) -> dict:
         "n_states_list": [10, 15, 20, 25, 30],
         "hamming_thresholds": [0, 1],
         "labeled_casas": "new_labeled_data/aruba.txt",
-        "sensor_map": "configs/aruba_sensor_map.json",
+        "sensor_map": "configs/aruba_sensor_map_individual.json",
         "adl_intervals": "output/adl_label_intervals.csv",
         "patterns_template": "",
         "state_series_template": "",

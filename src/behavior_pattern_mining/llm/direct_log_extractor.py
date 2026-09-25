@@ -288,7 +288,11 @@ def direct_output_is_reusable(path: Path) -> bool:
     return path.exists() and output_has_adl_sequence_labels(path)
 
 
-def prepare_input_csv(input_path: Path) -> tuple[Path, tempfile.TemporaryDirectory | None, int | None]:
+def prepare_input_csv(
+    input_path: Path,
+    sensor_map_path: Path = SENSOR_MAP_PATH,
+    dataset_name: str = DATASET_NAME,
+) -> tuple[Path, tempfile.TemporaryDirectory | None, int | None]:
     """Return an event CSV path, converting labeled CASAS txt when needed."""
     if not input_path.exists():
         raise FileNotFoundError(f"Input log not found: {input_path}")
@@ -296,11 +300,11 @@ def prepare_input_csv(input_path: Path) -> tuple[Path, tempfile.TemporaryDirecto
         return input_path, None, None
 
     tmpdir = tempfile.TemporaryDirectory()
-    converted_csv = Path(tmpdir.name) / f"{DATASET_NAME}.csv"
+    converted_csv = Path(tmpdir.name) / f"{dataset_name}.csv"
     event_count = convert_labeled_casas_to_event_csv(
         labeled_casas_path=input_path,
         output_csv_path=converted_csv,
-        sensor_map_path=SENSOR_MAP_PATH,
+        sensor_map_path=sensor_map_path,
     )
     return converted_csv, tmpdir, event_count
 
@@ -466,6 +470,8 @@ def main(
     runs: int | None = None,
     n_states: int | None = None,
     hamming_threshold: int | None = None,
+    dataset_name: str = DATASET_NAME,
+    sensor_map_path: Path = SENSOR_MAP_PATH,
     estimate_cost: bool = False,
 ) -> None:
     effective_log_days = log_days if log_days is not None else LOG_DAYS
@@ -505,14 +511,21 @@ def main(
     # 入力ログに対して state_transition_visualizer の前処理を適用する。
     # ラベル付きCASAS txtを指定した場合は activity begin/end を捨て、
     # センサーイベントだけを一時CSVへ変換してから既存処理に渡す。
-    csv_path, input_tmpdir, converted_event_count = prepare_input_csv(INPUT_LOG_PATH)
+    csv_path, input_tmpdir, converted_event_count = prepare_input_csv(
+        INPUT_LOG_PATH, sensor_map_path, dataset_name
+    )
     if output_dir is not None:
         effective_output_dir = output_dir
-    elif effective_log_days != DAYS or n_states is not None or hamming_threshold is not None:
+    elif (
+        effective_log_days != DAYS
+        or n_states is not None
+        or hamming_threshold is not None
+        or dataset_name != DATASET_NAME
+    ):
         effective_output_dir = model_result_path(
             ROOT_DIR,
             identity,
-            f"llm_direct_{effective_n_states}_{effective_hamming_threshold}_{effective_log_days}days",
+            f"llm_direct_{dataset_name}_{effective_n_states}_{effective_hamming_threshold}_{effective_log_days}days",
         )
     else:
         effective_output_dir = model_result_path(
@@ -546,7 +559,7 @@ def main(
         effective_days = visualizer.effective_data_duration_days
         state_file_days = state_days if state_days is not None else effective_days
         state_file = find_state_file(
-            DATASET_NAME,
+            dataset_name,
             effective_n_states,
             effective_hamming_threshold,
             state_file_days,
@@ -584,7 +597,7 @@ def main(
         # プロンプトを構築（N_STATES と STATE_TABLE を埋め込む）
         state_table_text = state_table_to_text(state_file)
         user_message = build_prompt(
-            dataset_name=DATASET_NAME,
+            dataset_name=dataset_name,
             days=effective_log_days,
             log_text=log_text,
             truncated=truncated

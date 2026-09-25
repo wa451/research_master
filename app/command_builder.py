@@ -15,6 +15,7 @@ from experiment_config import SMOOTHING_WINDOW_SEC, current_model_results_root
 from src.behavior_pattern_mining.evaluation.evaluation7_staged import (
     select_top_condition_rows,
 )
+from src.behavior_pattern_mining.data.sensor_representation import artifact_dataset_name
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -107,6 +108,7 @@ def default_state_table(dataset: str, n_states: int, hamming_threshold: int, day
 
 
 def default_direct_path(
+    dataset: str,
     n_states: int,
     hamming_threshold: int,
     days: int,
@@ -114,7 +116,11 @@ def default_direct_path(
     *,
     results_root: Path | None = None,
 ) -> Path:
-    return (results_root or current_model_results_root()) / f"llm_direct_{n_states}_{hamming_threshold}_{days}days" / f"{run}.json"
+    if dataset == "aruba":
+        directory = f"llm_direct_{n_states}_{hamming_threshold}_{days}days"
+    else:
+        directory = f"llm_direct_{dataset}_{n_states}_{hamming_threshold}_{days}days"
+    return (results_root or current_model_results_root()) / directory / f"{run}.json"
 
 
 def settings_model_results_root(settings: dict[str, Any]) -> Path:
@@ -123,10 +129,14 @@ def settings_model_results_root(settings: dict[str, Any]) -> Path:
     return selected or current_model_results_root()
 
 
-def default_eval_state_series_path(n_states: int, hamming_threshold: int, days: int) -> Path:
-    if n_states == 15 and hamming_threshold == 1 and days in {14, 30}:
+def default_eval_state_series_path(
+    dataset: str, n_states: int, hamming_threshold: int, days: int
+) -> Path:
+    if dataset == "aruba" and n_states == 15 and hamming_threshold == 1 and days in {14, 30}:
         return PROJECT_ROOT / "output" / f"6_adl_evaluation_{days}" / "state_series.csv"
-    return PROJECT_ROOT / "output" / f"6_adl_evaluation_{short_suffix(n_states, hamming_threshold, days)}" / "state_series.csv"
+    suffix = short_suffix(n_states, hamming_threshold, days)
+    dirname = f"6_adl_evaluation_{suffix}" if dataset == "aruba" else f"6_adl_evaluation_{dataset}_{suffix}"
+    return PROJECT_ROOT / "output" / dirname / "state_series.csv"
 
 
 def template_path(template: str, dataset: str, n_states: int, hamming_threshold: int, days: int, run: int | None = None) -> Path:
@@ -167,7 +177,8 @@ def proposed_run_path(
 
 def build_evaluation4_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     runner = settings["runner"]
-    dataset = settings["dataset"]
+    representation = settings.get("sensor_representation", "individual")
+    dataset = artifact_dataset_name(settings["dataset"], representation)
     days = settings["days"]
     n_states = settings["n_states"]
     hamming = settings["hamming_threshold"]
@@ -183,6 +194,7 @@ def build_evaluation4_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     build_cmd = script_cmd(runner, "scripts/run_build_network_from_labeled_casas.py")
     add_arg(build_cmd, "--labeled-casas", labeled)
     add_arg(build_cmd, "--sensor-map", sensor_map)
+    add_arg(build_cmd, "--sensor-representation", representation)
     add_arg(build_cmd, "--days", days)
     add_arg(build_cmd, "--n-states", n_states)
     add_arg(build_cmd, "--hamming-threshold", hamming)
@@ -196,6 +208,7 @@ def build_evaluation4_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_arg(llm_cmd, "--days", days)
     add_arg(llm_cmd, "--n-states", n_states)
     add_arg(llm_cmd, "--hamming-threshold", hamming)
+    add_arg(llm_cmd, "--sensor-representation", representation)
 
     eval_cmd = script_cmd(runner, "scripts/evaluate_adl_labels.py")
     add_arg(eval_cmd, "--labeled-casas", labeled)
@@ -203,6 +216,7 @@ def build_evaluation4_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_arg(eval_cmd, "--event-log", event_log)
     add_arg(eval_cmd, "--state-table", state_table)
     add_arg(eval_cmd, "--sensor-map", sensor_map)
+    add_arg(eval_cmd, "--sensor-representation", representation)
     add_arg(eval_cmd, "--patterns", patterns)
     add_arg(eval_cmd, "--output-dir", output_dir)
     add_multi_arg(eval_cmd, "--iou-thresholds", settings["iou_thresholds"])
@@ -261,7 +275,8 @@ def build_evaluation4_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
 
 def build_evaluation5_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     runner = settings["runner"]
-    dataset = settings["dataset"]
+    representation = settings.get("sensor_representation", "individual")
+    dataset = artifact_dataset_name(settings["dataset"], representation)
     days = settings["days"]
     n_states = settings["n_states"]
     hamming = settings["hamming_threshold"]
@@ -278,6 +293,7 @@ def build_evaluation5_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     build_cmd = script_cmd(runner, "scripts/run_build_network_from_labeled_casas.py")
     add_arg(build_cmd, "--labeled-casas", labeled)
     add_arg(build_cmd, "--sensor-map", sensor_map)
+    add_arg(build_cmd, "--sensor-representation", representation)
     add_arg(build_cmd, "--days", days)
     add_arg(build_cmd, "--n-states", n_states)
     add_arg(build_cmd, "--hamming-threshold", hamming)
@@ -292,11 +308,13 @@ def build_evaluation5_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_arg(llm_cmd, "--n-states", n_states)
     add_arg(llm_cmd, "--hamming-threshold", hamming)
     add_arg(llm_cmd, "--runs", runs)
+    add_arg(llm_cmd, "--sensor-representation", representation)
 
     prep_cmd = script_cmd(runner, "scripts/evaluate_adl_labels.py")
     add_arg(prep_cmd, "--labeled-casas", labeled)
     add_arg(prep_cmd, "--state-table", state_table)
     add_arg(prep_cmd, "--sensor-map", sensor_map)
+    add_arg(prep_cmd, "--sensor-representation", representation)
     add_arg(prep_cmd, "--write-state-series", state_series)
     add_arg(prep_cmd, "--hamming-threshold", hamming)
     add_arg(prep_cmd, "--state-series-preprocessing", "network-equivalent")
@@ -432,7 +450,8 @@ def build_evaluation5_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
 
 def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     runner = settings["runner"]
-    dataset = settings["dataset"]
+    representation = settings.get("sensor_representation", "individual")
+    dataset = artifact_dataset_name(settings["dataset"], representation)
     days = settings["days"]
     n_states = settings["n_states"]
     hamming = settings["hamming_threshold"]
@@ -450,6 +469,7 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     build_cmd = script_cmd(runner, "scripts/run_build_network_from_labeled_casas.py")
     add_arg(build_cmd, "--labeled-casas", labeled)
     add_arg(build_cmd, "--sensor-map", sensor_map)
+    add_arg(build_cmd, "--sensor-representation", representation)
     add_arg(build_cmd, "--days", days)
     add_arg(build_cmd, "--n-states", n_states)
     add_arg(build_cmd, "--hamming-threshold", hamming)
@@ -464,11 +484,13 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_arg(proposed_cmd, "--n-states", n_states)
     add_arg(proposed_cmd, "--hamming-threshold", hamming)
     add_arg(proposed_cmd, "--runs", runs)
+    add_arg(proposed_cmd, "--sensor-representation", representation)
 
     state_series_cmd = script_cmd(runner, "scripts/evaluate_adl_labels.py")
     add_arg(state_series_cmd, "--labeled-casas", labeled)
     add_arg(state_series_cmd, "--state-table", state_table)
     add_arg(state_series_cmd, "--sensor-map", sensor_map)
+    add_arg(state_series_cmd, "--sensor-representation", representation)
     add_arg(state_series_cmd, "--patterns", proposed)
     add_arg(state_series_cmd, "--output-dir", intermediate_dir)
     add_arg(state_series_cmd, "--write-state-series", state_series)
@@ -481,6 +503,7 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_arg(direct_cmd, "--n-states", n_states)
     add_arg(direct_cmd, "--hamming-threshold", hamming)
     add_arg(direct_cmd, "--runs", runs)
+    add_arg(direct_cmd, "--sensor-representation", representation)
 
     compare_cmd = script_cmd(runner, "scripts/evaluate_6_compare_adl_interpretation_set.py")
     add_arg(compare_cmd, "--patterns-proposed", proposed)
@@ -504,10 +527,10 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     suffix = short_suffix(n_states, hamming, days)
     final_dir = output_dir if output_dir.name == suffix else output_dir / suffix
     expected_proposed = [default_proposed_path(dataset, n_states, hamming, days, 1, results_root=model_root)]
-    expected_direct = [default_direct_path(n_states, hamming, days, 1, results_root=model_root)]
+    expected_direct = [default_direct_path(dataset, n_states, hamming, days, 1, results_root=model_root)]
     if runs > 1:
         expected_proposed.append(default_proposed_path(dataset, n_states, hamming, days, runs, results_root=model_root))
-        expected_direct.append(default_direct_path(n_states, hamming, days, runs, results_root=model_root))
+        expected_direct.append(default_direct_path(dataset, n_states, hamming, days, runs, results_root=model_root))
 
     return [
         EvaluationStep(
@@ -678,7 +701,8 @@ def build_evaluation8_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
 
 def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     runner = settings["runner"]
-    dataset = settings["dataset"]
+    representation = settings.get("sensor_representation", "individual")
+    dataset = artifact_dataset_name(settings["dataset"], representation)
     days = settings["days"]
     runs = settings["runs"]
     staged_search = settings.get("staged_search", False)
@@ -719,6 +743,7 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
         else:
             add_arg(command, "--runs", run_count if run_count is not None else runs)
         add_arg(command, "--dataset", dataset)
+        add_arg(command, "--sensor-representation", representation)
         add_arg(command, "--condition-summary-copy", condition_summary_copy)
         add_arg(command, "--patterns-template", patterns_template)
         add_arg(command, "--state-series-template", settings.get("state_series_template"))
@@ -748,7 +773,7 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                         template_path(settings["state_series_template"], dataset, n_states, hamming, days)
                     )
                 else:
-                    required.append(default_eval_state_series_path(n_states, hamming, days))
+                    required.append(default_eval_state_series_path(dataset, n_states, hamming, days))
                 for run_id in run_ids:
                     if patterns_template:
                         required.append(
@@ -786,7 +811,7 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                 state_series = (
                     template_path(settings["state_series_template"], dataset, n_states, hamming, days)
                     if settings.get("state_series_template")
-                    else default_eval_state_series_path(n_states, hamming, days)
+                    else default_eval_state_series_path(dataset, n_states, hamming, days)
                 )
                 intermediate_dir = state_series.parent
                 first_pattern = (
@@ -797,6 +822,7 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                 build_cmd = script_cmd(runner, "scripts/run_build_network_from_labeled_casas.py")
                 add_arg(build_cmd, "--labeled-casas", labeled)
                 add_arg(build_cmd, "--sensor-map", sensor_map)
+                add_arg(build_cmd, "--sensor-representation", representation)
                 add_arg(build_cmd, "--days", days)
                 add_arg(build_cmd, "--n-states", n_states)
                 add_arg(build_cmd, "--hamming-threshold", hamming)
@@ -821,6 +847,7 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                 add_arg(llm_cmd, "--n-states", n_states)
                 add_arg(llm_cmd, "--hamming-threshold", hamming)
                 add_arg(llm_cmd, "--runs", 1 if staged_search else runs)
+                add_arg(llm_cmd, "--sensor-representation", representation)
                 expected_patterns = [first_pattern]
                 if not staged_search and runs > 1:
                     expected_patterns.append(
@@ -843,6 +870,7 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                 add_arg(state_series_cmd, "--labeled-casas", labeled)
                 add_arg(state_series_cmd, "--state-table", state_table)
                 add_arg(state_series_cmd, "--sensor-map", sensor_map)
+                add_arg(state_series_cmd, "--sensor-representation", representation)
                 add_arg(state_series_cmd, "--patterns", first_pattern)
                 add_arg(state_series_cmd, "--output-dir", intermediate_dir)
                 add_arg(state_series_cmd, "--write-state-series", state_series)

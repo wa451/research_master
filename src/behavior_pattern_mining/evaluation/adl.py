@@ -111,6 +111,14 @@ DEFAULT_ARUBA_SENSOR_ID_MAP = {
     "D004": "OutsideDoor",
 }
 
+
+def default_aruba_individual_sensor_id_map() -> dict[str, str]:
+    """Keep physical Aruba sensors distinct while retaining their location in the name."""
+    return {
+        sensor_id: f"{room_name}_{sensor_id}"
+        for sensor_id, room_name in DEFAULT_ARUBA_SENSOR_ID_MAP.items()
+    }
+
 WAKE_UP_CANDIDATE_LABELS = {
     "Bed_to_Toilet",
     "Bathroom",
@@ -500,7 +508,7 @@ def build_state_series_from_event_log(
 
 def load_sensor_id_map(path: Path | None) -> dict[str, str]:
     if path is None:
-        return dict(DEFAULT_ARUBA_SENSOR_ID_MAP)
+        return default_aruba_individual_sensor_id_map()
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError(f"Sensor map must be a JSON object: {path}")

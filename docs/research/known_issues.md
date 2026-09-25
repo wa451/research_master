@@ -18,6 +18,7 @@
 | <a id="ki-12"></a>KI-12 | prompt fallback | 通常読む外部promptと、欠落時の埋め込みfallbackで許可ADLラベル集合が一致しない。 | fallbackを再現契約に含めるか、prompt欠落をエラーとするかを決める。LLM条件を変えるため文書だけでは解決しない。 | `src/behavior_pattern_mining/llm/pattern_extractor.py`, `docs/operations/experiment_reproduction.md` |
 | <a id="ki-13"></a>KI-13 | 遷移確率の解釈 | 遷移確率0.2以上はfrom状態内の相対頻度条件であり、「複数日で反復」を直接保証しない。 | 論文上の反復性の説明を維持するなら、別の根拠または指標が必要である。 | `src/behavior_pattern_mining/baselines/transition_probability.py`, `docs/research/paper_parameters.md` |
 | <a id="ki-14"></a>KI-14 | 設定ファイルの適用範囲 | `dataset.input_csv` や一部の出力ディレクトリ設定を参照せず、スクリプト内の固定パスを使う入口がある。 | 設定を正本にするか、入口ごとの固定パスを互換仕様として維持するかを決める。 | `configs/default.yaml`, `scripts/run_build_network.py` |
+| <a id="ki-15"></a>KI-15 | Arubaセンサ表現間の比較 | 2026-09-25から既定は物理センサ34個を個別に保持する `individual`、従来の10部屋・場所ラベル統合は `room` として選択できる。個別成果物は `aruba_individual_*`、従来成果物は互換の `aruba_*` に分離する。 | 特徴量数が違うため、hamming閾値の絶対値や既存のh=0採用結果を表現間で直接比較できない。各表現で同じ評価範囲・run集合による感度分析を行い、表現自体を実験条件として報告する必要がある。 | `configs/aruba_sensor_map*.json`, `scripts/run_build_network_from_labeled_casas.py`, `scripts/run_llm_extraction.py`, `scripts/evaluate_adl_labels.py` |
 
 ## 取り扱い
 

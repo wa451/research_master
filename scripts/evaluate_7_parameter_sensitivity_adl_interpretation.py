@@ -46,6 +46,11 @@ from src.behavior_pattern_mining.evaluation.evaluation7_staged import (
     FORMAL_EVALUATION7_RUNS,
     condition_pairs_from_file,
 )
+from src.behavior_pattern_mining.data.sensor_representation import (
+    DEFAULT_SENSOR_REPRESENTATION,
+    SENSOR_REPRESENTATIONS,
+    artifact_dataset_name,
+)
 
 
 DEFAULT_DAYS = FORMAL_EVALUATION7_DAYS
@@ -192,7 +197,17 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Explicit run IDs to evaluate, e.g. 2 3 4. Cannot be combined with --runs.",
     )
-    parser.add_argument("--dataset", default=DATASET_NAME)
+    parser.add_argument(
+        "--dataset",
+        default=None,
+        help="Optional artifact dataset name. Defaults from --sensor-representation.",
+    )
+    parser.add_argument(
+        "--sensor-representation",
+        choices=SENSOR_REPRESENTATIONS,
+        default=DEFAULT_SENSOR_REPRESENTATION,
+        help="Aruba feature representation used to resolve default artifact paths.",
+    )
     parser.add_argument(
         "--conditions-file",
         type=Path,
@@ -242,7 +257,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=current_model_results_root() / FORMAL_EVALUATION7_RESULTS_DIRNAME,
+        default=None,
+        help="Directory for summaries. Defaults to a representation-specific result directory.",
     )
     parser.add_argument("--min-overlap-ratio-for-true-label", type=float, default=0.10)
     parser.add_argument(
@@ -286,6 +302,12 @@ def parse_args() -> argparse.Namespace:
     args.n_states_list = parse_int_list(args.n_states_list)
     args.hamming_thresholds = parse_int_list(args.hamming_thresholds)
     args.run_ids = parse_int_list(args.run_ids) if args.run_ids else None
+    args.dataset = args.dataset or artifact_dataset_name(
+        DATASET_NAME, args.sensor_representation
+    )
+    if args.output_dir is None:
+        suffix = "" if args.sensor_representation == "room" else f"_{args.sensor_representation}"
+        args.output_dir = current_model_results_root() / f"{FORMAL_EVALUATION7_RESULTS_DIRNAME}{suffix}"
     return args
 
 
@@ -323,10 +345,14 @@ def default_pattern_path(dataset: str, n_states: int, hamming_threshold: int, da
     )
 
 
-def default_state_series_path(n_states: int, hamming_threshold: int, days: int) -> Path:
-    if n_states == 15 and hamming_threshold == 1 and days == 30:
+def default_state_series_path(
+    dataset: str, n_states: int, hamming_threshold: int, days: int
+) -> Path:
+    if dataset == DATASET_NAME and n_states == 15 and hamming_threshold == 1 and days == 30:
         return ROOT_DIR / "output" / "6_adl_evaluation_30" / "state_series.csv"
-    return ROOT_DIR / "output" / f"6_adl_evaluation_{condition_id(n_states, hamming_threshold, days)}" / "state_series.csv"
+    suffix = condition_id(n_states, hamming_threshold, days)
+    directory = f"6_adl_evaluation_{suffix}" if dataset == DATASET_NAME else f"6_adl_evaluation_{dataset}_{suffix}"
+    return ROOT_DIR / "output" / directory / "state_series.csv"
 
 
 def resolve_pattern_path(args: argparse.Namespace, n_states: int, hamming_threshold: int, run: int) -> Path:
@@ -350,7 +376,7 @@ def resolve_state_series_path(args: argparse.Namespace, n_states: int, hamming_t
                 **template_context(args.dataset, n_states, hamming_threshold, args.days)
             )
         )
-    return default_state_series_path(n_states, hamming_threshold, args.days)
+    return default_state_series_path(args.dataset, n_states, hamming_threshold, args.days)
 
 
 def mean(values: list[float]) -> float:

@@ -19,7 +19,13 @@ from experiment_config import (
     ROOT_DIR as PROJECT_ROOT,
     SMOOTHING_WINDOW_SEC,
 )
-from src.behavior_pattern_mining.evaluation.adl import DEFAULT_ARUBA_SENSOR_ID_MAP
+from src.behavior_pattern_mining.data.sensor_representation import (
+    DEFAULT_SENSOR_REPRESENTATION,
+    SENSOR_REPRESENTATIONS,
+    artifact_dataset_name,
+    sensor_map_path,
+)
+from src.behavior_pattern_mining.evaluation.adl import default_aruba_individual_sensor_id_map
 from src.behavior_pattern_mining.visualization.state_transition_visualizer import (
     StateTransitionVisualizer,
 )
@@ -38,8 +44,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sensor-map",
         type=Path,
-        default=PROJECT_ROOT / "configs" / "aruba_sensor_map.json",
-        help="JSON map from CASAS sensor IDs to representative-state sensor names",
+        default=None,
+        help="Optional JSON map overriding --sensor-representation.",
+    )
+    parser.add_argument(
+        "--sensor-representation",
+        choices=SENSOR_REPRESENTATIONS,
+        default=DEFAULT_SENSOR_REPRESENTATION,
+        help=(
+            "Aruba feature representation. individual keeps every physical sensor "
+            "separate; room uses the historical room-level map."
+        ),
     )
     parser.add_argument(
         "--keep-converted-csv",
@@ -79,7 +94,7 @@ def parse_args() -> argparse.Namespace:
 
 def load_sensor_map(path: Path) -> dict[str, str]:
     if not path.exists():
-        return dict(DEFAULT_ARUBA_SENSOR_ID_MAP)
+        return default_aruba_individual_sensor_id_map()
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError(f"Sensor map must be a JSON object: {path}")
@@ -116,7 +131,11 @@ def main() -> None:
     if args.smoothing_window_sec < 0:
         raise ValueError("--smoothing-window-sec must be non-negative")
 
-    sensor_map = load_sensor_map(args.sensor_map)
+    selected_sensor_map = args.sensor_map or sensor_map_path(
+        PROJECT_ROOT, args.sensor_representation
+    )
+    sensor_map = load_sensor_map(selected_sensor_map)
+    artifact_dataset = artifact_dataset_name(DATASET_NAME, args.sensor_representation)
 
     if args.keep_converted_csv is not None:
         converted_csv = args.keep_converted_csv
@@ -135,7 +154,7 @@ def main() -> None:
         return
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        converted_csv = Path(tmpdir) / f"{DATASET_NAME}.csv"
+        converted_csv = Path(tmpdir) / f"{artifact_dataset}.csv"
         event_count = convert_labeled_casas_to_event_csv(args.labeled_casas, converted_csv, sensor_map)
         print(f"Converted labeled CASAS events: {event_count} -> {converted_csv}")
         visualizer_kwargs = {
