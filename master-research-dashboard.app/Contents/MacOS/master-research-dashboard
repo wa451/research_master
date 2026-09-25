@@ -61,6 +61,7 @@ if [[ -z "$uv_command" ]]; then
   exit 1
 fi
 
+export PATH="${uv_command:h}:$PATH"
 launch_log="$(/usr/bin/mktemp -t master-research-dashboard.XXXXXX)"
 /usr/bin/nohup /usr/bin/env STREAMLIT_SERVER_HEADLESS=true \
   "$uv_command" run streamlit run app/streamlit_app.py >"$launch_log" 2>&1 < /dev/null &

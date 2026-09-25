@@ -84,15 +84,31 @@ def run_command(
             header += f"# subprocess environment: {override_preview}\n"
         header += "\n"
         log_file.write(header)
-        process = subprocess.Popen(
-            command,
-            cwd=str(cwd),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            env=env,
-        )
+        try:
+            process = subprocess.Popen(
+                command,
+                cwd=str(cwd),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                env=env,
+            )
+        except FileNotFoundError as exc:
+            executable = command[0] if command else "<empty command>"
+            message = (
+                f"実行コマンドが見つかりません: {executable}\n"
+                "ダッシュボードを .app または start_dashboard.command から再起動するか、"
+                "サイドバーの「Python実行方法」を利用可能な環境に変更してください。\n"
+                f"詳細: {exc}\n"
+            )
+            log_file.write(message)
+            return CommandResult(
+                returncode=127,
+                elapsed_seconds=time.monotonic() - started,
+                log_path=log_path,
+                output=message,
+            )
         assert process.stdout is not None
         with process.stdout:
             for raw_line in process.stdout:

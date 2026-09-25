@@ -108,6 +108,19 @@ class DashboardModelSelectionTests(unittest.TestCase):
         )
         self.assertEqual(os.environ.get("BEDROCK_MODEL_ID"), before)
 
+    def test_missing_command_is_reported_instead_of_raising(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            log_path = Path(directory) / "command.log"
+            result = run_command(
+                ["definitely-not-a-dashboard-command"],
+                log_path=log_path,
+            )
+
+            self.assertEqual(result.returncode, 127)
+            self.assertIn("実行コマンドが見つかりません", result.output)
+            self.assertIn("definitely-not-a-dashboard-command", result.output)
+            self.assertEqual(log_path.read_text(encoding="utf-8").splitlines()[-1], "詳細: [Errno 2] No such file or directory: 'definitely-not-a-dashboard-command'")
+
 
 if __name__ == "__main__":
     unittest.main()

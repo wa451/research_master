@@ -50,7 +50,7 @@ macOSでは、リポジトリ直下の `start_dashboard.command` をダブルク
 |---|---|
 | 評価・テストを選択 | 評価4〜10に加え、実APIを1回だけ呼ぶ独立した `APIテスト` を選べます。 |
 | 実行LLMモデル | 評価4〜10のLLM生成・評価で使うモデルを選ぶ。既定は **GPT-5.6 Sol**。選択したモデルのLLM JSON、checkpoint、metrics、評価結果は `results/<model>/` に分離する。 |
-| Python実行方法 | READMEの既定に合わせて `uv run python` を既定にしています。 |
+| Python実行方法 | READMEの既定に合わせて `uv run python` を既定にしています。`.app` / `start_dashboard.command` 起動時は `uv` の絶対パスを子プロセスにも引き継ぐため、テスト実行でも `uv` を見失いません。 |
 | run名 | ログディレクトリ名に使います。CLI引数には渡しません。 |
 | チャタリング除去時間（秒） | 代表状態・状態遷移ネットワーク作成時の遅延OFF窓幅。既定は `5` 秒で、`0` は無効。評価4〜7と評価10の前段CLIへ渡す。 |
 | dry-run | 実行せず、コマンドとログファイルだけを保存します。 |

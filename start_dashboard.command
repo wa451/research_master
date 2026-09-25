@@ -21,4 +21,5 @@ if [[ -z "$uv_command" ]]; then
   exit 1
 fi
 
+export PATH="${uv_command:h}:$PATH"
 exec "$uv_command" run streamlit run app/streamlit_app.py
