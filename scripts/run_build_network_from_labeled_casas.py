@@ -20,9 +20,9 @@ from experiment_config import (
     SMOOTHING_WINDOW_SEC,
 )
 from src.behavior_pattern_mining.data.sensor_representation import (
-    DEFAULT_SENSOR_REPRESENTATION,
     SENSOR_REPRESENTATIONS,
     artifact_dataset_name,
+    resolve_sensor_representation,
     sensor_map_path,
 )
 from src.behavior_pattern_mining.evaluation.adl import default_aruba_individual_sensor_id_map
@@ -50,7 +50,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sensor-representation",
         choices=SENSOR_REPRESENTATIONS,
-        default=DEFAULT_SENSOR_REPRESENTATION,
+        default=None,
         help=(
             "Aruba feature representation. individual keeps every physical sensor "
             "separate; room uses the historical room-level map."
@@ -131,6 +131,9 @@ def main() -> None:
     if args.smoothing_window_sec < 0:
         raise ValueError("--smoothing-window-sec must be non-negative")
 
+    args.sensor_representation = resolve_sensor_representation(
+        args.sensor_representation, args.sensor_map, PROJECT_ROOT
+    )
     selected_sensor_map = args.sensor_map or sensor_map_path(
         PROJECT_ROOT, args.sensor_representation
     )

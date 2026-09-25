@@ -46,8 +46,8 @@ from src.behavior_pattern_mining.evaluation.adl import (
     write_state_series_csv,
 )
 from src.behavior_pattern_mining.data.sensor_representation import (
-    DEFAULT_SENSOR_REPRESENTATION,
     SENSOR_REPRESENTATIONS,
+    resolve_sensor_representation,
     sensor_map_path,
 )
 
@@ -93,7 +93,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sensor-representation",
         choices=SENSOR_REPRESENTATIONS,
-        default=DEFAULT_SENSOR_REPRESENTATION,
+        default=None,
         help="Aruba feature representation used to rebuild the state series.",
     )
     parser.add_argument(
@@ -213,6 +213,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    args.sensor_representation = resolve_sensor_representation(
+        args.sensor_representation, args.sensor_map, ROOT_DIR
+    )
     if args.sensor_map is None:
         args.sensor_map = sensor_map_path(ROOT_DIR, args.sensor_representation)
     if args.output_dir is None:

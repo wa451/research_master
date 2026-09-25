@@ -8,6 +8,7 @@ from app.command_builder import build_evaluation7_steps
 
 from src.behavior_pattern_mining.data.sensor_representation import (
     artifact_dataset_name,
+    resolve_sensor_representation,
     sensor_map_path,
 )
 from src.behavior_pattern_mining.evaluation.adl import (
@@ -35,6 +36,16 @@ class SensorRepresentationTests(unittest.TestCase):
     def test_room_artifacts_remain_compatible_and_individual_are_namespaced(self) -> None:
         self.assertEqual(artifact_dataset_name("aruba", "room"), "aruba")
         self.assertEqual(artifact_dataset_name("aruba", "individual"), "aruba_individual")
+
+    def test_historical_explicit_room_map_selects_room_compatibility(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        self.assertEqual(
+            resolve_sensor_representation(
+                None, sensor_map_path(root, "room"), root
+            ),
+            "room",
+        )
+        self.assertEqual(resolve_sensor_representation(None, None, root), "individual")
 
     def test_evaluation7_defaults_to_individual_and_can_select_room(self) -> None:
         base_settings = {

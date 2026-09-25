@@ -29,6 +29,21 @@ def sensor_map_path(project_root: Path, representation: str) -> Path:
     return project_root / "configs" / filename
 
 
+def resolve_sensor_representation(
+    representation: str | None,
+    sensor_map: Path | None,
+    project_root: Path,
+) -> str:
+    """Choose the default while recognizing the historical explicit room map."""
+    if representation is not None:
+        return validate_sensor_representation(representation)
+    if sensor_map is not None and sensor_map.resolve() == sensor_map_path(
+        project_root, "room"
+    ).resolve():
+        return "room"
+    return DEFAULT_SENSOR_REPRESENTATION
+
+
 def artifact_dataset_name(dataset: str, representation: str) -> str:
     """Namespace artifacts while preserving historical room-level Aruba paths."""
     representation = validate_sensor_representation(representation)
