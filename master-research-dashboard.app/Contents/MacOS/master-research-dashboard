@@ -19,11 +19,29 @@ open_dashboard() {
   fi
 }
 
-# Reuse the local dashboard when it is already running instead of starting a
-# second Streamlit process on another port.
+# Always restart this repository's dashboard so a double-click picks up the
+# current Python modules. Reusing an older Streamlit process can retain stale
+# imports after a code update. Never stop an unrelated service on port 8501.
+for existing_pid in "${(@f)$(/usr/sbin/lsof -tiTCP:8501 -sTCP:LISTEN 2>/dev/null || true)}"; do
+  [[ -z "$existing_pid" ]] && continue
+  existing_command="$(/bin/ps -p "$existing_pid" -o command= 2>/dev/null || true)"
+  if [[ "$existing_command" != *"$project_root"* || "$existing_command" != *"streamlit"* ]]; then
+    show_error "ポート8501は別のアプリが使用中です。終了するか、ターミナルから別ポートで起動してください。"
+    exit 1
+  fi
+  /bin/kill -TERM "$existing_pid" 2>/dev/null || true
+done
+
+for _ in {1..20}; do
+  if ! /usr/bin/curl --fail --silent --show-error "$dashboard_url/_stcore/health" >/dev/null 2>&1; then
+    break
+  fi
+  /bin/sleep 0.25
+done
+
 if /usr/bin/curl --fail --silent --show-error "$dashboard_url/_stcore/health" >/dev/null 2>&1; then
-  open_dashboard
-  exit 0
+  show_error "既存のダッシュボードを停止できませんでした。起動中のStreamlitを終了してから、もう一度開いてください。"
+  exit 1
 fi
 
 cd "$project_root"
