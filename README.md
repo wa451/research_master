@@ -173,7 +173,7 @@ Pythonファイル単位の台帳は [docs/architecture/python_file_inventory.md
 | LLM provider | `bedrock` |
 | Bedrock model ID | `us.openai.gpt-5.6-sol` |
 | Gemini model（Gemini選択時） | `gemini-2.5-pro` |
-| Temperature | `0.2` |
+| Temperature | Gemini等で `0.2`。BedrockのGPT-5.6 Sol/Terra/LunaではConverse APIが `temperature` を受け付けないため送信せず、Bedrockの既定値を使う（成果物メタデータは `null`）。 |
 
 論文採用条件では `K=15, h=0` を使う評価があります。共通既定値と論文採用条件を混同せず、[docs/research/paper_parameters.md](docs/research/paper_parameters.md) と各評価文書の明示引数を確認してください。この差は [KI-01](docs/research/known_issues.md#ki-01) として判断保留です。
 

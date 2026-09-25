@@ -19,7 +19,7 @@ class LLMRuntimeConfig:
 
     provider: str
     model_name: str
-    temperature: float
+    temperature: Optional[float]
     api_key: Optional[str] = None
     region_name: Optional[str] = None
     max_tokens: Optional[int] = None
@@ -34,6 +34,14 @@ class BedrockInputTokenCount:
     exact: bool
     method: str
     warning: Optional[str] = None
+
+
+def bedrock_supports_temperature(model_name: str) -> bool:
+    """Return whether a Bedrock Converse model accepts ``temperature``."""
+    normalized_model_name = model_name.strip().lower()
+    return not normalized_model_name.startswith(
+        ("us.openai.gpt-5.6-", "global.openai.gpt-5.6-")
+    )
 
 
 def resolve_llm_runtime_config(
@@ -125,10 +133,11 @@ def resolve_llm_runtime_config(
             "BEDROCK_ESTIMATED_OUTPUT_TOKENS は BEDROCK_MAX_TOKENS 以下で指定してください。"
         )
 
+    effective_temperature = temperature if bedrock_supports_temperature(model_name) else None
     return LLMRuntimeConfig(
         provider=provider,
         model_name=model_name,
-        temperature=temperature,
+        temperature=effective_temperature,
         region_name=region_name,
         max_tokens=max_tokens,
         estimated_output_tokens=estimated_output_tokens,
@@ -649,7 +658,7 @@ def call_bedrock(
     *,
     model_name: str,
     user_message: str,
-    temperature: float,
+    temperature: Optional[float],
     region_name: str,
     max_tokens: int,
 ) -> Tuple[str, str, dict, float]:
@@ -664,14 +673,17 @@ def call_bedrock(
     try:
         client = boto3.client("bedrock-runtime", region_name=region_name)
         messages = build_bedrock_messages(user_message)
+        inference_config: dict[str, int | float] = {"maxTokens": max_tokens}
+        # GPT-5.6 cross-Region inference profiles reject ``temperature``.
+        # Leave it to the service default while retaining temperature for models
+        # that support the common Converse inference parameter.
+        if temperature is not None and bedrock_supports_temperature(model_name):
+            inference_config["temperature"] = temperature
         start_time = time.monotonic()
         response = client.converse(
             modelId=model_name,
             messages=messages,
-            inferenceConfig={
-                "maxTokens": max_tokens,
-                "temperature": temperature,
-            },
+            inferenceConfig=inference_config,
         )
         duration_sec = time.monotonic() - start_time
     except Exception as exc:
