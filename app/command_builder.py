@@ -522,10 +522,23 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_arg(compare_cmd, "--n-states", n_states)
     add_arg(compare_cmd, "--hamming-threshold", hamming)
     add_arg(compare_cmd, "--runs", runs)
+    add_arg(compare_cmd, "--split-mode", settings.get("split_mode", "holdout"))
+    add_arg(compare_cmd, "--generation-days", settings.get("generation_days", days))
+    add_arg(compare_cmd, "--validation-start-day", settings.get("validation_start_day", 15))
+    add_arg(compare_cmd, "--validation-end-day", settings.get("validation_end_day", 154))
+    add_arg(compare_cmd, "--test-start-day", settings.get("test_start_day", 155))
+    add_arg(compare_cmd, "--test-end-day", settings.get("test_end_day", 220))
+    add_arg(compare_cmd, "--best-condition-manifest", as_path(settings.get("best_condition_manifest")))
     add_flag(compare_cmd, "--skip-missing-runs", settings["skip_missing_runs"])
 
     suffix = short_suffix(n_states, hamming, days)
-    final_dir = output_dir if output_dir.name == suffix else output_dir / suffix
+    holdout_suffix = f"{suffix}_holdout_test"
+    final_dir = (
+        output_dir
+        if settings.get("split_mode", "holdout") == "holdout"
+        and output_dir.name.endswith("_holdout_test")
+        else output_dir if output_dir.name == suffix else output_dir / suffix
+    )
     expected_proposed = [default_proposed_path(dataset, n_states, hamming, days, 1, results_root=model_root)]
     expected_direct = [default_direct_path(dataset, n_states, hamming, days, 1, results_root=model_root)]
     if runs > 1:
@@ -738,6 +751,12 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
             add_multi_arg(command, "--n-states-list", n_states_list)
             add_multi_arg(command, "--hamming-thresholds", hamming_thresholds)
         add_arg(command, "--days", days)
+        add_arg(command, "--split-mode", settings.get("split_mode", "holdout"))
+        add_arg(command, "--generation-days", settings.get("generation_days", days))
+        add_arg(command, "--validation-start-day", settings.get("validation_start_day", 15))
+        add_arg(command, "--validation-end-day", settings.get("validation_end_day", 154))
+        add_arg(command, "--test-start-day", settings.get("test_start_day", 155))
+        add_arg(command, "--test-end-day", settings.get("test_end_day", 220))
         if run_ids is not None:
             add_multi_arg(command, "--run-ids", run_ids)
         else:
@@ -799,6 +818,7 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
             destination / "evaluation7_by_true_label.csv",
             destination / "evaluation7_by_time_band.csv",
             destination / "evaluation7_summary.json",
+            destination / "evaluation7_best_condition_manifest.json",
         ]
 
     steps: list[EvaluationStep] = []

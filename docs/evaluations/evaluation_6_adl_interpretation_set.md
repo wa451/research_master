@@ -1,10 +1,24 @@
 # 評価6: LLM解釈ラベルとADL重なりラベルのSet一致評価
 
-> **モデル別保存:** proposed/direct-log JSON、checkpoint、usage、比較結果はそれぞれ `results/<model>/aruba_*`、`results/<model>/llm_direct_*`、`results/<model>/6_adl_match/` に保存する。`.env` のモデルから自動決定されるため、通常は出力先指定不要である。`output/6_adl_evaluation_*/state_series.csv` は全モデルで共有するモデル非依存入力として残す。以下の旧 `output/.../llm_*` / `results/6_*` はGemini移行元のlegacy表記である。
+> **モデル別保存:** proposed/direct-log JSON、checkpoint、usage、比較結果はそれぞれ `results/<model>/aruba_*`、`results/<model>/llm_direct_*`、`results/<model>/6_adl_match/` に保存する。holdout既定の比較結果は条件名末尾を `_holdout_test` として旧全220日成果物と分ける。`.env` のモデルから自動決定されるため、通常は出力先指定不要である。`output/6_adl_evaluation_*/state_series.csv` は全モデルで共有するモデル非依存入力として残す。以下の旧 `output/.../llm_*` / `results/6_*` はGemini移行元のlegacy表記である。
 
 ## 評価の要約
 
-LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出現区間がCASAS正解ADL区間と重なった結果から得られるADL集合を比較する。評価はset一致で行い、ラベル順序は使わない。パターン名、ADL集合、解釈根拠は同じ系列解釈に基づく一体的な出力であり、本評価をパターン名と根拠の意味的正当性を確認する主要な定量代理評価として位置付ける。ただし、自然言語根拠の文単位の忠実性を直接評価するものではない。評価6では提案手法単体の評価は行わず、提案手法と、同じ期間の前処理済み代表状態系列を直接LLMへ入力するLLM単独ベースラインを、先頭14日の入力条件に揃えて比較する。抽出・LLM入力は14日だが、出現検索とADL照合には、この14日条件の代表状態定義で写像した全220日の状態系列を使う。提案手法では、同じ `遷移のパターン` が複数時間帯で抽出された場合、表示・保存上は1つのグループにまとめ、評価時には `sequence × time_band` 単位へ展開する。
+LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出現区間がCASAS正解ADL区間と重なった結果から得られるADL集合を比較する。評価はset一致で行い、ラベル順序は使わない。パターン名、ADL集合、解釈根拠は同じ系列解釈に基づく一体的な出力であり、本評価をパターン名と根拠の意味的正当性を確認する主要な定量代理評価として位置付ける。ただし、自然言語根拠の文単位の忠実性を直接評価するものではない。評価6では提案手法単体の評価は行わず、提案手法と、同じ期間の前処理済み代表状態系列を直接LLMへ入力するLLM単独ベースラインを、先頭14日の入力条件に揃えて比較する。提案手法では、同じ `遷移のパターン` が複数時間帯で抽出された場合、表示・保存上は1つのグループにまとめ、評価時には `sequence × time_band` 単位へ展開する。
+
+## 期間分割（既定: holdout）
+
+状態表・状態遷移ネットワーク・LLMパターンは共通して先頭14日で作る。一方、評価6は評価7で選んだ `K,h` を固定し、独立した後半期間だけで提案手法とLLM-onlyを比較する。
+
+| 期間 | 用途 |
+|---|---|
+| Day 1–14 | 代表状態表、ネットワーク、両手法のパターン生成 |
+| Day 15–154 | 評価7のvalidation（`K,h` 選択）。評価6の採点には使わない。 |
+| Day 155–220 | 評価6の独立test。出現検索とADL照合の採点対象。 |
+
+内部では半開区間 `[start, end)` として state series とADL区間を切り出し、境界をまたぐADL区間も各期間へclipする。このため同じイベントやADL時間がvalidation/testに二重計上されない。state series 自体は14日条件の状態表を全220日へ適用した入力だが、評価6の照合に見える部分はDay 155–220だけである。
+
+`--best-condition-manifest results/<model>/7_param_search_14d_5runs_*_holdout/evaluation7_best_condition_manifest.json` を指定すると、そのmanifestの `K,h` を使用する。手動の `--n-states` / `--hamming-threshold` も残すが、manifestと値が不一致なら安全のためエラーにする。既存の全220日採点を再現する場合は `--split-mode legacy` を指定する。この場合も生成期間は先頭14日のままで、採点だけが全期間となる。
 
 ## RQ
 
@@ -46,7 +60,7 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 |---|---|---|
 | 提案手法LLM JSON | `output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json` | `time_band_interpretations` を持つ提案手法出力。 |
 | LLM単独ベースラインJSON | `output/llm_direct_15_0_14days/1.json` | 同期間の前処理済み代表状態系列をLLMへ直接入力した出力。 |
-| 14日条件の全220日照合系列 | `output/6_adl_evaluation_15_0_14days/state_series.csv` | 先頭14日で作成した代表状態定義を固定し、全220日で両手法の出現区間を同条件検索する。 |
+| 14日条件の全220日照合系列 | `output/6_adl_evaluation_15_0_14days/state_series.csv` | 先頭14日で作成した代表状態定義を固定し全220日へ写像する入力。holdout既定ではDay 155–220だけを照合する。 |
 | ADL正解データ | `new_labeled_data/aruba.txt` | CASAS activity `begin/end` からADL正解区間を内部生成する。 |
 
 この表はargparse既定値ではない。省略時の現行CLIは、提案手法に `output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json`、LLM単独に `output/llm_direct_15_1_14days/1.json`、state seriesに互換パス `output/6_adl_evaluation_14/state_series.csv` を使う。`--labeled-casas` を省略した場合は `output/adl_label_intervals.csv` を使い、出力先は設定値から `results/6_adl_match/15_1_14days/` へ解決される。さらに `--n-states` と `--hamming-threshold` のargparse既定値は未指定（summaryではnull）である。正式14日評価ではStep 7--8のとおり `--days 14 --n-states 15 --hamming-threshold 0` と各パスを明示する。既定値と正式条件の不一致は [KI-01](../research/known_issues.md#ki-01) および [KI-08](../research/known_issues.md#ki-08) で追跡している。
@@ -55,14 +69,14 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 
 | 出力 | 内容 |
 |---|---|
-| `results/6_adl_match/15_0_14days/evaluation6_method_comparison.csv` | 提案手法とLLM単独ベースラインの主比較表。`--runs` が2以上の場合はrun平均と標準偏差。 |
-| `results/6_adl_match/15_0_14days/evaluation6_method_comparison_by_run.csv` | runごとの手法別summary。5回平均の元データ。 |
-| `results/6_adl_match/15_0_14days/evaluation6_llm_usage_comparison.csv` | 手法ごとの記録済み1 run合計トークン数・API応答時間。`prompt_tokens`、`response_tokens`、`total_tokens` はそれぞれGemini APIの `promptTokenCount`、`candidatesTokenCount`、`totalTokenCount` に対応する。欠損runは0で補完せず、完全な記録があるrun数を併記する。 |
-| `results/6_adl_match/15_0_14days/evaluation6_pattern_set_details_by_method.csv` | 手法別・パターン別詳細。4状態、raw/unknown予測ラベル、conditional/end-to-end指標、境界横断監査を含む。`num_occurrences` は評価8の監査前件数として保持する。 |
-| `results/6_adl_match/15_0_14days/evaluation6_by_pred_label_by_method.csv` | 手法別・予測ラベル別集計。 |
-| `results/6_adl_match/15_0_14days/evaluation6_by_true_label_by_method.csv` | 手法別・正解ラベル別集計。 |
-| `results/6_adl_match/15_0_14days/evaluation6_by_time_band_by_method.csv` | 手法別・時間帯別集計。 |
-| `results/6_adl_match/15_0_14days/evaluation6_comparison_summary.json` | 比較評価の再現条件。 |
+| `results/6_adl_match/15_0_14days_holdout_test/evaluation6_method_comparison.csv` | 提案手法とLLM単独ベースラインの主比較表。`--runs` が2以上の場合はrun平均と標準偏差。 |
+| `results/6_adl_match/15_0_14days_holdout_test/evaluation6_method_comparison_by_run.csv` | runごとの手法別summary。5回平均の元データ。 |
+| `results/6_adl_match/15_0_14days_holdout_test/evaluation6_llm_usage_comparison.csv` | 手法ごとの記録済み1 run合計トークン数・API応答時間。`prompt_tokens`、`response_tokens`、`total_tokens` はそれぞれGemini APIの `promptTokenCount`、`candidatesTokenCount`、`totalTokenCount` に対応する。欠損runは0で補完せず、完全な記録があるrun数を併記する。 |
+| `results/6_adl_match/15_0_14days_holdout_test/evaluation6_pattern_set_details_by_method.csv` | 手法別・パターン別詳細。4状態、raw/unknown予測ラベル、conditional/end-to-end指標、境界横断監査を含む。`num_occurrences` は評価8の監査前件数として保持する。 |
+| `results/6_adl_match/15_0_14days_holdout_test/evaluation6_by_pred_label_by_method.csv` | 手法別・予測ラベル別集計。 |
+| `results/6_adl_match/15_0_14days_holdout_test/evaluation6_by_true_label_by_method.csv` | 手法別・正解ラベル別集計。 |
+| `results/6_adl_match/15_0_14days_holdout_test/evaluation6_by_time_band_by_method.csv` | 手法別・時間帯別集計。 |
+| `results/6_adl_match/15_0_14days_holdout_test/evaluation6_comparison_summary.json` | 比較評価の再現条件。 |
 
 ## 結果の読み方
 
@@ -110,9 +124,9 @@ uv run python scripts/run_llm_extraction.py \
   --runs 5
 ```
 
-### 4. 🟨 **条件付き** 評価6用の全220日照合系列を作る
+### 4. 🟨 **条件付き** 評価6用の全220日状態系列を作る
 
-`output/6_adl_evaluation_15_0_14days/pattern_occurrences.csv` または `output/6_adl_evaluation_15_0_14days/state_series.csv` がなければ実行する。この系列は、先頭14日で作成した代表状態表を全220日のセンサログへ適用した照合用中間ファイルであり、`output/` に保存する。ディレクトリ名の `14days` は抽出・LLM入力条件を表し、照合系列の長さを表さない。
+`output/6_adl_evaluation_15_0_14days/pattern_occurrences.csv` または `output/6_adl_evaluation_15_0_14days/state_series.csv` がなければ実行する。この系列は、先頭14日で作成した代表状態表を全220日のセンサログへ適用した中間ファイルであり、`output/` に保存する。評価6のholdout採点時にはこのうちDay 155–220だけを使用する。ディレクトリ名の `14days` は抽出・LLM入力条件を表し、状態系列の長さを表さない。
 
 次のコマンドは `--state-series-preprocessing` を指定しないため、現行CLIの `event-driven` 既定を使う。抽出系の1秒Sample-and-Hold・遅延OFF系列とどちらへ統一するかは未解決であり、[KI-06](../research/known_issues.md#ki-06) で追跡している。
 

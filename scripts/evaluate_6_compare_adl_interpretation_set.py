@@ -45,13 +45,29 @@ from src.behavior_pattern_mining.evaluation.llm_usage import (
     load_proposed_run_usage,
     summarize_usage,
 )
+from src.behavior_pattern_mining.evaluation.period_splits import (
+    add_split_arguments,
+    clip_intervals,
+    resolve_split,
+)
+from src.behavior_pattern_mining.data.sensor_representation import (
+    DEFAULT_SENSOR_REPRESENTATION,
+    SENSOR_REPRESENTATIONS,
+)
 
 
 EVAL6_DAYS = 14
+SPLIT_FIELDNAMES = [
+    "split_mode", "evaluation_role", "generation_start", "generation_end",
+    "evaluation_start", "evaluation_end", "generation_days",
+    "validation_start_day", "validation_end_day", "test_start_day", "test_end_day",
+    "sensor_representation",
+]
 
 DETAIL_FIELDNAMES = [
     "run",
     "method",
+    *SPLIT_FIELDNAMES,
     "eval_pattern_id",
     "group_pattern_id",
     "sequence",
@@ -143,6 +159,7 @@ AGGREGATE_SUMMARY_FIELDNAMES = [
 SUMMARY_FIELDNAMES = [
     "run",
     "method",
+    *SPLIT_FIELDNAMES,
     "num_patterns",
     "num_pattern_occurrences",
     "mean_exact_set_match",
@@ -156,6 +173,7 @@ SUMMARY_FIELDNAMES = [
 
 MEAN_SUMMARY_FIELDNAMES = [
     "method",
+    *SPLIT_FIELDNAMES,
     "num_runs",
     "avg_num_patterns",
     "avg_num_pattern_occurrences",
@@ -233,6 +251,8 @@ def parse_args() -> argparse.Namespace:
         / f"llm_sequences_modes_{param_suffix}_1.json",
         help="Proposed-method LLM pattern JSON containing ADL系列ラベル",
     )
+    parser.add_argument("--sensor-representation", choices=SENSOR_REPRESENTATIONS, default=DEFAULT_SENSOR_REPRESENTATION)
+    parser.add_argument("--best-condition-manifest", type=Path, default=None)
     parser.add_argument(
         "--patterns-proposed-template",
         type=str,
@@ -243,6 +263,7 @@ def parse_args() -> argparse.Namespace:
             "llm_sequences_modes_15_1_14days_{run}.json"
         ),
     )
+    add_split_arguments(parser)
     parser.add_argument(
         "--patterns-direct",
         type=Path,
@@ -378,7 +399,40 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip missing method/run pattern files instead of stopping. Skipped files are recorded in the summary JSON.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.generation_days is None:
+        args.generation_days = args.days
+    elif args.generation_days != args.days:
+        raise ValueError("--generation-days must equal --days because artifact paths use --days")
+    if args.best_condition_manifest is not None:
+        payload = json.loads(args.best_condition_manifest.read_text(encoding="utf-8"))
+        representation = payload.get("sensor_representation")
+        if representation != args.sensor_representation:
+            raise ValueError(
+                "best-condition manifest sensor_representation does not match "
+                f"--sensor-representation: {representation!r} != {args.sensor_representation!r}"
+            )
+        manifest_k = int(payload["n_states"])
+        manifest_h = int(payload["hamming_threshold"])
+        if args.n_states is not None and args.n_states != manifest_k:
+            raise ValueError("--n-states conflicts with --best-condition-manifest")
+        if args.hamming_threshold is not None and args.hamming_threshold != manifest_h:
+            raise ValueError("--hamming-threshold conflicts with --best-condition-manifest")
+        args.n_states = manifest_k
+        args.hamming_threshold = manifest_h
+        if args.split_mode != payload.get("split_mode"):
+            raise ValueError("--split-mode conflicts with --best-condition-manifest")
+        for field in (
+            "generation_days",
+            "validation_start_day",
+            "validation_end_day",
+            "test_start_day",
+            "test_end_day",
+        ):
+            manifest_value = payload.get(field)
+            if manifest_value is not None and getattr(args, field) != manifest_value:
+                raise ValueError(f"--{field.replace('_', '-')} conflicts with --best-condition-manifest")
+    return args
 
 
 def path_for_run(base_path: Path, run: int, template: str | None) -> Path:
@@ -570,12 +624,27 @@ def main() -> None:
         args.n_states,
         args.hamming_threshold,
     )
+    if args.split_mode == "holdout":
+        output_suffix = f"{output_suffix}_holdout_test"
     args.output_dir = resolve_output_dir(args.output_dir, output_suffix)
     if not args.state_series.exists():
         raise FileNotFoundError(f"--state-series does not exist: {args.state_series}")
 
-    state_intervals = load_state_series_csv(args.state_series)
+    all_state_intervals = load_state_series_csv(args.state_series)
     adl_intervals, adl_source = load_truth_intervals(args)
+    split = resolve_split(
+        [*all_state_intervals, *adl_intervals],
+        split_mode=args.split_mode,
+        generation_days=args.generation_days,
+        validation_start_day=args.validation_start_day,
+        validation_end_day=args.validation_end_day,
+        test_start_day=args.test_start_day,
+        test_end_day=args.test_end_day,
+    )
+    evaluation_start, evaluation_end = split.scoring_period("test")
+    state_intervals = clip_intervals(all_state_intervals, evaluation_start, evaluation_end)
+    adl_intervals = clip_intervals(adl_intervals, evaluation_start, evaluation_end)
+    split_metadata = split.metadata("test")
 
     all_detail_rows: list[dict] = []
     run_summary_rows: list[dict] = []
@@ -616,11 +685,23 @@ def main() -> None:
                 args=args,
             )
             detail_rows = add_run_to_rows(run, detail_rows)
-            summary_metrics = {"run": run, **summary_metrics}
+            detail_rows = [
+                {**split_metadata, "sensor_representation": args.sensor_representation, **row}
+                for row in detail_rows
+            ]
+            summary_metrics = {
+                "run": run,
+                **split_metadata,
+                "sensor_representation": args.sensor_representation,
+                **summary_metrics,
+            }
             all_detail_rows.extend(detail_rows)
             run_summary_rows.append(summary_metrics)
 
-    summary_rows = summarize_runs(run_summary_rows)
+    summary_rows = [
+        {**split_metadata, "sensor_representation": args.sensor_representation, **row}
+        for row in summarize_runs(run_summary_rows)
+    ]
     evaluated_runs_by_method = {
         method: sorted(
             {
@@ -671,11 +752,15 @@ def main() -> None:
     llm_usage_run_rows.extend(direct_usage_rows)
     missing_llm_usage.extend(direct_missing_rows)
     llm_usage_summary_rows = [
-        summarize_usage(
-            method,
-            evaluated_runs_by_method[method],
-            llm_usage_run_rows,
-        )
+        {
+            **split_metadata,
+            "sensor_representation": args.sensor_representation,
+            **summarize_usage(
+                method,
+                evaluated_runs_by_method[method],
+                llm_usage_run_rows,
+            ),
+        }
         for method in ("proposed", "direct_log_baseline")
     ]
 
@@ -703,6 +788,11 @@ def main() -> None:
             )
         )
 
+    result_metadata = {**split_metadata, "sensor_representation": args.sensor_representation}
+    pred_label_rows = [{**result_metadata, **row} for row in pred_label_rows]
+    true_label_rows = [{**result_metadata, **row} for row in true_label_rows]
+    time_band_rows = [{**result_metadata, **row} for row in time_band_rows]
+
     args.output_dir.mkdir(parents=True, exist_ok=True)
     write_csv_rows(
         args.output_dir / "evaluation6_method_comparison.csv",
@@ -717,7 +807,7 @@ def main() -> None:
     write_csv_rows(
         args.output_dir / "evaluation6_llm_usage_comparison.csv",
         llm_usage_summary_rows,
-        LLM_USAGE_COMPARISON_FIELDNAMES,
+        [*SPLIT_FIELDNAMES, *LLM_USAGE_COMPARISON_FIELDNAMES],
     )
     write_csv_rows(
         args.output_dir / "evaluation6_pattern_set_details_by_method.csv",
@@ -727,17 +817,17 @@ def main() -> None:
     write_csv_rows(
         args.output_dir / "evaluation6_by_pred_label_by_method.csv",
         pred_label_rows,
-        ["method", "pred_label", *AGGREGATE_SUMMARY_FIELDNAMES],
+        [*SPLIT_FIELDNAMES, "method", "pred_label", *AGGREGATE_SUMMARY_FIELDNAMES],
     )
     write_csv_rows(
         args.output_dir / "evaluation6_by_true_label_by_method.csv",
         true_label_rows,
-        ["method", "true_label", *AGGREGATE_SUMMARY_FIELDNAMES],
+        [*SPLIT_FIELDNAMES, "method", "true_label", *AGGREGATE_SUMMARY_FIELDNAMES],
     )
     write_csv_rows(
         args.output_dir / "evaluation6_by_time_band_by_method.csv",
         time_band_rows,
-        ["method", "time_band", *AGGREGATE_SUMMARY_FIELDNAMES],
+        [*SPLIT_FIELDNAMES, "method", "time_band", *AGGREGATE_SUMMARY_FIELDNAMES],
     )
 
     identity = current_model_identity()
@@ -757,6 +847,9 @@ def main() -> None:
         "skip_missing_runs": args.skip_missing_runs,
         "skipped_runs": skipped_runs,
         "days": args.days,
+        **split_metadata,
+        "sensor_representation": args.sensor_representation,
+        "best_condition_manifest": str(args.best_condition_manifest) if args.best_condition_manifest else None,
         "n_states": args.n_states,
         "hamming_threshold": args.hamming_threshold,
         "state_series": str(args.state_series),

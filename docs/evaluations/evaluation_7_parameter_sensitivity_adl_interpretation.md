@@ -1,12 +1,24 @@
 # 評価7: 14日・全28条件・各5 runのADL解釈ラベル精度パラメータ感度分析
 
-> **モデル別保存:** 個別センサ条件のLLM JSON/checkpointは `results/<model>/aruba_individual_{K}_{h}_{days}days/`、正式な複数run集計は `results/<model>/7_param_search_14d_5runs_individual/` に保存する。部屋統合条件は互換の `aruba_{K}_{h}_{days}days/` と `7_param_search_14d_5runs/` を使う。state seriesとnetworkは `output/` / `picture/` に残すが、表現名を含むパスで分離する。
+> **モデル別保存:** 個別センサ条件のLLM JSON/checkpointは `results/<model>/aruba_individual_{K}_{h}_{days}days/`、holdout既定の正式な複数run集計は `results/<model>/7_param_search_14d_5runs_individual_holdout/` に保存する。部屋統合条件は互換の `aruba_{K}_{h}_{days}days/` と `7_param_search_14d_5runs_holdout/` を使う。`_holdout` がない旧出力先はlegacy全220日成果物として保持する。state seriesとnetworkは `output/` / `picture/` に残すが、表現名を含むパスで分離する。
 
 ## 目的
 
 提案手法単独について、代表状態数 `K` とハミング距離閾値を変化させたときのADL解釈ラベル精度を比較し、最適なパラメータ条件を選ぶ。
 
 評価6と同じset評価を使うが、評価7ではLLM単独ベースラインとは比較しない。比較対象は提案手法のみである。
+
+## 期間分割（既定: holdout）
+
+評価7は最終性能を報告する評価ではなく、実験条件選択のvalidationである。状態表・状態遷移ネットワーク・LLMパターンは先頭14日で作り、各 `K,h` のF1はDay 15–154だけで計算する。Day 155–220のstate series、pattern occurrence、ADL正解は選択に使用しない。評価7終了時には、選択指標・期間・表現名を含む `evaluation7_best_condition_manifest.json` を保存し、評価6へ渡せる。
+
+| 期間 | 用途 |
+|---|---|
+| Day 1–14 | 代表状態表、ネットワーク、LLMパターン生成 |
+| Day 15–154 | 評価7 validation / `K,h` 選択 |
+| Day 155–220 | 評価6の独立test。評価7は使用しない。 |
+
+すべての採点入力は半開区間 `[start, end)` で制限する。期間境界をまたぐADL区間はclipするため、Day 154/155の境界で二重計上しない。従来の全220日採点を再現するには `--split-mode legacy` を指定する。legacyでもパターン生成は先頭14日であり、採点だけが全期間になる。
 
 ## 評価方法
 
@@ -37,20 +49,20 @@
 |---|---|---|
 | センサ表現 | `individual`（既定） | 物理センサ34個を `Bedroom_M001` のように個別特徴量として保持する。`room` は従来の10部屋・場所ラベルへの統合条件であり、比較用に明示指定する。 |
 | 提案手法LLM JSON | `output/aruba_{K}_{hamming}_{days}days/llm_sequences_modes_{K}_{hamming}_{days}days_1.json` | `ADL系列ラベル` を持つ提案手法出力。 |
-| 状態系列CSV | `output/6_adl_evaluation_{K}_{hamming}_{days}days/state_series.csv` | 当該入力条件の代表状態定義を固定して全220日を写像し、パターン出現区間を検索する照合系列。 |
+| 状態系列CSV | `output/6_adl_evaluation_{K}_{hamming}_{days}days/state_series.csv` | 当該入力条件の代表状態定義を固定して全220日を写像する系列。holdout既定ではDay 15–154だけを照合する。 |
 | ADL正解データ | `new_labeled_data/aruba.txt` | CASAS activity `begin/end` からADL正解区間を内部生成する。 |
 
 条件ごとの入力パスが既定命名と異なる場合は、`--patterns-template` と `--state-series-template` を使う。
 
 | 実行区分 | 条件 | run | state series | 出力先 |
 |---|---|---:|---|---|
-| 正式評価 | `K=10,15,20,25,30,35,40` と `hamming=0,1,2,3` の全28条件、`days=14` | 各条件 `1--5` | 条件別パス | `results/<model>/7_param_search_14d_5runs/` |
+| 正式評価 | `K=10,15,20,25,30,35,40` と `hamming=0,1,2,3` の全28条件、`days=14` | 各条件 `1--5` | 条件別パス | `results/<model>/7_param_search_14d_5runs_*_holdout/` |
 
 `output/6_adl_evaluation_{K}_{hamming}_{days}days/state_series.csv` を各条件の入力に使う。全条件を同じ5 runで評価し、条件ごとの平均と標準偏差から最適条件を選ぶ。評価5・6の正式条件 `hamming=0` との不一致は [KI-01](../research/known_issues.md#ki-01)、state seriesの前処理差は [KI-06](../research/known_issues.md#ki-06) で追跡している。
 
 ## 実行コマンド
 
-`--days 14` は状態遷移ネットワークの構築およびLLM入力に使う先頭14日を表す。各条件の `evaluate_adl_labels.py --write-state-series` は、その14日条件で作成した代表状態定義を固定して全220日を写像した照合系列を生成し、評価7のADL集合整合性は全220日で算出する。
+`--days 14` は状態遷移ネットワークの構築およびLLM入力に使う先頭14日を表す。各条件の `evaluate_adl_labels.py --write-state-series` は、その14日条件で作成した代表状態定義を固定して全220日を写像した状態系列を生成する。holdout既定の評価7はこの系列のDay 15–154だけでADL集合整合性を算出する。
 
 個別センサ条件の state table・network・LLM成果物は `aruba_individual_{K}_{h}_{days}days` を含むパスへ保存され、従来の部屋統合条件は既存互換の `aruba_{K}_{h}_{days}days` を使う。両条件の成果物を同一パスに混在させない。
 

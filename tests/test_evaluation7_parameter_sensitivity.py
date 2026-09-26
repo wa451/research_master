@@ -79,7 +79,8 @@ class Evaluation7ParameterSensitivityTests(unittest.TestCase):
         self.assertEqual(args.n_states_list, [10, 15, 20, 25, 30, 35, 40])
         self.assertEqual(args.hamming_thresholds, [0, 1, 2, 3])
         self.assertEqual(args.runs, 5)
-        self.assertEqual(args.output_dir.name, "7_param_search_14d_5runs")
+        self.assertEqual(args.split_mode, "holdout")
+        self.assertEqual(args.output_dir.name, "7_param_search_14d_5runs_individual_holdout")
 
     def test_cli_writes_condition_summary_and_best_condition(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -116,6 +117,8 @@ class Evaluation7ParameterSensitivityTests(unittest.TestCase):
                 str(tmp / "missing_labeled_casas.txt"),
                 "--output-dir",
                 str(output_dir),
+                "--split-mode",
+                "legacy",
             ]
             completed = subprocess.run(
                 command,
@@ -198,6 +201,8 @@ class Evaluation7ParameterSensitivityTests(unittest.TestCase):
                 str(tmp / "missing_labeled_casas.txt"),
                 "--output-dir",
                 str(output_dir),
+                "--split-mode",
+                "legacy",
             ]
             subprocess.run(command, cwd=ROOT_DIR, check=True, text=True, capture_output=True)
 

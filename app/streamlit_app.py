@@ -708,6 +708,9 @@ def render_eval5_settings(common: dict) -> dict:
 
 def render_eval6_settings(common: dict) -> dict:
     st.subheader("評価6: ADL解釈ラベルSet一致評価")
+    st.caption(
+        "既定は holdout: 先頭14日で生成し、Day 155–220 を独立テストとして採点します。"
+    )
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         days = st.number_input("使用日数", min_value=1, value=14, step=1)
@@ -756,6 +759,10 @@ def render_eval6_settings(common: dict) -> dict:
     with st.expander("複数run用テンプレート（任意）"):
         proposed_template = st.text_input("patterns-proposed-template", "")
         direct_template = st.text_input("patterns-direct-template", "")
+        best_condition_manifest = st.text_input(
+            "evaluation7 best-condition manifest（任意）", "",
+            help="指定時はmanifestのK,hを使用します。不一致の手動K,hはCLIでエラーになります。",
+        )
 
     st.markdown("**評価パラメータ**")
     col1, col2 = st.columns(2)
@@ -778,6 +785,7 @@ def render_eval6_settings(common: dict) -> dict:
     default_eval6_output = f"{model_results_relative(common)}/6_adl_match"
     if representation != "room":
         default_eval6_output += f"_{representation}"
+    default_eval6_output += "_holdout_test"
     output_dir = st.text_input(
         "比較output-dir",
         default_eval6_output,
@@ -798,6 +806,7 @@ def render_eval6_settings(common: dict) -> dict:
         "patterns_direct": direct,
         "patterns_proposed_template": proposed_template,
         "patterns_direct_template": direct_template,
+        "best_condition_manifest": best_condition_manifest,
         "state_series": state_series,
         "adl_intervals": adl_intervals,
         "intermediate_output_dir": intermediate_dir,
@@ -810,6 +819,12 @@ def render_eval6_settings(common: dict) -> dict:
         "match_mode": match_mode,
         "max_skip_duration_minutes": max_skip,
         "skip_missing_runs": skip_missing,
+        "split_mode": "holdout",
+        "generation_days": int(days),
+        "validation_start_day": 15,
+        "validation_end_day": 154,
+        "test_start_day": 155,
+        "test_end_day": 220,
     }
 
 
@@ -822,6 +837,7 @@ def render_eval7_settings(common: dict) -> dict:
         f"hamming={','.join(str(value) for value in FORMAL_EVALUATION7_HAMMING)}, "
         f"runs={FORMAL_EVALUATION7_RUNS}。"
     )
+    st.caption("既定は holdout: Day 15–154 のvalidationでK,hを選びます。")
     days = FORMAL_EVALUATION7_DAYS
     n_states_list = list(FORMAL_EVALUATION7_N_STATES)
     hamming_thresholds = list(FORMAL_EVALUATION7_HAMMING)
@@ -890,6 +906,7 @@ def render_eval7_settings(common: dict) -> dict:
     default_eval7_output = f"{model_results_relative(common)}/{FORMAL_EVALUATION7_RESULTS_DIRNAME}"
     if representation != "room":
         default_eval7_output += f"_{representation}"
+    default_eval7_output += "_holdout"
     output_dir = st.text_input(
         "output-dir",
         default_eval7_output,
@@ -921,6 +938,12 @@ def render_eval7_settings(common: dict) -> dict:
         "skip_missing_runs": skip_missing_runs,
         "skip_missing_conditions": skip_missing_conditions,
         "show_preparation_steps": show_preparation_steps,
+        "split_mode": "holdout",
+        "generation_days": int(days),
+        "validation_start_day": 15,
+        "validation_end_day": 154,
+        "test_start_day": 155,
+        "test_end_day": 220,
     }
 
 

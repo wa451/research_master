@@ -142,6 +142,8 @@ class Evaluation6DefaultDaysTests(unittest.TestCase):
                 str(output_dir),
                 "--runs",
                 "5",
+                "--split-mode",
+                "legacy",
             ]
             with patch.object(sys, "argv", argv):
                 evaluation6.main()

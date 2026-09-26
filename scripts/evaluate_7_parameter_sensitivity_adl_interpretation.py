@@ -46,6 +46,11 @@ from src.behavior_pattern_mining.evaluation.evaluation7_staged import (
     FORMAL_EVALUATION7_RUNS,
     condition_pairs_from_file,
 )
+from src.behavior_pattern_mining.evaluation.period_splits import (
+    add_split_arguments,
+    clip_intervals,
+    resolve_split,
+)
 from src.behavior_pattern_mining.data.sensor_representation import (
     DEFAULT_SENSOR_REPRESENTATION,
     SENSOR_REPRESENTATIONS,
@@ -54,6 +59,12 @@ from src.behavior_pattern_mining.data.sensor_representation import (
 
 
 DEFAULT_DAYS = FORMAL_EVALUATION7_DAYS
+SPLIT_FIELDNAMES = [
+    "split_mode", "evaluation_role", "generation_start", "generation_end",
+    "evaluation_start", "evaluation_end", "generation_days",
+    "validation_start_day", "validation_end_day", "test_start_day", "test_end_day",
+    "sensor_representation",
+]
 
 DETAIL_FIELDNAMES = [
     "condition_id",
@@ -62,6 +73,7 @@ DETAIL_FIELDNAMES = [
     "days",
     "patterns_path",
     "state_series",
+    *SPLIT_FIELDNAMES,
     *EVAL6_DETAIL_FIELDNAMES,
 ]
 
@@ -74,6 +86,7 @@ RUN_SUMMARY_FIELDNAMES = [
     "method",
     "patterns_path",
     "state_series",
+    *SPLIT_FIELDNAMES,
     "num_patterns",
     "num_pattern_occurrences",
     "mean_accuracy",
@@ -92,6 +105,7 @@ CONDITION_SUMMARY_FIELDNAMES = [
     "n_states",
     "hamming_threshold",
     "days",
+    *SPLIT_FIELDNAMES,
     "num_runs",
     "avg_num_patterns",
     "avg_num_pattern_occurrences",
@@ -136,6 +150,7 @@ LABEL_FIELDNAMES = [
     "n_states",
     "hamming_threshold",
     "days",
+    *SPLIT_FIELDNAMES,
     "method",
     "label",
     *AGGREGATE_SUMMARY_FIELDNAMES,
@@ -146,6 +161,7 @@ TIME_BAND_FIELDNAMES = [
     "n_states",
     "hamming_threshold",
     "days",
+    *SPLIT_FIELDNAMES,
     "method",
     "time_band",
     "mean_accuracy",
@@ -189,6 +205,7 @@ def parse_args() -> argparse.Namespace:
         help="Hamming thresholds. Accepts space or comma separated values, e.g. 0 1 2 or 0,1,2.",
     )
     parser.add_argument("--days", type=int, default=DEFAULT_DAYS)
+    add_split_arguments(parser)
     run_group = parser.add_mutually_exclusive_group()
     run_group.add_argument("--runs", type=int, default=FORMAL_EVALUATION7_RUNS)
     run_group.add_argument(
@@ -302,12 +319,17 @@ def parse_args() -> argparse.Namespace:
     args.n_states_list = parse_int_list(args.n_states_list)
     args.hamming_thresholds = parse_int_list(args.hamming_thresholds)
     args.run_ids = parse_int_list(args.run_ids) if args.run_ids else None
+    if args.generation_days is None:
+        args.generation_days = args.days
+    elif args.generation_days != args.days:
+        raise ValueError("--generation-days must equal --days because artifact paths use --days")
     args.dataset = args.dataset or artifact_dataset_name(
         DATASET_NAME, args.sensor_representation
     )
     if args.output_dir is None:
         suffix = "" if args.sensor_representation == "room" else f"_{args.sensor_representation}"
-        args.output_dir = current_model_results_root() / f"{FORMAL_EVALUATION7_RESULTS_DIRNAME}{suffix}"
+        holdout_suffix = "_holdout" if args.split_mode == "holdout" else ""
+        args.output_dir = current_model_results_root() / f"{FORMAL_EVALUATION7_RESULTS_DIRNAME}{suffix}{holdout_suffix}"
     return args
 
 
@@ -601,7 +623,19 @@ def evaluate_conditions(args: argparse.Namespace) -> dict[str, Any]:
                 "Use --skip-missing-conditions to skip missing conditions."
             )
 
-        state_intervals = load_state_series_csv(state_series_path)
+        all_state_intervals = load_state_series_csv(state_series_path)
+        split = resolve_split(
+            [*all_state_intervals, *adl_intervals],
+            split_mode=args.split_mode,
+            generation_days=args.generation_days,
+            validation_start_day=args.validation_start_day,
+            validation_end_day=args.validation_end_day,
+            test_start_day=args.test_start_day,
+            test_end_day=args.test_end_day,
+        )
+        evaluation_start, evaluation_end = split.scoring_period("validation")
+        state_intervals = clip_intervals(all_state_intervals, evaluation_start, evaluation_end)
+        scoring_adl_intervals = clip_intervals(adl_intervals, evaluation_start, evaluation_end)
         pattern_paths = [
             (run, resolve_pattern_path(args, n_states, hamming_threshold, run))
             for run in run_ids
@@ -653,11 +687,14 @@ def evaluate_conditions(args: argparse.Namespace) -> dict[str, Any]:
                 method="proposed",
                 patterns_path=patterns_path,
                 state_intervals=state_intervals,
-                adl_intervals=adl_intervals,
+                adl_intervals=scoring_adl_intervals,
                 args=args,
             )
             condition_had_run = True
-            detail_rows = [{"run": run, **row} for row in detail_rows]
+            detail_rows = [
+                {"run": run, **split.metadata("validation"), "sensor_representation": args.sensor_representation, **row}
+                for row in detail_rows
+            ]
             all_detail_rows.extend(
                 add_condition_to_rows(
                     detail_rows,
@@ -674,11 +711,13 @@ def evaluate_conditions(args: argparse.Namespace) -> dict[str, Any]:
                 "hamming_threshold": hamming_threshold,
                 "days": args.days,
                 "run": run,
+                "sensor_representation": args.sensor_representation,
                 "patterns_path": str(patterns_path),
                 "state_series": str(state_series_path),
                 **summary_metrics,
             }
             run_summary["mean_accuracy"] = run_summary["mean_exact_set_match"]
+            run_summary.update(split.metadata("validation"))
             run_summary_rows.append(run_summary)
 
         if not condition_had_run and args.skip_missing_conditions:
@@ -710,11 +749,15 @@ def evaluate_conditions(args: argparse.Namespace) -> dict[str, Any]:
             f"Skipped conditions/runs shown up to 10:\n{details}"
         )
 
-    condition_summary_rows = condition_summary_from_runs(run_summary_rows, args.selection_metric)
+    split_metadata = split.metadata("validation")
+    condition_summary_rows = [
+        {**split_metadata, "sensor_representation": args.sensor_representation, **row}
+        for row in condition_summary_from_runs(run_summary_rows, args.selection_metric)
+    ]
     best_condition = condition_summary_rows[0] if condition_summary_rows else None
-    pred_label_rows = condition_label_rows(all_detail_rows, "pred_adl_labels", "pred_label")
-    true_label_rows = condition_label_rows(all_detail_rows, "true_adl_labels", "true_label")
-    time_band_rows = condition_time_band_rows(all_detail_rows)
+    pred_label_rows = [{**split_metadata, "sensor_representation": args.sensor_representation, **row} for row in condition_label_rows(all_detail_rows, "pred_adl_labels", "pred_label")]
+    true_label_rows = [{**split_metadata, "sensor_representation": args.sensor_representation, **row} for row in condition_label_rows(all_detail_rows, "true_adl_labels", "true_label")]
+    time_band_rows = [{**split_metadata, "sensor_representation": args.sensor_representation, **row} for row in condition_time_band_rows(all_detail_rows)]
 
     return {
         "adl_source": adl_source,
@@ -728,6 +771,7 @@ def evaluate_conditions(args: argparse.Namespace) -> dict[str, Any]:
         "best_condition": best_condition,
         "skipped_conditions": skipped_conditions,
         "skipped_runs": skipped_runs,
+        "split": split,
     }
 
 
@@ -771,6 +815,7 @@ def write_outputs(args: argparse.Namespace, result: dict[str, Any]) -> None:
     )
 
     identity = current_model_identity()
+    split_metadata = result["split"].metadata("validation")
     summary_payload = {
         "evaluation": 7,
         "model": {
@@ -782,7 +827,9 @@ def write_outputs(args: argparse.Namespace, result: dict[str, Any]) -> None:
         "order_sensitive": False,
         "time_band_aware": True,
         "dataset": args.dataset,
+        "sensor_representation": args.sensor_representation,
         "days": args.days,
+        **split_metadata,
         "n_states_list": sorted({pair[0] for pair in result["condition_pairs"]}),
         "hamming_thresholds": sorted({pair[1] for pair in result["condition_pairs"]}),
         "condition_pairs": [
@@ -835,12 +882,28 @@ def write_outputs(args: argparse.Namespace, result: dict[str, Any]) -> None:
             "by_true_label": "evaluation7_by_true_label.csv",
             "by_time_band": "evaluation7_by_time_band.csv",
             "summary": "evaluation7_summary.json",
+            "best_condition_manifest": "evaluation7_best_condition_manifest.json",
         },
     }
     (args.output_dir / "evaluation7_summary.json").write_text(
         json.dumps(summary_payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    best = result["best_condition"]
+    if best is not None:
+        manifest = {
+            "K": int(best["n_states"]),
+            "h": int(best["hamming_threshold"]),
+            "n_states": int(best["n_states"]),
+            "hamming_threshold": int(best["hamming_threshold"]),
+            "sensor_representation": args.sensor_representation,
+            "dataset": args.dataset,
+            "selection_metric": args.selection_metric,
+            **split_metadata,
+        }
+        (args.output_dir / "evaluation7_best_condition_manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
 
 
 def main() -> None:
