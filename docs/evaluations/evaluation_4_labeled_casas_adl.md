@@ -53,7 +53,7 @@
 | `results/4_adl_detect/adl_interval_hit_metrics.csv` | ADL区間内hit評価。 |
 | `results/4_adl_detect/adl_interval_hit_details.csv` | 各正解区間のhit/miss詳細。 |
 | `results/4_adl_detect/evaluation_summary.json` | 入力パス、閾値、後処理件数、平均指標。 |
-| `results/4_adl_detect/state_series.csv` | `--write-state-series` 指定時に保存する代表状態系列CSV。下流で再利用する場合は、抽出側・下流側と前処理条件が一致するか確認する（[KI-06](../research/known_issues.md)）。 |
+| `results/4_adl_detect/state_series.csv` | `--write-state-series` 指定時に保存する代表状態系列CSV。下流で再利用する場合は、抽出側・下流側と前処理条件が一致するか確認する。評価6・7の正式workflowは別途 `network-equivalent` を明示した系列を使う。 |
 
 ## 結果の読み方
 
@@ -93,7 +93,7 @@ uv run python scripts/run_llm_extraction.py \
 
 ### 3. 🟥 **必須** 評価4を実行する
 
-ADL区間評価を作るために実行する。`--write-state-series` により代表状態系列CSVを同時に保存する。以下は現在のCLI既定である `event-driven` を明示した互換手順であり、抽出側と同じ `network-equivalent` を正式条件にするかは未解決である（[KI-06](../research/known_issues.md)）。splitを指定しないため、同一期間で対応付けと評価を行うdescriptive evaluationになる（[KI-07](../research/known_issues.md)）。
+ADL区間評価を作るために実行する。`--write-state-series` により代表状態系列CSVを同時に保存する。以下は現在のCLI既定である `event-driven` を明示した互換手順である。評価6・7の正式workflowは別途 `network-equivalent` を採用済みであり（[KI-06](../research/known_issues.md)）、この評価4の互換手順をそれらの入力に使わない。splitを指定しないため、同一期間で対応付けと評価を行うdescriptive evaluationになる（[KI-07](../research/known_issues.md)）。
 
 ```bash
 uv run python scripts/evaluate_adl_labels.py \
@@ -116,7 +116,7 @@ uv run python scripts/evaluate_adl_labels.py \
 
 ### 4. 🟩 **スキップ可** 代表状態系列CSVだけを再利用する
 
-`results/4_adl_detect/state_series.csv` が既にあり、下流評価だけを実行したい場合は評価4の再実行を省いてよい。ただし、保存時の `event-driven` / `network-equivalent`、平滑化、期間、K/hが下流条件と一致する場合に限る（[KI-06](../research/known_issues.md)）。このStepの追加コマンドはない。
+`results/4_adl_detect/state_series.csv` が既にあり、同じ評価4条件の下流処理だけを実行したい場合は評価4の再実行を省いてよい。ただし、保存時の `event-driven` / `network-equivalent`、平滑化、期間、K/hが下流条件と一致する場合に限る。評価6・7の正式入力には、別途 `network-equivalent` で作成した条件一致のCSVを使う。このStepの追加コマンドはない。
 
 ## 比較対象
 
@@ -157,7 +157,7 @@ uv run python scripts/evaluate_adl_labels.py \
 | `--split-date` | 未指定 | 指定時はこの時刻より前で対応付けを学習し、後を評価する。 |
 | `--train-ratio` | 未指定 | `--split-date` 未指定時の時間比率split。splitなしの位置付けは未解決（[KI-07](../research/known_issues.md)）。 |
 | `--write-state-series` | 未指定 | 互換手順では `results/4_adl_detect/state_series.csv`。 |
-| `--state-series-preprocessing` | `event-driven` | `network-equivalent` も選択可能。正式条件は未解決（[KI-06](../research/known_issues.md)）。 |
+| `--state-series-preprocessing` | `event-driven` | `network-equivalent` も選択可能。評価4の本書はevent-driven互換手順であり、評価6・7の正式workflowはnetwork-equivalentを明示する。 |
 | `--smoothing-window-sec` | `5` | `network-equivalent` の遅延OFF窓。event-drivenでは使わない。 |
 | `--state-series-days` | 未指定 | `network-equivalent` では未指定時にラベル付きデータの全カレンダー期間を使う。 |
 | `--state-series-only` | 無効 | `--write-state-series` で系列だけを作り、パターン・ADL評価前に終了する場合に有効化。 |
@@ -173,5 +173,5 @@ uv run python scripts/evaluate_adl_labels.py \
 - splitなしでは、パターンとADLの対応付けと評価を同じ全期間で行うため、descriptive evaluationとして扱う。検出性能評価としての期間・splitは未解決である（[KI-07](../research/known_issues.md)）。
 - 評価4は既存の前処理、代表状態抽出、LLM抽出ロジックを変更せず、後段評価として実行する。
 - マージ幅や最小継続時間の設定によりPrecision / Recall / F1は変わるため、報告時は後処理条件を併記する。
-- ADL照合用状態系列のCLI既定は `event-driven` で、抽出側の1秒Sample-and-Hold・遅延OFFとは一致しない（[KI-06](../research/known_issues.md)）。
+- ADL照合用状態系列のCLI既定は `event-driven` で、抽出側の1秒Sample-and-Hold・遅延OFFとは一致しない。評価6・7ではこの不一致を避けるため `network-equivalent` を明示する（[KI-06](../research/known_issues.md)）。
 - `Bathroom`, `Personal_Hygiene`, `Bathing` を時間帯によらず `Wake-up` とする現在の分類規則は、正式仕様として未確定である（[KI-07](../research/known_issues.md)）。

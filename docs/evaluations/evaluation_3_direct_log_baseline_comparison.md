@@ -102,7 +102,7 @@ uv run python scripts/run_groundedness.py
 2. LLM単独ベースラインは `new_labeled_data/aruba.txt` からセンサーイベントだけを抽出する。
 3. activity `begin/end` ラベルはLLM入力から除外する。
 4. `configs/aruba_sensor_map.json` でセンサーIDを場所名へ変換する。
-5. `scripts/run_direct_log_baseline.py` が、1秒粒度化・遅延OFF・圧縮後の系列をネットワーク化せずLLMへ直接入力して抽出・評価する。現在の最終状態写像は完全一致のみであり、提案手法のハミング写像との不一致は未解決である（[KI-04](../research/known_issues.md)）。
+5. `scripts/run_direct_log_baseline.py` が、1秒粒度化・遅延OFF・圧縮後の系列をネットワーク化せずLLMへ直接入力して抽出・評価する。最終状態写像は提案手法と同じ `map_vector_to_state` を再利用し、完全一致後に閾値内の最近傍Hamming写像、範囲外で `その他` とする（[KI-04](../research/known_issues.md)）。既存の旧LLM-only成果物は完全一致のみだったため、現行仕様の比較には再生成が必要である。
 6. 評価指標は遷移確率・頻度ベースラインに対するPrecision / Recall / F1を使う。ただし、評価側のK/hと入力パスの固定箇所は未解決である（[KI-05](../research/known_issues.md)）。
 
 ## パラメータ
@@ -124,5 +124,5 @@ uv run python scripts/run_groundedness.py
 - `--n-states` や `--hamming-threshold` は抽出CLIに存在するが、評価側の固定入力パスへ完全には伝播しないため、非既定条件の比較は未解決である（[KI-05](../research/known_issues.md)）。
 - LLM単独ベースラインの出力先は `output/llm_direct_{DAYS}/` で、提案手法の出力先とは異なる。
 - `src/behavior_pattern_mining/evaluation/groundedness_check.py` の現在の既定入力はLLM単独出力向けであるため、Groundedness確認時は入力パスを確認する。
-- direct-log側と提案手法側の状態写像は現在一致していない（[KI-04](../research/known_issues.md)）。
+- direct-log側と提案手法側の状態写像は現行生成では一致する。旧完全一致成果物を新しい生成物と混在させない（[KI-04](../research/known_issues.md)）。
 - 無引数実行の `h=1` と現論文採用条件 `h=0` の関係は未解決である（[KI-01](../research/known_issues.md)）。

@@ -48,8 +48,8 @@
 | 入力 | 既定・例 | 役割 |
 |---|---|---|
 | センサ表現 | `individual`（既定） | 物理センサ34個を `Bedroom_M001` のように個別特徴量として保持する。`room` は従来の10部屋・場所ラベルへの統合条件であり、比較用に明示指定する。 |
-| 提案手法LLM JSON | `output/aruba_{K}_{hamming}_{days}days/llm_sequences_modes_{K}_{hamming}_{days}days_1.json` | `ADL系列ラベル` を持つ提案手法出力。 |
-| 状態系列CSV | `output/6_adl_evaluation_{K}_{hamming}_{days}days/state_series.csv` | 当該入力条件の代表状態定義を固定し、抽出側と同じ `network-equivalent`（1秒Sample-and-Hold、遅延OFF、Hamming最近傍写像、連続圧縮）で全220日を写像する系列。holdout既定ではDay 15–154だけを照合する。 |
+| 提案手法LLM JSON | `results/<model>/aruba_individual_{K}_{hamming}_{days}days/llm_sequences_modes_{K}_{hamming}_{days}days_1.json` | `ADL系列ラベル` を持つ個別センサ既定の提案手法出力。 |
+| 状態系列CSV | `output/6_adl_evaluation_aruba_individual_{K}_{hamming}_{days}days/state_series.csv` | 当該入力条件の代表状態定義を固定し、抽出側と同じ `network-equivalent`（1秒Sample-and-Hold、遅延OFF、Hamming最近傍写像、連続圧縮）で全220日を写像する系列。holdout既定ではDay 15–154だけを照合する。 |
 | ADL正解データ | `new_labeled_data/aruba.txt` | CASAS activity `begin/end` からADL正解区間を内部生成する。 |
 
 条件ごとの入力パスが既定命名と異なる場合は、`--patterns-template` と `--state-series-template` を使う。
@@ -58,7 +58,7 @@
 |---|---|---:|---|---|
 | 正式評価 | `K=10,15,20,25,30,35,40` と `hamming=0,1,2,3` の全28条件、`days=14` | 各条件 `1--5` | 条件別パス | `results/<model>/7_param_search_14d_5runs_*_holdout/` |
 
-`output/6_adl_evaluation_{K}_{hamming}_{days}days/state_series.csv` を各条件の入力に使う。全条件を同じ5 runで評価し、条件ごとの平均と標準偏差から最適条件を選ぶ。評価5・6の正式条件 `hamming=0` との不一致は [KI-01](../research/known_issues.md#ki-01)、state seriesの前処理差は [KI-06](../research/known_issues.md#ki-06) で追跡している。
+`output/6_adl_evaluation_aruba_individual_{K}_{hamming}_{days}days/state_series.csv` を個別センサ既定の各条件入力に使う。全条件を同じ5 runで評価し、条件ごとの平均と標準偏差から最適条件を選ぶ。評価5・6の正式条件 `hamming=0` との不一致は [KI-01](../research/known_issues.md#ki-01) で追跡する。state seriesは正式workflowで抽出側と同じ `network-equivalent` 前処理へ統一済みであり、旧event-driven系列は再利用しない（[KI-06](../research/known_issues.md#ki-06)）。
 
 ## 実行コマンド
 
@@ -93,7 +93,10 @@ uv run python scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py \
   --runs 5 \
   --sensor-representation individual \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/<model>/7_param_search_14d_5runs
+  --output-dir results/<model>/7_param_search_14d_5runs_individual_holdout \
+  --split-mode holdout --generation-days 14 \
+  --validation-start-day 15 --validation-end-day 154 \
+  --test-start-day 155 --test-end-day 220
 ```
 
 前段の構築・LLM抽出・state series作成も、個別センサを明示する場合は同じ指定を使う。
@@ -110,7 +113,7 @@ uv run python scripts/run_llm_extraction.py \
 
 従来の部屋統合条件を再現・比較する時だけ、両コマンドと `evaluate_adl_labels.py` に `--sensor-representation room` を指定する。表現間で特徴量数が異なるため、ハミング距離の絶対値を同じ意味として扱わず、各表現内でK・hの感度分析を完結させる。
 
-上記の条件はCLI既定でも使われる。既存の30日・二段階探索の成果物を上書きしないよう、正式出力先は `7_param_search_14d_5runs/` とする。
+既存の30日・二段階探索の成果物を上書きしないよう、個別センサ既定の正式出力先は `results/<model>/7_param_search_14d_5runs_individual_holdout/` とする。CLI引数を省略した既定値は正式条件ではない。
 
 ## 旧二段階探索との互換性
 
@@ -118,7 +121,7 @@ uv run python scripts/run_llm_extraction.py \
 
 ## 出力
 
-出力先: `results/7_param_search/`
+出力先: `results/<model>/7_param_search_14d_5runs_individual_holdout/`
 
 | 出力 | 内容 |
 |---|---|
@@ -130,7 +133,7 @@ uv run python scripts/run_llm_extraction.py \
 | `evaluation7_by_time_band.csv` | 条件別・時間帯別集計。 |
 | `evaluation7_summary.json` | 入力条件、閾値、skipped条件、最適条件、出力ファイル一覧。 |
 
-正式結果は `results/<model>/7_param_search_14d_5runs/` に保存する。各条件のsummaryには `num_runs=5`、run別summaryにはrun 1--5が記録される。旧二段階探索の結果は比較用に既存ディレクトリへ残す。
+正式結果は `results/<model>/7_param_search_14d_5runs_individual_holdout/` に保存する。各条件のsummaryには `num_runs=5`、run別summaryにはrun 1--5が記録される。旧二段階探索の結果は比較用に既存ディレクトリへ残す。
 
 ## 最適条件の判断
 

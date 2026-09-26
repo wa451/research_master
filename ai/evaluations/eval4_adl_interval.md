@@ -26,7 +26,7 @@
 | LLM pattern JSON | CLI既定は旧 `output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json`。現在モデルのJSONを使う場合は `results/<model>/...` を `--patterns` で明示する |
 | 既存 `state_series.csv` | `--state-series` 指定時だけ再構築を省略できる。ただし前処理・期間・K/hが一致する場合に限る |
 
-`event-driven` はラベル付きCASASの全イベントから状態を再構築するCLI既定である。`network-equivalent` は抽出側の代表状態処理へ合わせる選択肢で、`--state-series-days` と `--smoothing-window-sec`（既定5秒）が使える。どちらを正式条件にするかは **KI-06** 未解決であるため、変更で勝手に統一しない。
+`event-driven` はラベル付きCASASの全イベントから状態を再構築するCLI既定である。`network-equivalent` は抽出側の代表状態処理へ合わせる選択肢で、`--state-series-days` と `--smoothing-window-sec`（既定5秒）が使える。評価4の本書はevent-driven互換手順を記録する。評価6・7の正式workflowは別途 `network-equivalent` とholdoutを採用済みであり（[KI-06](../../docs/research/known_issues.md#ki-06)）、この評価4の互換CSVをそのまま流用しない。
 
 splitなしは同じ期間でパターン→ADL対応付けと評価を行うdescriptive evaluationである。`--split-date` または `--train-ratio` を使うと対応付けを前期間、評価を後期間へ分けるが、正式なsplit位置付けは **KI-07** 未解決である。
 

@@ -25,7 +25,7 @@
 - 対応ファイル: `src/behavior_pattern_mining/visualization/state_transition_visualizer.py`, `src/behavior_pattern_mining/states/state_mapping.py`, `src/behavior_pattern_mining/baselines/frequency.py`, `src/behavior_pattern_mining/llm/direct_log_extractor.py`
 - 役割: 出現頻度上位K個を代表状態にし、通常パイプラインでは未知状態をハミング距離閾値以下なら最近傍代表状態へ、超過なら「その他」へ写像する。
 
-direct-log baselineの最終写像は現在、完全一致のみを採用しており、この共通説明と一致しない。比較条件として意図した差か未確定のため、[KI-04](../research/known_issues.md) を参照する。
+direct-log/LLM-onlyも同じ `map_vector_to_state` を再利用し、完全一致後に閾値内の最近傍代表状態へ写像し、範囲外を「その他」とする。過去の完全一致のみのLLM-only成果物は、現行条件の比較に混ぜない（[KI-04](../research/known_issues.md)）。
 
 ## 4. Transition network construction
 
@@ -71,7 +71,7 @@ direct-log baselineの最終写像は現在、完全一致のみを採用して�
 
 ## 7.3 評価6: LLM ADL interpretation set match
 
-- 入力: `output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json`, `output/llm_direct_15_0_14days/1.json`, `output/6_adl_evaluation_15_0_14days/state_series.csv`, `new_labeled_data/aruba.txt`
+- 入力: `results/<model>/aruba_individual_15_0_14days/llm_sequences_modes_15_0_14days_1.json`, `results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json`, `output/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv`, `new_labeled_data/aruba.txt`
 - 出力: `results/6_adl_match/15_0_14days/evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_llm_usage_comparison.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_time_band_by_method.csv`, `evaluation6_comparison_summary.json`
 - 対応ファイル: `scripts/evaluate_6_compare_adl_interpretation_set.py`, `src/behavior_pattern_mining/evaluation/adl_interpretation_set.py`, `src/behavior_pattern_mining/evaluation/llm_usage.py`
 - 役割: LLMが一体的に生成したパターン名・ADL集合・根拠のうち、ADL集合とCASAS重複集合を順序なしで比較し、解釈の意味的正当性を定量的に代理評価する。提案手法は `sequence × time_band` 単位へ展開する。状態遷移ネットワーク入力と、同じ14日分の前処理済み代表状態系列を直接LLMへ入力する構成を比較し、記録が揃うrunではトークン数も比較する。

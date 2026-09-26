@@ -107,17 +107,17 @@ macOSでは、リポジトリ直下の `start_dashboard.command` をダブルク
    `scripts/run_llm_extraction.py --days 14` を実行します。`--runs` で複数runを生成できます。
 
 3. 評価6用 `state_series.csv` を作成  
-   `scripts/evaluate_adl_labels.py` で、先頭14日から作成した代表状態定義を固定して全220日を写像した比較用の照合系列を `output/6_adl_evaluation_15_0_14days/state_series.csv` へ保存します。`14days` は抽出・LLM入力条件であり、照合期間は全220日です。
+   `scripts/evaluate_adl_labels.py --state-series-preprocessing network-equivalent` で、先頭14日から作成した代表状態定義を固定し、network構築と同じ遅延OFF平滑化で全220日を写像した比較用の照合系列を `output/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv` へ保存します。`--state-series-days` は指定しません。`14days` は抽出・LLM入力条件であり、照合期間は全220日です。部屋統合を選んだ場合だけ既存互換の `aruba_` 名を使います。
 
 4. LLM単独ベースラインを生成  
    既定では `scripts/run_direct_log_baseline.py --log-days 14 --llm-only-time-mode split --extract-only` を実行します。既存の Morning / Daytime / Night / Midnight ごとに代表状態系列を分け、各時間帯を独立してLLMへ入力します。画面の「LLM-only input」で `Split by time period (default)` またはIoT2026再現用の `Legacy unsplit` を選べます。
 
 5. 評価6の手法間比較を実行  
-   `scripts/evaluate_6_compare_adl_interpretation_set.py` を実行します。split選択時は両手法を `sequence × time_period` 単位で評価し、LLM-onlyの出現検索もpattern自身の時間帯だけに制限します。主な出力は `evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_llm_usage_comparison.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_*_by_method.csv`, `evaluation6_comparison_summary.json` です。
+   `scripts/evaluate_6_compare_adl_interpretation_set.py` をholdout（Day 155–220）で実行します。split選択時は両手法を `sequence × time_period` 単位で評価し、LLM-onlyの出現検索もpattern自身の時間帯だけに制限します。主な出力は `evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_llm_usage_comparison.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_*_by_method.csv`, `evaluation6_comparison_summary.json` です。
 
 評価6・7画面では旧sentinelラベルの選択欄を表示しない。`no_occurrence`, `no_adl_overlap`, `prediction missing`, `unknown` は評価ロジックで固定された別状態であり、conditional/end-to-end指標とcoverage/rateへ一貫して反映される。旧CLI引数は既存コマンドとの互換性のため受理されるが、アプリが新規生成するコマンドには付与しない。
 
-アプリの標準条件は、評価7の選定結果に合わせて代表状態数 `K=15`、ハミング距離閾値 `0` です。中間出力には `output/6_adl_evaluation_15_0_14days/` を使い、Kやハミング距離を変えた場合も `output/6_adl_evaluation_{K}_{hamming}_{days}days/` を使います。
+アプリの標準条件は、評価7の選定結果に合わせて代表状態数 `K=15`、ハミング距離閾値 `0` です。個別センサ既定の中間出力には `output/6_adl_evaluation_aruba_individual_15_0_14days/` を使い、Kやハミング距離を変えた場合も `output/6_adl_evaluation_aruba_individual_{K}_{hamming}_{days}days/` を使います。部屋統合を選んだ場合だけ既存互換の `aruba_` 名を使います。
 
 ## 評価7のステップ
 
@@ -130,14 +130,14 @@ macOSでは、リポジトリ直下の `start_dashboard.command` をダブルク
    `scripts/run_llm_extraction.py --runs 5` を条件ごとに実行します。正式条件は14日、K=`10,15,20,25,30,35,40`、hamming=`0,1,2,3` の全28条件です。
 
 3. 条件別の `state_series.csv` を作成  
-   `scripts/evaluate_adl_labels.py --write-state-series` を条件ごとに実行します。`output/6_adl_evaluation_{K}_{hamming}_{days}days/state_series.csv` がない場合に使います。
+   `scripts/evaluate_adl_labels.py --write-state-series --state-series-preprocessing network-equivalent` を、network構築と同じ平滑化値で条件ごとに実行します。固定した14日版state tableを全220日に適用し、Day 15–154だけを評価7のK,h選択に使います。個別センサ既定では `output/6_adl_evaluation_aruba_individual_{K}_{hamming}_{days}days/state_series.csv` がない場合に使います。
 
 4. 全28条件をrun 1--5で評価
-   `scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py --days 14 --runs 5` を実行し、各条件の平均と標準偏差から最適条件を選びます。
+   `scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py --days 14 --runs 5 --split-mode holdout` を実行し、Day 15–154の各条件の平均と標準偏差から最適条件を選びます。
 
 主な出力は `evaluation7_condition_summary.csv`, `evaluation7_condition_summary_by_run.csv`, `evaluation7_pattern_set_details.csv`, `evaluation7_by_pred_label.csv`, `evaluation7_by_true_label.csv`, `evaluation7_by_time_band.csv`, `evaluation7_summary.json` です。
 
-Streamlit画面は正式条件（14日・全28条件・各5 run）を固定で表示する。一括実行の「不足ファイル生成 + 評価本体」は、条件ごとの不足runだけを生成して全条件を5回平均する。新しい結果は `results/<model>/7_param_search_14d_5runs/` に保存し、旧30日・二段階探索の成果物を上書きしない。
+Streamlit画面は正式条件（14日・全28条件・各5 run）を固定で表示する。一括実行の「不足ファイル生成 + 評価本体」は、条件ごとの不足runだけを生成して全条件を5回平均する。個別センサ既定の新しい結果は `results/<model>/7_param_search_14d_5runs_individual_holdout/` に保存し、旧30日・二段階探索の成果物を上書きしない。
 
 ## APIテスト
 

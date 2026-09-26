@@ -60,9 +60,9 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 
 | 入力 | 正式14日評価で明示するパス | 役割 |
 |---|---|---|
-| 提案手法LLM JSON | `output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json` | `time_band_interpretations` を持つ提案手法出力。 |
+| 提案手法LLM JSON | `results/<model>/aruba_individual_15_0_14days/llm_sequences_modes_15_0_14days_1.json` | `time_band_interpretations` を持つ個別センサ既定の提案手法出力。 |
 | LLM単独ベースラインJSON | `results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json` | 同期間の前処理済み代表状態系列を時間帯ごとにLLMへ直接入力した出力。各patternに `time_period` を保存する。 |
-| 14日条件の全220日照合系列 | `output/6_adl_evaluation_15_0_14days/state_series.csv` | 先頭14日で作成した代表状態定義を固定し、抽出側と同じ1秒Sample-and-Hold・遅延OFF・Hamming最近傍写像・連続圧縮（`network-equivalent`）で全220日へ写像する入力。holdout既定ではDay 155–220だけを照合する。 |
+| 14日条件の全220日照合系列 | `output/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv` | 先頭14日で作成した代表状態定義を固定し、抽出側と同じ1秒Sample-and-Hold・遅延OFF・Hamming最近傍写像・連続圧縮（`network-equivalent`）で全220日へ写像する入力。holdout既定ではDay 155–220だけを照合する。 |
 | ADL正解データ | `new_labeled_data/aruba.txt` | CASAS activity `begin/end` からADL正解区間を内部生成する。 |
 
 この表はargparse既定値ではない。省略時の現行CLIは、提案手法に `output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json`、LLM単独に `output/llm_direct_15_1_14days/1.json`、state seriesに互換パス `output/6_adl_evaluation_14/state_series.csv` を使う。`--labeled-casas` を省略した場合は `output/adl_label_intervals.csv` を使い、出力先は設定値から `results/6_adl_match/15_1_14days/` へ解決される。さらに `--n-states` と `--hamming-threshold` のargparse既定値は未指定（summaryではnull）である。正式14日評価ではStep 7--8のとおり `--days 14 --n-states 15 --hamming-threshold 0` と各パスを明示する。既定値と正式条件の不一致は [KI-01](../research/known_issues.md#ki-01) および [KI-08](../research/known_issues.md#ki-08) で追跡している。
@@ -71,14 +71,14 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 
 | 出力 | 内容 |
 |---|---|
-| `results/6_adl_match/15_0_14days_holdout_test/evaluation6_method_comparison.csv` | 提案手法とLLM単独ベースラインの主比較表。`--runs` が2以上の場合はrun平均と標準偏差。 |
-| `results/6_adl_match/15_0_14days_holdout_test/evaluation6_method_comparison_by_run.csv` | runごとの手法別summary。5回平均の元データ。 |
-| `results/6_adl_match/15_0_14days_holdout_test/evaluation6_llm_usage_comparison.csv` | 手法ごとの記録済み1 run合計トークン数・API応答時間。`prompt_tokens`、`response_tokens`、`total_tokens` はそれぞれGemini APIの `promptTokenCount`、`candidatesTokenCount`、`totalTokenCount` に対応する。欠損runは0で補完せず、完全な記録があるrun数を併記する。 |
-| `results/6_adl_match/15_0_14days_holdout_test/evaluation6_pattern_set_details_by_method.csv` | 手法別・パターン別詳細。4状態、raw/unknown予測ラベル、conditional/end-to-end指標、境界横断監査を含む。`num_occurrences` は評価8の監査前件数として保持する。 |
-| `results/6_adl_match/15_0_14days_holdout_test/evaluation6_by_pred_label_by_method.csv` | 手法別・予測ラベル別集計。 |
-| `results/6_adl_match/15_0_14days_holdout_test/evaluation6_by_true_label_by_method.csv` | 手法別・正解ラベル別集計。 |
-| `results/6_adl_match/15_0_14days_holdout_test/evaluation6_by_time_band_by_method.csv` | 手法別・時間帯別集計。 |
-| `results/6_adl_match/15_0_14days_holdout_test/evaluation6_comparison_summary.json` | 比較評価の再現条件。 |
+| `results/<model>/6_adl_match_individual_holdout_test_direct_time_split/evaluation6_method_comparison.csv` | 提案手法とLLM単独ベースラインの主比較表。`--runs` が2以上の場合はrun平均と標準偏差。 |
+| `results/<model>/6_adl_match_individual_holdout_test_direct_time_split/evaluation6_method_comparison_by_run.csv` | runごとの手法別summary。5回平均の元データ。 |
+| `results/<model>/6_adl_match_individual_holdout_test_direct_time_split/evaluation6_llm_usage_comparison.csv` | 手法ごとの記録済み1 run合計トークン数・API応答時間。`prompt_tokens`、`response_tokens`、`total_tokens` はそれぞれGemini APIの `promptTokenCount`、`candidatesTokenCount`、`totalTokenCount` に対応する。欠損runは0で補完せず、完全な記録があるrun数を併記する。 |
+| `results/<model>/6_adl_match_individual_holdout_test_direct_time_split/evaluation6_pattern_set_details_by_method.csv` | 手法別・パターン別詳細。4状態、raw/unknown予測ラベル、conditional/end-to-end指標、境界横断監査を含む。`num_occurrences` は評価8の監査前件数として保持する。 |
+| `results/<model>/6_adl_match_individual_holdout_test_direct_time_split/evaluation6_by_pred_label_by_method.csv` | 手法別・予測ラベル別集計。 |
+| `results/<model>/6_adl_match_individual_holdout_test_direct_time_split/evaluation6_by_true_label_by_method.csv` | 手法別・正解ラベル別集計。 |
+| `results/<model>/6_adl_match_individual_holdout_test_direct_time_split/evaluation6_by_time_band_by_method.csv` | 手法別・時間帯別集計。 |
+| `results/<model>/6_adl_match_individual_holdout_test_direct_time_split/evaluation6_comparison_summary.json` | 比較評価の再現条件。 |
 
 ## 結果の読み方
 
@@ -96,12 +96,13 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 
 ### 1. 🟨 **条件付き** 14日版の状態遷移ネットワークを構築する
 
-`state/aruba_15_0_14days.txt` がなければ実行する。評価6では提案手法とLLM単独ベースラインの入力日数を14日に揃える。
+`state/aruba_individual_15_0_14days.txt` がなければ実行する。評価6では提案手法とLLM単独ベースラインの入力日数を14日に揃える。
 
 ```bash
 uv run python scripts/run_build_network_from_labeled_casas.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --sensor-map configs/aruba_sensor_map.json \
+  --sensor-map configs/aruba_sensor_map_individual.json \
+  --sensor-representation individual \
   --days 14 \
   --hamming-threshold 0 \
   --smoothing-window-sec 5
@@ -109,37 +110,39 @@ uv run python scripts/run_build_network_from_labeled_casas.py \
 
 ### 2. 🟨 **条件付き** 提案手法の14日版LLM出力を生成する
 
-`output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json` がなければ実行する。既に同じ条件のLLM出力がある場合はスキップしてよい。1回分だけ比較する場合はこのコマンドでよい。
+`results/<model>/aruba_individual_15_0_14days/llm_sequences_modes_15_0_14days_1.json` がなければ実行する。既に同じ条件のLLM出力がある場合はスキップしてよい。1回分だけ比較する場合はこのコマンドでよい。
 
 ```bash
-uv run python scripts/run_llm_extraction.py --days 14 --hamming-threshold 0
+uv run python scripts/run_llm_extraction.py --sensor-representation individual --days 14 --hamming-threshold 0
 ```
 
 ### 3. 🟩 **スキップ可** 提案手法の14日版LLM出力を5回分生成する
 
-5回平均を出す場合に実行する。`output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json` から `_5.json` までを作成する。既に存在する時間帯別チェックポイントや統合JSONはスキップされる。
+5回平均を出す場合に実行する。`results/<model>/aruba_individual_15_0_14days/llm_sequences_modes_15_0_14days_1.json` から `_5.json` までを作成する。既に存在する時間帯別チェックポイントや統合JSONはスキップされる。
 
 ```bash
 uv run python scripts/run_llm_extraction.py \
   --days 14 \
+  --sensor-representation individual \
   --hamming-threshold 0 \
   --runs 5
 ```
 
 ### 4. 🟨 **条件付き** 評価6用の全220日状態系列を作る
 
-`output/6_adl_evaluation_15_0_14days/pattern_occurrences.csv` または `output/6_adl_evaluation_15_0_14days/state_series.csv` がなければ実行する。この系列は、先頭14日で作成した代表状態表を全220日のセンサログへ適用した中間ファイルであり、`output/` に保存する。評価6のholdout採点時にはこのうちDay 155–220だけを使用する。ディレクトリ名の `14days` は抽出・LLM入力条件を表し、状態系列の長さを表さない。
+`output/6_adl_evaluation_aruba_individual_15_0_14days/pattern_occurrences.csv` または `output/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv` がなければ実行する。この系列は、先頭14日で作成した代表状態表を全220日のセンサログへ適用した中間ファイルであり、`output/` に保存する。評価6のholdout採点時にはこのうちDay 155–220だけを使用する。ディレクトリ名の `14days` は抽出・LLM入力条件を表し、状態系列の長さを表さない。
 
 正式な評価6では、抽出側と同じ `network-equivalent` 前処理と同じ遅延OFF平滑化を明示する。`--state-series-days` は指定しないため、固定した14日版state tableをCASAS Arubaの全期間へ適用する。これは生成期間を14日に制限する指定ではない。
 
 ```bash
 uv run python scripts/evaluate_adl_labels.py \
   --labeled-casas new_labeled_data/aruba.txt \
-  --state-table state/aruba_15_0_14days.txt \
-  --sensor-map configs/aruba_sensor_map.json \
-  --patterns output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
-  --output-dir output/6_adl_evaluation_15_0_14days \
-  --write-state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
+  --state-table state/aruba_individual_15_0_14days.txt \
+  --sensor-map configs/aruba_sensor_map_individual.json \
+  --sensor-representation individual \
+  --patterns results/<model>/aruba_individual_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
+  --output-dir output/6_adl_evaluation_aruba_individual_15_0_14days \
+  --write-state-series output/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv \
   --hamming-threshold 0 \
   --state-series-preprocessing network-equivalent \
   --smoothing-window-sec 5
@@ -152,6 +155,7 @@ uv run python scripts/evaluate_adl_labels.py \
 ```bash
 uv run python scripts/run_direct_log_baseline.py \
   --log-days 14 \
+  --sensor-representation individual \
   --hamming-threshold 0 \
   --llm-only-time-mode split \
   --extract-only
@@ -164,6 +168,7 @@ uv run python scripts/run_direct_log_baseline.py \
 ```bash
 uv run python scripts/run_direct_log_baseline.py \
   --log-days 14 \
+  --sensor-representation individual \
   --hamming-threshold 0 \
   --llm-only-time-mode split \
   --extract-only \
@@ -188,36 +193,42 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 
 ```bash
 uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
-  --patterns-proposed output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
+  --patterns-proposed results/<model>/aruba_individual_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
   --patterns-direct results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json \
-  --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
+  --state-series output/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/6_adl_match/15_0_14days \
+  --output-dir results/<model>/6_adl_match_individual_holdout_test_direct_time_split \
   --min-overlap-ratio-for-true-label 0.10 \
   --days 14 \
   --n-states 15 \
   --hamming-threshold 0 \
+  --split-mode holdout --generation-days 14 \
+  --validation-start-day 15 --validation-end-day 154 \
+  --test-start-day 155 --test-end-day 220 \
   --llm-only-time-mode split
 ```
 
 ### 8. 🟩 **スキップ可** 5回分の平均を出す
 
-Step 3とStep 6で5回分のパターン出力を作成したあとに実行する。`output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json` から `_5.json` まで、かつsplit LLM-onlyの `results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json` から `5.json` までを使って平均を出す。
+Step 3とStep 6で5回分のパターン出力を作成したあとに実行する。`results/<model>/aruba_individual_15_0_14days/llm_sequences_modes_15_0_14days_1.json` から `_5.json` まで、かつsplit LLM-onlyの `results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json` から `5.json` までを使って平均を出す。
 
 ```bash
 uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
-  --patterns-proposed output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
+  --patterns-proposed results/<model>/aruba_individual_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
   --patterns-direct results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json \
-  --proposed-metrics-template 'output/aruba_15_0_14days/llm_modes_metrics_15_0_14days_run{run}.csv' \
+  --proposed-metrics-template 'results/<model>/aruba_individual_15_0_14days/llm_modes_metrics_15_0_14days_run{run}.csv' \
   --direct-metrics results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/llm_direct_metrics_14days.csv \
-  --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
+  --state-series output/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/6_adl_match/15_0_14days \
+  --output-dir results/<model>/6_adl_match_individual_holdout_test_direct_time_split \
   --min-overlap-ratio-for-true-label 0.10 \
   --days 14 \
   --n-states 15 \
   --hamming-threshold 0 \
   --runs 5 \
+  --split-mode holdout --generation-days 14 \
+  --validation-start-day 15 --validation-end-day 154 \
+  --test-start-day 155 --test-end-day 220 \
   --llm-only-time-mode split
 ```
 
@@ -227,9 +238,9 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
   --skip-missing-runs
 ```
 
-### 9. 🟩 **スキップ可** 代表状態数・ハミング距離を変えて1回実行する
+### 9. 旧非標準条件の参照
 
-評価1の感度分析と同じように、評価6でも `K` とハミング距離を変えた条件で比較できる。以下は `K=20`, `hamming=1`, `14days` の例。出力先を条件別に分け、採用条件の `15_0_14days` 結果を上書きしない。
+以下の `K=20`, `hamming=1` の部屋統合・旧出力パスの例は、既存成果物の参照用に残す。現行の個別センサ・holdout評価を新しいモデルで実行する手順ではない。非標準条件を新規実行する場合も、Step 1–8と同じ個別センサ、`network-equivalent`、time split、holdout、およびモデル別出力を明示する。
 
 ```bash
 uv run python scripts/run_build_network_from_labeled_casas.py \
@@ -418,9 +429,9 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 | time_band-aware | `true` |
 | 時間帯境界 | `[start,end)` 全体が同じ時間帯に含まれる出現だけを採用 |
 | `--no-overlap-label`, `--missing-pred-label`, `--unknown-pred-label` | CLI互換性のため受理するが無視する非推奨引数 |
-| 提案手法JSON | `output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json` |
-| LLM単独JSON | `output/llm_direct_15_0_14days/1.json` |
-| 状態系列 | `output/6_adl_evaluation_15_0_14days/state_series.csv` |
+| 提案手法JSON | `results/<model>/aruba_individual_15_0_14days/llm_sequences_modes_15_0_14days_1.json` |
+| LLM単独JSON | `results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json` |
+| 状態系列 | `output/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv` |
 | ADL正解データ | `new_labeled_data/aruba.txt` |
 
 評価で許可するLLM出力ADLラベル:
@@ -446,4 +457,4 @@ Other
 - 154日版の提案手法出力と14日版の前処理済み代表状態系列ベースラインを混ぜて比較しない。
 - 既存のLLM出力に `ADL系列ラベル` がない場合は `prediction_status=missing` として0点にし、分母から除外しない。
 - 予測ラベル集合を \(C\) と書く場合、\(C\) は10カテゴリへの軽微な表記正規化後の集合である。語彙外ラベルを含むレコードでは \(C\) を有効な予測集合として採点せず、`unknown` として0点にする。
-- `output/6_adl_evaluation_15_0_14days/` は評価6用の中間出力であり、最終結果は `results/6_adl_match/` に保存する。
+- `output/6_adl_evaluation_aruba_individual_15_0_14days/` は個別センサ既定の評価6用中間出力であり、最終結果は `results/<model>/6_adl_match_individual_holdout_test_direct_time_split/` に保存する。部屋統合を選ぶ場合だけ既存互換の `aruba_` 名を使う。

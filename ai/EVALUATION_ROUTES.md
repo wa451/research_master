@@ -22,14 +22,14 @@
 - 文書: [評価3](../docs/evaluations/evaluation_3_direct_log_baseline_comparison.md)。
 - 入口/実装: [run_direct_log_baseline.py](../scripts/run_direct_log_baseline.py) → [direct_log_extractor.py](../src/behavior_pattern_mining/llm/direct_log_extractor.py)、[evaluation/direct_log.py](../src/behavior_pattern_mining/evaluation/direct_log.py)。
 - テスト: [test_llm_response_parsing.py](../tests/test_llm_response_parsing.py)、[test_llm_prompt_files_unchanged.py](../tests/test_llm_prompt_files_unchanged.py)（抽出保全、比較全体の専用テストなし）。
-- 注意: KI-04/05。最終写像の完全一致、固定K/hパス。抽出ファイル編集前に [DECISIONS](DECISIONS.md)。
+- 注意: KI-04は採用済みの共通Hamming写像（旧LLM-only成果物は再利用しない）、KI-05は固定K/hパス。抽出ファイル編集前に [DECISIONS](DECISIONS.md)。
 
 ## eval4 ADL区間・検出指標
 
 - 文書: [評価4](../docs/evaluations/evaluation_4_labeled_casas_adl.md)、AI説明: [eval4](evaluations/eval4_adl_interval.md)。
 - 入口/実装: [evaluate_adl_labels.py](../scripts/evaluate_adl_labels.py) → [adl.py](../src/behavior_pattern_mining/evaluation/adl.py)。
 - テスト: [test_adl_evaluation.py](../tests/test_adl_evaluation.py)。
-- 注意: KI-06/07。状態系列生成は後続評価も利用する。
+- 注意: 評価4のCLI既定はevent-drivenの互換経路である。評価6・7の正式workflowだけがKI-06の`network-equivalent`・holdoutを採用済みであり、評価4の期間・分類はKI-07で別途扱う。
 
 ## eval5 有用性・断片化・無文脈
 
@@ -43,14 +43,14 @@
 - 文書: [評価6](../docs/evaluations/evaluation_6_adl_interpretation_set.md)、AI説明: [eval6](evaluations/eval6_adl_label_sets.md)。
 - 入口/実装: [evaluate_6_compare_adl_interpretation_set.py](../scripts/evaluate_6_compare_adl_interpretation_set.py)（run集計も保持） → [adl_interpretation_set.py](../src/behavior_pattern_mining/evaluation/adl_interpretation_set.py)、[llm_usage.py](../src/behavior_pattern_mining/evaluation/llm_usage.py)。
 - テスト: [test_evaluation6_adl_interpretation_set.py](../tests/test_evaluation6_adl_interpretation_set.py)、[test_evaluation6_default_days.py](../tests/test_evaluation6_default_days.py)。
-- 注意: KI-06/08/09。ラベル集合指標はeval7/8も利用し、details CSVはeval8の入力。
+- 注意: KI-06の正式workflowは採用済み（`network-equivalent`・holdout）。KI-08/09は未解決。ラベル集合指標はeval7/8も利用し、details CSVはeval8の入力。
 
 ## eval7 14日・全28条件・各5 runのK/h感度分析
 
 - 文書: [評価7](../docs/evaluations/evaluation_7_parameter_sensitivity_adl_interpretation.md)、AI説明: [eval7](evaluations/eval7_parameter_sensitivity.md)。
 - 入口/実装: [evaluate_7_parameter_sensitivity_adl_interpretation.py](../scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py)（既定: days=14、K=10--40の7値、hamming=0--3、runs=5）→ [evaluation7_staged.py](../src/behavior_pattern_mining/evaluation/evaluation7_staged.py)、eval6の集合指標。`run_evaluation7_top_condition_repeats.py` は旧30日・二段階探索成果物の再現専用。
 - テスト: [test_evaluation7_parameter_sensitivity.py](../tests/test_evaluation7_parameter_sensitivity.py)、[test_evaluation7_staged_workflow.py](../tests/test_evaluation7_staged_workflow.py)（Web配線も含む）。
-- 注意: KI-06。正式結果は全28条件を同じ5 runで集計する。旧二段階探索のmanifestは互換再現時だけ利用する。
+- 注意: KI-06の正式workflowは採用済み（`network-equivalent`・Day 15–154 validation）。正式結果は全28条件を同じ5 runで集計する。旧二段階探索のmanifestは互換再現時だけ利用する。
 
 ## eval8 頻度層別ADL整合性
 

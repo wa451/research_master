@@ -183,6 +183,6 @@ uv run python scripts/evaluate_9_duration.py --stage evaluate --method both
 
 ## パラメータと注意点
 
-pilotの既定はK=15、h=0、平滑化0秒、観測ノイズなし、seed=11。既存評価の平滑化5秒やevent-driven既定とは独立した研究条件である。[既知の不一致 KI-06・07](../research/known_issues.md) を既存評価側で解消する変更は行っていない。
+pilotの既定はK=15、h=0、平滑化0秒、観測ノイズなし、seed=11。評価6・7の正式workflowで採用した平滑化5秒・`network-equivalent`・holdoutとは独立した研究条件である。評価9の期間分割・正解なしという制約は [既知の不一致 KI-07](../research/known_issues.md) と混同しない。
 
 後半の結果を見てKや閾値を調整した成績を、未使用testの性能として報告しない。pilotの1seedから統計的結論を出さない。詳細な条件、catalogの境界条件、missing集計、制約は [Hestia評価仕様](../../Hestia/docs/noise_free_evaluation.md) を参照する。

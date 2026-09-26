@@ -8,11 +8,15 @@
 |---|---|
 | 無引数実行が正式条件とずれる。共通h=1／論文h=0、CLI固定パス・設定未参照がある。 | [KI-01](../docs/research/known_issues.md#ki-01), [KI-05](../docs/research/known_issues.md#ki-05), [KI-08](../docs/research/known_issues.md#ki-08), [KI-14](../docs/research/known_issues.md#ki-14): 既定値・条件伝播の方針。 |
 | 評価2の独立runが疑わしい。batchから引数なし抽出でrun1 checkpointを再利用し得る。 | [KI-02](../docs/research/known_issues.md#ki-02), [KI-03](../docs/research/known_issues.md#ki-03): checkpointと集計契約。 |
-| 比較法・ADL照合の入力条件が揃わない。direct-log最終写像は完全一致、ADL系列の既定はevent-driven。 | [KI-04](../docs/research/known_issues.md#ki-04), [KI-06](../docs/research/known_issues.md#ki-06): 正式な比較前処理。 |
 | ADLの期間・分類・run分母に解釈差が残る。 | [KI-07](../docs/research/known_issues.md#ki-07), [KI-09](../docs/research/known_issues.md#ki-09): split、ラベル規則、paired/pooled集計。 |
 | 旧30日scopeは入力期間未検証／外部promptとfallbackのラベル差／成果物保管方針の不一致／遷移確率だけでは複数日の反復を保証しない。 | [KI-10](../docs/research/known_issues.md#ki-10), [KI-12](../docs/research/known_issues.md#ki-12), [KI-11](../docs/research/known_issues.md#ki-11), [KI-13](../docs/research/known_issues.md#ki-13)。 |
 
 これらの修正試行・効果がなかった方法は正本に記録されていないため不明。推測で補わず、文書の注意書きを実装修正済みと扱わない。
+
+## 採用済み仕様
+
+- [KI-04](../docs/research/known_issues.md#ki-04): 評価3・6のLLM-onlyは提案手法と同じ `map_vector_to_state` による完全一致→閾値内Hamming最近傍→`その他` の写像を使う。旧LLM-only成果物は再利用しない。
+- [KI-06](../docs/research/known_issues.md#ki-06): 評価6・7の正式workflowは `network-equivalent`、network構築と同じ遅延OFF平滑化、Day 1–14生成／Day 15–154 validation／Day 155–220 testを使う。CLI単体の `event-driven` 既定は互換用途である。
 
 ## 再発を避ける実装済み対策
 

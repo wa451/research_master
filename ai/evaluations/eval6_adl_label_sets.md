@@ -7,9 +7,9 @@
 
 提案手法のLLMが付けた`ADL系列ラベル`集合と、パターン出現区間がCASAS正解ADL区間へ重なることで得た集合を比較する。ラベル順序、パターン名、自然言語根拠の文章自体は採点しない。ただしパターン名・ADL集合・根拠は同一の解釈出力なので、本評価はその解釈の主要な定量代理評価である。
 
-提案手法と、同じ14日間の前処理済み代表状態系列を直接LLMへ渡す`direct_log_baseline`を比較する。両手法の抽出・LLM入力は先頭14日だが、出現検索とADL照合は、その14日で作成した状態定義を固定して全220日に写像したstate seriesで行う。154日出力や別K/hのstate seriesを混ぜない。
+提案手法と、同じ14日間の前処理済み代表状態系列を直接LLMへ渡す`direct_log_baseline`を比較する。両手法の抽出・LLM入力は先頭14日であり、固定した状態定義を全220日へ写像したstate seriesを共用する。ただし正式holdoutでは出現検索とADL照合をDay 155–220だけに制限する。Day 15–154は評価7のK,h選択専用であり、評価6には混ぜない。
 
-提案JSONの同じ系列は保存上まとめられていても、評価では`sequence × time_band`へ展開する。時間帯指定が`All`以外なら、`[start,end)`全体がその帯に収まるexact出現だけを採る（境界横断は除外して監査）。
+提案手法は時間帯別状態遷移ネットワーク、LLM-onlyは同じ Morning / Daytime / Night / Midnight ごとの代表状態系列をLLMへ渡す。split方式では両手法とも`sequence × time_period`を評価単位とし、`[start,end)`全体が当該時間帯に収まるexact出現だけを採る（境界横断は除外して監査）。LLM-onlyの旧1入力方式は`--llm-only-time-mode legacy`で再現できる。
 
 ## 集合、状態、分母
 
@@ -32,19 +32,23 @@
 
 1. ラベル付きCASASから14日条件の状態表・ネットワークを作る。
 2. 現モデルの提案LLM JSONを1回（または5回）生成する。
-3. その状態表を固定した全220日照合state seriesを `output/6_adl_evaluation_15_0_14days/state_series.csv` に作る。現行フローは`event-driven`既定であり、network-equivalentとの不一致は **KI-06**。
-4. 同じ14日代表状態系列でdirect-log baselineを1回（または5回）生成する。
-5. 比較CLIへ双方JSON、state series、labeled CASAS、`--min-overlap-ratio-for-true-label 0.10 --days 14 --n-states 15 --hamming-threshold 0`を明示して実行する。
+3. その状態表を固定した全220日照合state seriesを `output/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv` に作る。正式workflowは`network-equivalent`、network構築と同じ5秒の遅延OFF平滑化を明示し、`--state-series-days`は指定しない（KI-06採用済み仕様）。
+4. 同じ14日代表状態系列を4時間帯に分け、direct-log baselineを1回（または5回）生成する。direct-logも提案手法と同じ `map_vector_to_state` のHamming写像を使う（KI-04採用済み仕様）。
+5. 比較CLIへ双方JSON、state series、labeled CASAS、`--split-mode holdout --generation-days 14 --validation-start-day 15 --validation-end-day 154 --test-start-day 155 --test-end-day 220`、`--llm-only-time-mode split`、`--min-overlap-ratio-for-true-label 0.10 --days 14 --n-states 15 --hamming-threshold 0`を明示して実行する。
 
-前段の標準コマンドは、networkを`run_build_network_from_labeled_casas.py --days 14 --n-states 15 --hamming-threshold 0 --smoothing-window-sec 5`で作り、提案側を`run_llm_extraction.py --days 14 --n-states 15 --hamming-threshold 0 [--runs 5]`、direct側を`run_direct_log_baseline.py --log-days 14 --n-states 15 --hamming-threshold 0 --extract-only [--runs 5]`で作る。比較は次の形である。
+前段の標準コマンドは、networkを`run_build_network_from_labeled_casas.py --days 14 --n-states 15 --hamming-threshold 0 --smoothing-window-sec 5`で作り、提案側を`run_llm_extraction.py --days 14 --n-states 15 --hamming-threshold 0 [--runs 5]`、direct側を`run_direct_log_baseline.py --log-days 14 --state-days 14 --n-states 15 --hamming-threshold 0 --llm-only-time-mode split --extract-only [--runs 5]`で作る。比較は次の形である。
 
 ```bash
 uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
-  --patterns-proposed results/<model>/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
-  --patterns-direct results/<model>/llm_direct_15_0_14days/1.json \
-  --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
+  --patterns-proposed results/<model>/aruba_individual_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
+  --patterns-direct results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json \
+  --state-series output/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/<model>/6_adl_match \
+  --output-dir results/<model>/6_adl_match_individual_holdout_test_direct_time_split \
+  --split-mode holdout --generation-days 14 \
+  --validation-start-day 15 --validation-end-day 154 \
+  --test-start-day 155 --test-end-day 220 \
+  --llm-only-time-mode split \
   --min-overlap-ratio-for-true-label 0.10 --days 14 --n-states 15 --hamming-threshold 0
 ```
 
@@ -57,7 +61,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 - `evaluation6_method_comparison.csv`は主比較、`..._by_run.csv`はrunごとの元データ、`...pattern_set_details_by_method.csv`は状態とrawラベルを含む根拠である。
 - label別`evaluation6_by_pred_label_by_method.csv`、true label別`evaluation6_by_true_label_by_method.csv`、time band別`evaluation6_by_time_band_by_method.csv`、`evaluation6_comparison_summary.json`も保存する。評価8はdetails CSVを入力として使うため、列・分母・`num_occurrences`を軽率に変更しない。
 - `--runs 5`では提案手法とdirect-logをそれぞれ独立に平均する。欠損JSON/runを許すなら`--skip-missing-runs`。共通runへ自動制限しない点、run等重みかdetail poolかの正式集計は **KI-09**。
-- usage CSVは1 runの抽出全体を比較する。提案手法は4時間帯の成功API呼出し合計、directは1呼出し。完全な記録を持つrunだけで平均し、欠損を0補完しない。Geminiの`totalTokenCount`はprompt+thoughts+candidatesであり、可視入力+出力の単純和ではない。
+- usage CSVは1 runの抽出全体を比較する。split方式では提案手法・directともに4時間帯の成功API呼出し合計を使い、directの時間帯別prompt/completion/API total tokensとrun合計を保存する。完全な記録を持つrunだけで平均し、欠損を0補完しない。Geminiの`totalTokenCount`はprompt+thoughts+candidatesであり、可視入力+出力の単純和ではない。
 
 ## 変更してはいけないこと
 

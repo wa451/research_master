@@ -13,15 +13,15 @@ set評価、許可10語彙、`missing`/`unknown`、time-bandの半開区間・�
 
 ## 入力条件と前段
 
-各(K,h,days)について、提案LLM JSONと、同じ状態定義を固定して全220日へ写像したstate seriesが必要である。正式条件はK=`10,15,20,25,30,35,40`、h=`0,1,2,3` の全28条件、`--days 14`、各条件`--runs 5`である。14日はネットワーク構築・LLM入力の先頭期間を表し、ADL集合照合は220日で行う。
+各(K,h,days)について、提案LLM JSONと、同じ状態定義を固定して全220日へ写像したstate seriesが必要である。正式条件はK=`10,15,20,25,30,35,40`、h=`0,1,2,3` の全28条件、`--days 14`、各条件`--runs 5`である。14日はネットワーク構築・LLM入力の先頭期間を表す。状態系列は全220日へ写像するが、K,h選択のADL集合照合はDay 15–154だけで行い、Day 155–220は評価6の独立testとして評価7では読まない。
 
 | 区分 | 条件 |
 |---|---|
 | 正式評価 | K×hの全28条件、days=14、各条件run 1〜5、条件別state series |
 
-異なる条件のstate seriesを再利用しない。前段`evaluate_adl_labels.py --write-state-series`は現行ではevent-driven既定であり、抽出側との差は **KI-06**。評価5/6とのh=0/h=1不一致は **KI-01**。未生成条件は既定ではエラーで、探索だけ先に確認する時だけ`--skip-missing-conditions`を明示する。
+異なる条件のstate seriesを再利用しない。正式workflowは`evaluate_adl_labels.py --write-state-series --state-series-preprocessing network-equivalent`とnetwork構築と同じ遅延OFF平滑化を明示し、`--state-series-days 14`は指定しない（KI-06採用済み仕様）。評価5/6とのh=0/h=1不一致は **KI-01**。未生成条件は既定ではエラーで、探索だけ先に確認する時だけ`--skip-missing-conditions`を明示する。
 
-LLM JSON/checkpointは`results/<model>/aruba_{K}_{h}_{days}days/`、正式なrun集計は`results/<model>/7_param_search_14d_5runs/`に保存する。state series/networkはモデル非依存で`output/`/`picture/`に残る。モデルをまたいで成果物を探索してはならない。
+個別センサ条件のLLM JSON/checkpointは`results/<model>/aruba_individual_{K}_{h}_{days}days/`、正式なrun集計は`results/<model>/7_param_search_14d_5runs_individual_holdout/`に保存する。state series/networkはモデル非依存で表現名を含む`output/`/`picture/`に残る。モデルをまたいで成果物を探索してはならない。
 
 ## 標準ワークフロー
 
@@ -36,7 +36,10 @@ uv run python scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py \
   --hamming-thresholds 0,1,2,3 \
   --runs 5 --days 14 \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/<model>/7_param_search_14d_5runs \
+  --output-dir results/<model>/7_param_search_14d_5runs_individual_holdout \
+  --split-mode holdout --generation-days 14 \
+  --validation-start-day 15 --validation-end-day 154 \
+  --test-start-day 155 --test-end-day 220 \
   --selection-metric mean_multilabel_f1
 ```
 
@@ -50,6 +53,6 @@ Streamlitの評価7は既存CLIを順に呼ぶ薄い画面で、「ネットワ�
 
 ## 守る契約
 
-- 後半の評価結果でK/hを選び直して未使用性能とは呼ばない（感度分析の選択であることを維持）。
+- Day 155–220の評価結果でK/hを選び直して未使用性能とは呼ばない。評価7はDay 15–154だけで選択し、その結果を評価6へ固定して渡す。
 - `--conditions-file` と `run_evaluation7_top_condition_repeats.py` は旧30日・上位条件二段階探索の再評価用で、正式評価には使用しない。
 - 予測語彙外をOtherへ変換せずunknownとして0点、time-band境界横断を含めず、欠損run・条件の扱いをsummaryに残す。

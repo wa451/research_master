@@ -68,5 +68,5 @@ durationは`evaluate_9_duration.py`へ順に`--stage generate`、`prepare`、`ba
 ## 不変条件
 
 - 評価9の指標を親側へ再実装しない。Hestiaの評価仕様とCLIを正本として使う。
-- pilot既定はK=15、h=0、平滑化0秒、観測ノイズなし、seed=11。既存評価の5秒/event-drivenと混同しない。
+- pilot既定はK=15、h=0、平滑化0秒、観測ノイズなし、seed=11。評価6・7で採用した5秒・`network-equivalent`・holdoutとは独立した条件である。
 - testを見てK/hやtargetを調整した値を未使用test性能として報告しない。pilot 1 seedから統計的結論を出さない。

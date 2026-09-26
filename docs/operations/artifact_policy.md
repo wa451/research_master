@@ -20,12 +20,12 @@
 ```text
 results/
 └── <model>/
-    ├── aruba_{K}_{h}_{days}days/       # 提案手法JSON、mode checkpoint、usage
+    ├── aruba_individual_{K}_{h}_{days}days/  # 個別センサ既定の提案手法JSON、mode checkpoint、usage
     ├── api_smoke_tests/                 # 1 API requestの疎通・JSON形式検証（論文評価外）
-    ├── llm_direct_{K}_{h}_{days}days/  # direct-log JSON、usage
+    ├── llm_direct_aruba_individual_{K}_{h}_{days}days_time_split/  # 個別センサ既定のdirect-log JSON、usage
     ├── 5_pattern_quality_without_low_information_judgment/
-    ├── 6_adl_match/
-    ├── 7_param_search_14d_5runs/      # 評価7の正式な14日・全28条件・各5 run集計
+    ├── 6_adl_match_individual_holdout_test_direct_time_split/
+    ├── 7_param_search_14d_5runs_individual_holdout/  # 評価7の正式な14日・全28条件・各5 run集計
     ├── 8_vs_llm_own_id_fixed/
     ├── 8_proposed_own_id_fixed/
     ├── 9_hestia/
@@ -35,10 +35,9 @@ output/
 ├── 5_rule_filter/
 ├── 5_adl_evaluation_15_0_154days_fixed/
 ├── 5_adl_correspondence_baselines_fixed/
-├── 6_adl_evaluation_15_0_14days/
+├── 6_adl_evaluation_aruba_individual_15_0_14days/
 ├── aruba_15_0_154days/
-├── aruba_15_0_14days/
-├── llm_direct_15_0_14days/
+├── aruba_individual_15_0_14days/
 ├── tmp/
 └── logs/
 ```
