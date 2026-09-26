@@ -80,6 +80,13 @@ class DashboardModelSelectionTests(unittest.TestCase):
         commands = [" ".join(step.command) for step in steps]
 
         self.assertEqual(sum("--llm-only-time-mode split" in command for command in commands), 2)
+        state_series_step = next(step for step in steps if step.step_id == "eval6_state_series")
+        self.assertIn("--state-series-preprocessing", state_series_step.command)
+        preprocessing_index = state_series_step.command.index("--state-series-preprocessing")
+        self.assertEqual(state_series_step.command[preprocessing_index + 1], "network-equivalent")
+        smoothing_index = state_series_step.command.index("--smoothing-window-sec")
+        self.assertEqual(state_series_step.command[smoothing_index + 1], "5")
+        self.assertNotIn("--state-series-days", state_series_step.command)
 
     def test_builders_use_the_selected_model_root_for_expected_outputs(self) -> None:
         terra_root = dashboard_model("us.openai.gpt-5.6-terra").results_root(PROJECT_ROOT)

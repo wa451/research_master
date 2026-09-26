@@ -45,6 +45,10 @@ from src.behavior_pattern_mining.llm.result_paths import (
     model_identity,
     model_result_path,
 )
+from src.behavior_pattern_mining.states.state_mapping import (
+    load_state_mapping,
+    map_vector_to_state,
+)
 from src.behavior_pattern_mining.visualization import state_transition_visualizer as stv
 
 
@@ -448,7 +452,8 @@ def find_state_file(dataset_name: str, n_states: int, hamming_threshold: int, nu
 
 def load_state_definition(state_file: Path) -> Tuple[dict, dict]:
     """
-    状態定義ファイルを読み込み、状態ラベルと状態ベクトル(タプル)をマッピング
+    状態定義ファイルを読み込み、状態ラベルと状態ベクトル(タプル)をマッピングする。
+    提案法と同じ共有loaderを使い、未知状態行は最近傍探索の候補から除外する。
     
     ファイル形式（TSV）:
     状態    Sensor1  Sensor2  ...
@@ -463,17 +468,10 @@ def load_state_definition(state_file: Path) -> Tuple[dict, dict]:
         - state_label_to_vector: "状態1" -> (0, 1, 0, ...) のマッピング
         - vector_to_label: (0, 1, 0, ...) -> "状態1" のマッピング
     """
-    df = pd.read_csv(state_file, sep="\t", index_col=0)
-    
-    state_label_to_vector = {}
-    vector_to_label = {}
-    
-    for state_label, row in df.iterrows():
-        # 状態ベクトルをタプルに変換（-1 は除外）
-        vector = tuple(int(v) for v in row.values if v != "-")
-        state_label_to_vector[state_label] = vector
-        vector_to_label[vector] = state_label
-    
+    _, vector_to_label = load_state_mapping(state_file, unknown_state="その他")
+    state_label_to_vector = {
+        state_label: vector for vector, state_label in vector_to_label.items()
+    }
     return state_label_to_vector, vector_to_label
 
 
@@ -495,7 +493,11 @@ def state_table_to_text(state_file: Path) -> str:
         return f.read()
 
 
-def map_vectors_to_states(state_vectors_df: pd.DataFrame, vector_to_label: dict) -> Tuple[List[str], dict]:
+def map_vectors_to_states(
+    state_vectors_df: pd.DataFrame,
+    vector_to_label: dict[tuple[int, ...], str],
+    hamming_threshold: int,
+) -> Tuple[List[str], dict]:
     """
     圧縮された状態ベクトル DataFrame の各行を、状態ラベルにマッピング
     
@@ -518,11 +520,16 @@ def map_vectors_to_states(state_vectors_df: pd.DataFrame, vector_to_label: dict)
     
     for idx, row in state_vectors_df.iterrows():
         vector = tuple(int(v) for v in row.values)
-        
-        if vector in vector_to_label:
-            label = vector_to_label[vector]
-        else:
-            label = "その他"
+
+        # Reuse the proposal method's exact-match / nearest-Hamming mapping.
+        # Dict insertion order is the state-table's existing representative-state
+        # order, which also supplies the shared tie-break rule.
+        label = map_vector_to_state(
+            vector,
+            vector_to_label,
+            hamming_threshold,
+            unknown_state="その他",
+        )
         
         state_labels.append(label)
         if label not in state_labels_dict:
@@ -708,7 +715,11 @@ def main(
         state_label_to_vector, vector_to_label = load_state_definition(state_file)
     
         # 圧縮された状態ベクトル DataFrame を状態ラベルにマッピング
-        state_labels_list, state_labels_count = map_vectors_to_states(state_vectors_df, vector_to_label)
+        state_labels_list, state_labels_count = map_vectors_to_states(
+            state_vectors_df,
+            vector_to_label,
+            effective_hamming_threshold,
+        )
     
         print("状態マッピング完了:")
         for label, count in sorted(state_labels_count.items()):

@@ -190,6 +190,35 @@ class ADLCorrespondenceTests(unittest.TestCase):
             ],
         )
 
+    def test_network_equivalent_without_duration_limit_covers_all_labeled_days(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            labeled = tmp / "labeled.txt"
+            labeled.write_text(
+                "2020-01-01 00:00:01 M001 ON\n"
+                "2020-01-02 12:00:00 M001 OFF\n",
+                encoding="utf-8",
+            )
+            state_definition = tmp / "states.tsv"
+            state_definition.write_text(
+                "状態\tKitchen\n状態1\t0\n状態2\t1\nその他\t-\n",
+                encoding="utf-8",
+            )
+            sensor_map = tmp / "sensor_map.json"
+            sensor_map.write_text(json.dumps({"M001": "Kitchen"}), encoding="utf-8")
+
+            intervals = build_network_equivalent_state_series_from_labeled_casas(
+                labeled_casas_path=labeled,
+                state_table_path=state_definition,
+                hamming_threshold=0,
+                smoothing_window_sec=5,
+                sensor_map_path=sensor_map,
+                duration_days=None,
+            )
+
+        self.assertEqual(intervals[0].start_time, ts("2020-01-01 00:00:00"))
+        self.assertEqual(intervals[-1].end_time, ts("2020-01-03 00:00:00"))
+
     def test_load_method_patterns_from_json_and_csv(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)

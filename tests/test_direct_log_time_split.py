@@ -12,6 +12,7 @@ import pandas as pd
 
 from src.behavior_pattern_mining.llm import direct_log_extractor as extractor
 from src.behavior_pattern_mining.llm.result_paths import ModelIdentity
+from src.behavior_pattern_mining.states.state_mapping import map_vector_to_state
 
 
 TIMESTAMPS = pd.to_datetime(
@@ -44,6 +45,56 @@ class _FakeVisualizer:
 
 
 class DirectLogTimeSplitTests(unittest.TestCase):
+    def test_hamming_mapping_matches_proposed_state_mapper(self) -> None:
+        representative_states = {
+            (0, 0, 0): "状態1",
+            (1, 1, 0): "状態2",
+        }
+        vectors = pd.DataFrame(
+            [
+                (0, 0, 0),  # exact
+                (0, 0, 1),  # distance 1 from 状態1
+                (0, 1, 1),  # distance 2 from 状態1
+                (0, 1, 0),  # tie: distance 1 from both; state-table order wins
+            ]
+        )
+
+        labels_h0, _ = extractor.map_vectors_to_states(
+            vectors, representative_states, hamming_threshold=0
+        )
+        labels_h1, _ = extractor.map_vectors_to_states(
+            vectors, representative_states, hamming_threshold=1
+        )
+
+        self.assertEqual(labels_h0, ["状態1", "その他", "その他", "その他"])
+        self.assertEqual(labels_h1, ["状態1", "状態1", "その他", "状態1"])
+        self.assertEqual(
+            labels_h1,
+            [
+                map_vector_to_state(
+                    tuple(vector), representative_states, 1, unknown_state="その他"
+                )
+                for vector in vectors.itertuples(index=False, name=None)
+            ],
+        )
+
+    def test_state_definition_excludes_unknown_row_from_nearest_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "states.tsv"
+            state_file.write_text(
+                "状態\tA\tB\tC\n"
+                "状態1\t0\t0\t0\n"
+                "その他\t-\t-\t-\n",
+                encoding="utf-8",
+            )
+            _, representatives = extractor.load_state_definition(state_file)
+
+        self.assertEqual(representatives, {(0, 0, 0): "状態1"})
+        labels, _ = extractor.map_vectors_to_states(
+            pd.DataFrame([(0, 0, 1)]), representatives, hamming_threshold=1
+        )
+        self.assertEqual(labels, ["状態1"])
+
     def test_partition_uses_common_half_open_time_periods_and_preserves_order(self) -> None:
         grouped = extractor.split_state_labels_by_time_period(TIMESTAMPS, STATE_LABELS)
 

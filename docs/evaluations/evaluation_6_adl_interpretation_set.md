@@ -62,7 +62,7 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 |---|---|---|
 | 提案手法LLM JSON | `output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json` | `time_band_interpretations` を持つ提案手法出力。 |
 | LLM単独ベースラインJSON | `results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json` | 同期間の前処理済み代表状態系列を時間帯ごとにLLMへ直接入力した出力。各patternに `time_period` を保存する。 |
-| 14日条件の全220日照合系列 | `output/6_adl_evaluation_15_0_14days/state_series.csv` | 先頭14日で作成した代表状態定義を固定し全220日へ写像する入力。holdout既定ではDay 155–220だけを照合する。 |
+| 14日条件の全220日照合系列 | `output/6_adl_evaluation_15_0_14days/state_series.csv` | 先頭14日で作成した代表状態定義を固定し、抽出側と同じ1秒Sample-and-Hold・遅延OFF・Hamming最近傍写像・連続圧縮（`network-equivalent`）で全220日へ写像する入力。holdout既定ではDay 155–220だけを照合する。 |
 | ADL正解データ | `new_labeled_data/aruba.txt` | CASAS activity `begin/end` からADL正解区間を内部生成する。 |
 
 この表はargparse既定値ではない。省略時の現行CLIは、提案手法に `output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json`、LLM単独に `output/llm_direct_15_1_14days/1.json`、state seriesに互換パス `output/6_adl_evaluation_14/state_series.csv` を使う。`--labeled-casas` を省略した場合は `output/adl_label_intervals.csv` を使い、出力先は設定値から `results/6_adl_match/15_1_14days/` へ解決される。さらに `--n-states` と `--hamming-threshold` のargparse既定値は未指定（summaryではnull）である。正式14日評価ではStep 7--8のとおり `--days 14 --n-states 15 --hamming-threshold 0` と各パスを明示する。既定値と正式条件の不一致は [KI-01](../research/known_issues.md#ki-01) および [KI-08](../research/known_issues.md#ki-08) で追跡している。
@@ -130,7 +130,7 @@ uv run python scripts/run_llm_extraction.py \
 
 `output/6_adl_evaluation_15_0_14days/pattern_occurrences.csv` または `output/6_adl_evaluation_15_0_14days/state_series.csv` がなければ実行する。この系列は、先頭14日で作成した代表状態表を全220日のセンサログへ適用した中間ファイルであり、`output/` に保存する。評価6のholdout採点時にはこのうちDay 155–220だけを使用する。ディレクトリ名の `14days` は抽出・LLM入力条件を表し、状態系列の長さを表さない。
 
-次のコマンドは `--state-series-preprocessing` を指定しないため、現行CLIの `event-driven` 既定を使う。抽出系の1秒Sample-and-Hold・遅延OFF系列とどちらへ統一するかは未解決であり、[KI-06](../research/known_issues.md#ki-06) で追跡している。
+正式な評価6では、抽出側と同じ `network-equivalent` 前処理と同じ遅延OFF平滑化を明示する。`--state-series-days` は指定しないため、固定した14日版state tableをCASAS Arubaの全期間へ適用する。これは生成期間を14日に制限する指定ではない。
 
 ```bash
 uv run python scripts/evaluate_adl_labels.py \
@@ -140,7 +140,9 @@ uv run python scripts/evaluate_adl_labels.py \
   --patterns output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
   --output-dir output/6_adl_evaluation_15_0_14days \
   --write-state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
-  --hamming-threshold 0
+  --hamming-threshold 0 \
+  --state-series-preprocessing network-equivalent \
+  --smoothing-window-sec 5
 ```
 
 ### 5. 🟨 **条件付き** LLM単独ベースラインを生成する

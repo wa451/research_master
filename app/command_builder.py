@@ -499,6 +499,12 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_arg(state_series_cmd, "--output-dir", intermediate_dir)
     add_arg(state_series_cmd, "--write-state-series", state_series)
     add_arg(state_series_cmd, "--hamming-threshold", hamming)
+    add_arg(state_series_cmd, "--state-series-preprocessing", "network-equivalent")
+    add_arg(
+        state_series_cmd,
+        "--smoothing-window-sec",
+        settings.get("smoothing_window_sec", SMOOTHING_WINDOW_SEC),
+    )
 
     direct_cmd = script_cmd(runner, "scripts/run_direct_log_baseline.py")
     add_arg(direct_cmd, "--log-days", days)
@@ -911,6 +917,16 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                 add_arg(state_series_cmd, "--output-dir", intermediate_dir)
                 add_arg(state_series_cmd, "--write-state-series", state_series)
                 add_arg(state_series_cmd, "--hamming-threshold", hamming)
+                add_arg(
+                    state_series_cmd,
+                    "--state-series-preprocessing",
+                    "network-equivalent",
+                )
+                add_arg(
+                    state_series_cmd,
+                    "--smoothing-window-sec",
+                    settings.get("smoothing_window_sec", SMOOTHING_WINDOW_SEC),
+                )
                 steps.append(
                     EvaluationStep(
                         f"eval7_{cond_id}_state_series",

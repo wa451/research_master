@@ -67,6 +67,18 @@ class Evaluation7StagedWorkflowTests(unittest.TestCase):
             runs_index = step.command.index("--runs")
             self.assertEqual(step.command[runs_index + 1], "5")
             self.assertTrue(step.expected_outputs[-1].name.endswith("_5.json"))
+        state_series_steps = [
+            step for step in steps if step.step_id.endswith("_state_series")
+        ]
+        self.assertEqual(len(state_series_steps), 28)
+        for step in state_series_steps:
+            preprocessing_index = step.command.index("--state-series-preprocessing")
+            self.assertEqual(
+                step.command[preprocessing_index + 1], "network-equivalent"
+            )
+            smoothing_index = step.command.index("--smoothing-window-sec")
+            self.assertEqual(step.command[smoothing_index + 1], "5")
+            self.assertNotIn("--state-series-days", step.command)
         evaluation_step = steps[-1]
         self.assertEqual(evaluation_step.step_id, "eval7_evaluate")
         runs_index = evaluation_step.command.index("--runs")

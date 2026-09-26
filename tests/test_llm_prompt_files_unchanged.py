@@ -17,7 +17,7 @@ EXPECTED_SHA256 = {
         "fa543d02cef6a47ebc0a54a81842ce5f79d8240460902db5874eb3eff9d50599"
     ),
     "src/behavior_pattern_mining/llm/direct_log_extractor.py": (
-        "561828735363b8aabdeed5727283cfc4f811ee0a5b77d58ca9991d46dd45700f"
+        "dc0ce7b27ad6bd3872022481af37e093f72daa4219cc4e42c9f43c47ed20d11f"
     ),
 }
 

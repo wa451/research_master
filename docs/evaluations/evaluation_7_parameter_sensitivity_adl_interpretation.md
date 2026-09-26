@@ -49,7 +49,7 @@
 |---|---|---|
 | センサ表現 | `individual`（既定） | 物理センサ34個を `Bedroom_M001` のように個別特徴量として保持する。`room` は従来の10部屋・場所ラベルへの統合条件であり、比較用に明示指定する。 |
 | 提案手法LLM JSON | `output/aruba_{K}_{hamming}_{days}days/llm_sequences_modes_{K}_{hamming}_{days}days_1.json` | `ADL系列ラベル` を持つ提案手法出力。 |
-| 状態系列CSV | `output/6_adl_evaluation_{K}_{hamming}_{days}days/state_series.csv` | 当該入力条件の代表状態定義を固定して全220日を写像する系列。holdout既定ではDay 15–154だけを照合する。 |
+| 状態系列CSV | `output/6_adl_evaluation_{K}_{hamming}_{days}days/state_series.csv` | 当該入力条件の代表状態定義を固定し、抽出側と同じ `network-equivalent`（1秒Sample-and-Hold、遅延OFF、Hamming最近傍写像、連続圧縮）で全220日を写像する系列。holdout既定ではDay 15–154だけを照合する。 |
 | ADL正解データ | `new_labeled_data/aruba.txt` | CASAS activity `begin/end` からADL正解区間を内部生成する。 |
 
 条件ごとの入力パスが既定命名と異なる場合は、`--patterns-template` と `--state-series-template` を使う。
@@ -66,7 +66,7 @@
 
 個別センサ条件の state table・network・LLM成果物は `aruba_individual_{K}_{h}_{days}days` を含むパスへ保存され、従来の部屋統合条件は既存互換の `aruba_{K}_{h}_{days}days` を使う。両条件の成果物を同一パスに混在させない。
 
-`evaluate_adl_labels.py` のstate-series前処理を明示しない現行フローは `event-driven` 既定を使う。抽出系と同じ1秒Sample-and-Hold・遅延OFFへ統一するかは [KI-06](../research/known_issues.md#ki-06) の未解決事項である。
+正式workflowのstate series生成は `--state-series-preprocessing network-equivalent` と、network構築時と同じ `--smoothing-window-sec` を明示する。`--state-series-days 14` は指定しない。したがって先頭14日はstate table・network・LLM patternの生成だけに使い、固定state tableは全220日へ適用される。評価7が読むのはそのうちDay 15–154だけである。
 
 小さい設定で既存出力だけを使って確認する例（正式条件外）:
 
