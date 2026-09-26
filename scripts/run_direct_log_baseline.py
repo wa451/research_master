@@ -11,7 +11,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from experiment_config import DAYS
+from experiment_config import DAYS, SMOOTHING_WINDOW_SEC
 from src.behavior_pattern_mining.evaluation import direct_log
 from src.behavior_pattern_mining.llm import direct_log_extractor
 from src.behavior_pattern_mining.data.sensor_representation import (
@@ -60,6 +60,15 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=None,
         help="Hamming distance threshold used by the state table and direct-log state mapping.",
+    )
+    parser.add_argument(
+        "--smoothing-window-sec",
+        type=int,
+        default=SMOOTHING_WINDOW_SEC,
+        help=(
+            "Delayed-OFF window shared with the proposed network and "
+            "network-equivalent state series."
+        ),
     )
     parser.add_argument(
         "--sensor-representation",
@@ -112,6 +121,7 @@ def main() -> None:
         runs=args.runs,
         n_states=args.n_states,
         hamming_threshold=args.hamming_threshold,
+        smoothing_window_sec=args.smoothing_window_sec,
         dataset_name=artifact_dataset_name("aruba", args.sensor_representation),
         sensor_map_path=sensor_map_path(ROOT_DIR, args.sensor_representation),
         estimate_cost=args.estimate_cost,

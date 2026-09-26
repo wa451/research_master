@@ -75,6 +75,7 @@ class DashboardModelSelectionTests(unittest.TestCase):
             "generation_days": 14, "validation_start_day": 15,
             "validation_end_day": 154, "test_start_day": 155, "test_end_day": 220,
             "llm_only_time_mode": "split",
+            "smoothing_window_sec": 7,
         }
         steps = build_evaluation6_steps(settings)
         commands = [" ".join(step.command) for step in steps]
@@ -85,8 +86,13 @@ class DashboardModelSelectionTests(unittest.TestCase):
         preprocessing_index = state_series_step.command.index("--state-series-preprocessing")
         self.assertEqual(state_series_step.command[preprocessing_index + 1], "network-equivalent")
         smoothing_index = state_series_step.command.index("--smoothing-window-sec")
-        self.assertEqual(state_series_step.command[smoothing_index + 1], "5")
+        self.assertEqual(state_series_step.command[smoothing_index + 1], "7")
         self.assertNotIn("--state-series-days", state_series_step.command)
+        build_step = next(step for step in steps if step.step_id == "eval6_build_network")
+        direct_step = next(step for step in steps if step.step_id == "eval6_direct_baseline")
+        for step in (build_step, direct_step):
+            smoothing_index = step.command.index("--smoothing-window-sec")
+            self.assertEqual(step.command[smoothing_index + 1], "7")
 
     def test_builders_use_the_selected_model_root_for_expected_outputs(self) -> None:
         terra_root = dashboard_model("us.openai.gpt-5.6-terra").results_root(PROJECT_ROOT)

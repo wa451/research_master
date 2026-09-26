@@ -512,6 +512,11 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_flag(direct_cmd, "--extract-only", True)
     add_arg(direct_cmd, "--n-states", n_states)
     add_arg(direct_cmd, "--hamming-threshold", hamming)
+    add_arg(
+        direct_cmd,
+        "--smoothing-window-sec",
+        settings.get("smoothing_window_sec", SMOOTHING_WINDOW_SEC),
+    )
     add_arg(direct_cmd, "--runs", runs)
     add_arg(direct_cmd, "--sensor-representation", representation)
     add_arg(direct_cmd, "--llm-only-time-mode", llm_only_time_mode)

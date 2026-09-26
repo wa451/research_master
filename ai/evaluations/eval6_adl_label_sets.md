@@ -9,7 +9,7 @@
 
 提案手法と、同じ14日間の前処理済み代表状態系列を直接LLMへ渡す`direct_log_baseline`を比較する。両手法の抽出・LLM入力は先頭14日であり、固定した状態定義を全220日へ写像したstate seriesを共用する。ただし正式holdoutでは出現検索とADL照合をDay 155–220だけに制限する。Day 15–154は評価7のK,h選択専用であり、評価6には混ぜない。
 
-提案手法は時間帯別状態遷移ネットワーク、LLM-onlyは同じ Morning / Daytime / Night / Midnight ごとの代表状態系列をLLMへ渡す。split方式では両手法とも`sequence × time_period`を評価単位とし、`[start,end)`全体が当該時間帯に収まるexact出現だけを採る（境界横断は除外して監査）。LLM-onlyの旧1入力方式は`--llm-only-time-mode legacy`で再現できる。
+提案手法は時間帯別状態遷移ネットワーク、LLM-onlyは同じ Morning / Daytime / Night / Midnight ごとの代表状態系列をLLMへ渡す。split方式では、Hamming写像後の連続同一代表状態を各時間帯内だけで圧縮し、両手法とも`sequence × time_period`を評価単位とする。`[start,end)`全体が当該時間帯に収まるexact出現だけを採る（境界横断は除外して監査）。LLM-onlyの旧1入力方式は`--llm-only-time-mode legacy`で再現できる。
 
 ## 集合、状態、分母
 
@@ -36,7 +36,7 @@
 4. 同じ14日代表状態系列を4時間帯に分け、direct-log baselineを1回（または5回）生成する。direct-logも提案手法と同じ `map_vector_to_state` のHamming写像を使う（KI-04採用済み仕様）。
 5. 比較CLIへ双方JSON、state series、labeled CASAS、`--split-mode holdout --generation-days 14 --validation-start-day 15 --validation-end-day 154 --test-start-day 155 --test-end-day 220`、`--llm-only-time-mode split`、`--min-overlap-ratio-for-true-label 0.10 --days 14 --n-states 15 --hamming-threshold 0`を明示して実行する。
 
-前段の標準コマンドは、networkを`run_build_network_from_labeled_casas.py --days 14 --n-states 15 --hamming-threshold 0 --smoothing-window-sec 5`で作り、提案側を`run_llm_extraction.py --days 14 --n-states 15 --hamming-threshold 0 [--runs 5]`、direct側を`run_direct_log_baseline.py --log-days 14 --state-days 14 --n-states 15 --hamming-threshold 0 --llm-only-time-mode split --extract-only [--runs 5]`で作る。比較は次の形である。
+前段の標準コマンドは、networkを`run_build_network_from_labeled_casas.py --days 14 --n-states 15 --hamming-threshold 0 --smoothing-window-sec 5`で作り、提案側を`run_llm_extraction.py --days 14 --n-states 15 --hamming-threshold 0 [--runs 5]`、direct側を`run_direct_log_baseline.py --log-days 14 --state-days 14 --n-states 15 --hamming-threshold 0 --smoothing-window-sec 5 --llm-only-time-mode split --extract-only [--runs 5]`で作る。比較は次の形である。
 
 ```bash
 uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \

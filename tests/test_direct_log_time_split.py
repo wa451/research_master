@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
+from scripts import run_direct_log_baseline
 from src.behavior_pattern_mining.llm import direct_log_extractor as extractor
 from src.behavior_pattern_mining.llm.result_paths import ModelIdentity
 from src.behavior_pattern_mining.states.state_mapping import map_vector_to_state
@@ -113,6 +114,54 @@ class DirectLogTimeSplitTests(unittest.TestCase):
             len(STATE_LABELS),
         )
 
+    def test_post_mapping_compression_matches_network_for_hamming_grouped_vectors(self) -> None:
+        representatives = {(0, 0, 0): "状態1"}
+        raw_vectors = pd.DataFrame([(0, 0, 0), (0, 0, 1), (0, 0, 0)])
+        labels, _ = extractor.map_vectors_to_states(
+            raw_vectors, representatives, hamming_threshold=1
+        )
+        items = list(zip(pd.to_datetime([
+            "2020-01-01 07:00:00",
+            "2020-01-01 07:01:00",
+            "2020-01-01 07:02:00",
+        ]), labels))
+
+        # create_state_vectors retains these distinct raw vectors; the proposed
+        # network compresses their same-state run after Hamming mapping.
+        self.assertEqual(labels, ["状態1", "状態1", "状態1"])
+        self.assertEqual(
+            extractor.compress_consecutive_state_labels(items),
+            [items[0]],
+        )
+
+    def test_hamming_zero_keeps_the_existing_distinct_label_sequence(self) -> None:
+        representatives = {(0, 0, 0): "状態1"}
+        raw_vectors = pd.DataFrame([(0, 0, 0), (0, 0, 1), (0, 0, 0)])
+        labels, _ = extractor.map_vectors_to_states(
+            raw_vectors, representatives, hamming_threshold=0
+        )
+        items = list(zip(TIMESTAMPS[:3], labels))
+
+        self.assertEqual(labels, ["状態1", "その他", "状態1"])
+        self.assertEqual(extractor.compress_consecutive_state_labels(items), items)
+
+    def test_post_mapping_compression_does_not_cross_time_period_boundary(self) -> None:
+        items = list(zip(
+            pd.to_datetime(["2020-01-01 09:59:59", "2020-01-01 10:00:00"]),
+            ["状態1", "状態1"],
+        ))
+        grouped = extractor.split_state_labels_by_time_period(
+            [timestamp for timestamp, _ in items],
+            [label for _, label in items],
+        )
+
+        compressed = {
+            period: extractor.compress_consecutive_state_labels(period_items)
+            for period, period_items in grouped.items()
+        }
+        self.assertEqual(compressed["Morning"], [items[0]])
+        self.assertEqual(compressed["Daytime"], [items[1]])
+
     def test_split_output_attaches_time_period_to_each_pattern(self) -> None:
         records = extractor.attach_time_period_to_records(
             [{"遷移のパターン": ["状態6", "状態7"], "ADL系列ラベル": ["Meal"]}],
@@ -150,6 +199,7 @@ class DirectLogTimeSplitTests(unittest.TestCase):
         timestamps: pd.DatetimeIndex = TIMESTAMPS,
         state_labels: list[str] = STATE_LABELS,
         empty_response: bool = False,
+        smoothing_window_sec: int | None = None,
     ) -> tuple[list[str], list[dict], list[dict[str, str]]]:
         prompts: list[str] = []
 
@@ -178,7 +228,16 @@ class DirectLogTimeSplitTests(unittest.TestCase):
             max_tokens=100,
         )
         identity = ModelIdentity(provider="test", model_id="test-model", result_name="test-model")
-        fake_visualizer = type("FakeVisualizer", (_FakeVisualizer,), {"timestamps": timestamps})
+        visualizer_kwargs: list[dict[str, object]] = []
+        test_timestamps = timestamps
+
+        class FakeVisualizer(_FakeVisualizer):
+            timestamps = test_timestamps
+
+            def __init__(self, **kwargs: object) -> None:
+                visualizer_kwargs.append(kwargs)
+                super().__init__(**kwargs)
+
         with tempfile.TemporaryDirectory() as tmpdir:
             output_dir = Path(tmpdir) / "direct"
             with (
@@ -186,7 +245,7 @@ class DirectLogTimeSplitTests(unittest.TestCase):
                 patch.object(extractor, "resolve_llm_runtime_config", return_value=config),
                 patch.object(extractor, "model_identity", return_value=identity),
                 patch.object(extractor, "prepare_input_csv", return_value=(Path(tmpdir) / "events.csv", None, None)),
-                patch.object(extractor.stv, "StateTransitionVisualizer", fake_visualizer),
+                patch.object(extractor.stv, "StateTransitionVisualizer", FakeVisualizer),
                 patch.object(extractor, "find_state_file", return_value=Path(tmpdir) / "states.txt"),
                 patch.object(extractor, "load_state_definition", return_value=({}, {})),
                 patch.object(extractor, "map_vectors_to_states", return_value=(state_labels, {})),
@@ -201,6 +260,17 @@ class DirectLogTimeSplitTests(unittest.TestCase):
                     n_states=15,
                     hamming_threshold=1,
                     llm_only_time_mode=mode,
+                    **(
+                        {"smoothing_window_sec": smoothing_window_sec}
+                        if smoothing_window_sec is not None
+                        else {}
+                    ),
+                )
+
+            if smoothing_window_sec is not None:
+                self.assertEqual(
+                    visualizer_kwargs[0]["smoothing_window_sec"],
+                    smoothing_window_sec,
                 )
 
             patterns = json.loads((output_dir / "1.json").read_text(encoding="utf-8"))
@@ -226,6 +296,23 @@ class DirectLogTimeSplitTests(unittest.TestCase):
         self.assertNotIn("状態0", morning_prompt)
         self.assertNotIn("状態18", morning_prompt)
 
+    def test_split_mode_uses_post_mapping_compression_in_llm_input(self) -> None:
+        timestamps = pd.to_datetime([
+            "2020-01-01 07:00:00",
+            "2020-01-01 07:01:00",
+            "2020-01-01 07:02:00",
+        ])
+        prompts, _, _ = self._run_extractor(
+            "split",
+            timestamps=timestamps,
+            state_labels=["状態1", "状態1", "状態1"],
+        )
+
+        self.assertEqual(len(prompts), 1)
+        self.assertIn("2020-01-01 07:00:00\t状態1", prompts[0])
+        self.assertNotIn("2020-01-01 07:01:00\t状態1", prompts[0])
+        self.assertNotIn("2020-01-01 07:02:00\t状態1", prompts[0])
+
     def test_legacy_mode_keeps_the_single_unsplit_call(self) -> None:
         prompts, patterns, metrics = self._run_extractor("legacy")
 
@@ -234,6 +321,41 @@ class DirectLogTimeSplitTests(unittest.TestCase):
         self.assertNotIn("time_period", patterns[0])
         self.assertEqual(len(metrics), 1)
         self.assertEqual(metrics[0]["time_period"], "")
+
+    def test_legacy_mode_keeps_post_mapping_duplicates_for_iot2026_compatibility(self) -> None:
+        timestamps = pd.to_datetime([
+            "2020-01-01 07:00:00",
+            "2020-01-01 07:01:00",
+            "2020-01-01 07:02:00",
+        ])
+        prompts, _, _ = self._run_extractor(
+            "legacy",
+            timestamps=timestamps,
+            state_labels=["状態1", "状態1", "状態1"],
+        )
+
+        self.assertEqual(len(prompts), 1)
+        self.assertIn("2020-01-01 07:00:00\t状態1", prompts[0])
+        self.assertIn("2020-01-01 07:01:00\t状態1", prompts[0])
+        self.assertIn("2020-01-01 07:02:00\t状態1", prompts[0])
+
+    def test_extractor_forwards_explicit_smoothing_window_to_visualizer(self) -> None:
+        self._run_extractor("split", smoothing_window_sec=7)
+
+    def test_direct_baseline_cli_forwards_smoothing_window_to_extractor(self) -> None:
+        argv = [
+            "run_direct_log_baseline.py",
+            "--extract-only",
+            "--smoothing-window-sec",
+            "7",
+        ]
+        with (
+            patch("sys.argv", argv),
+            patch.object(run_direct_log_baseline.direct_log_extractor, "main") as main,
+        ):
+            run_direct_log_baseline.main()
+
+        self.assertEqual(main.call_args.kwargs["smoothing_window_sec"], 7)
 
     def test_no_input_skips_api_call_and_empty_response_is_recorded(self) -> None:
         only_morning = pd.to_datetime(["2020-01-01 07:00:00"])

@@ -27,6 +27,7 @@ from experiment_config import (
     LLM_TEMPERATURE,
     N_STATES,
     ROOT_DIR,
+    SMOOTHING_WINDOW_SEC,
     TIME_MODES,
 )
 from src.behavior_pattern_mining.evaluation.adl import load_sensor_id_map
@@ -561,6 +562,25 @@ def state_lines_for_time_period(items: list[tuple[Any, str]]) -> list[str]:
     return [f"{timestamp}\t{state_label}" for timestamp, state_label in items]
 
 
+def compress_consecutive_state_labels(
+    items: list[tuple[Any, str]],
+) -> list[tuple[Any, str]]:
+    """Keep the first timestamp of each mapped-state run within one time period.
+
+    ``create_state_vectors`` only removes equal raw 0/1 vectors.  With a positive
+    Hamming threshold, different raw vectors can still map to the same
+    representative state.  The proposed time-period transition network removes
+    those post-mapping self transitions, so split LLM-only input must do the same.
+    Callers partition first to preserve a state run on either side of a time-period
+    boundary.
+    """
+    return [
+        item
+        for index, item in enumerate(items)
+        if index == 0 or item[1] != items[index - 1][1]
+    ]
+
+
 def attach_time_period_to_records(
     records: list[dict],
     time_period: str,
@@ -608,6 +628,7 @@ def main(
     runs: int | None = None,
     n_states: int | None = None,
     hamming_threshold: int | None = None,
+    smoothing_window_sec: int = SMOOTHING_WINDOW_SEC,
     dataset_name: str = DATASET_NAME,
     sensor_map_path: Path = SENSOR_MAP_PATH,
     estimate_cost: bool = False,
@@ -629,6 +650,8 @@ def main(
     )
     if effective_hamming_threshold < 0:
         raise ValueError("hamming_threshold must be >= 0")
+    if smoothing_window_sec < 0:
+        raise ValueError("smoothing_window_sec must be >= 0")
     if MAX_RETRIES_PER_RUN <= 0:
         raise ValueError("MAX_RETRIES_PER_RUN must be >= 1")
     if MAX_ROWS < 0:
@@ -691,7 +714,8 @@ def main(
         visualizer = stv.StateTransitionVisualizer(
             n_representative_states=effective_n_states,
             hamming_threshold=effective_hamming_threshold,
-            data_duration_days=effective_log_days
+            data_duration_days=effective_log_days,
+            smoothing_window_sec=smoothing_window_sec,
         )
     
         # load_data はイベント形式の DataFrame を返す
@@ -739,6 +763,10 @@ def main(
                 visualizer.state_vectors_df.index,
                 state_labels_list,
             )
+            period_items = {
+                time_period: compress_consecutive_state_labels(items)
+                for time_period, items in period_items.items()
+            }
             metrics_path = effective_output_dir / f"llm_direct_metrics_{effective_log_days}days.csv"
             metrics_by_key = load_direct_metrics_by_run_and_period(metrics_path)
             mismatched_metrics = [

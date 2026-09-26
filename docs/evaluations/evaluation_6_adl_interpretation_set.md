@@ -6,7 +6,7 @@ LLM-onlyの既定は `--llm-only-time-mode split` であり、各runで4時間�
 
 ## 評価の要約
 
-LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出現区間がCASAS正解ADL区間と重なった結果から得られるADL集合を比較する。評価はset一致で行い、ラベル順序は使わない。パターン名、ADL集合、解釈根拠は同じ系列解釈に基づく一体的な出力であり、本評価をパターン名と根拠の意味的正当性を確認する主要な定量代理評価として位置付ける。ただし、自然言語根拠の文単位の忠実性を直接評価するものではない。評価6では提案手法単体の評価は行わず、先頭14日の入力条件を揃えた提案手法とLLM-onlyを比較する。両手法とも既存の Morning / Daytime / Night / Midnight ごとに独立して生成・評価し、評価単位は `sequence × time_period` である。提案手法の入力は時間帯別状態遷移ネットワーク、LLM-onlyの入力は同じ代表状態表で写像した時間帯別代表状態系列であり、主な差はこの入力表現だけである。
+LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出現区間がCASAS正解ADL区間と重なった結果から得られるADL集合を比較する。評価はset一致で行い、ラベル順序は使わない。パターン名、ADL集合、解釈根拠は同じ系列解釈に基づく一体的な出力であり、本評価をパターン名と根拠の意味的正当性を確認する主要な定量代理評価として位置付ける。ただし、自然言語根拠の文単位の忠実性を直接評価するものではない。評価6では提案手法単体の評価は行わず、先頭14日の入力条件を揃えた提案手法とLLM-onlyを比較する。両手法とも既存の Morning / Daytime / Night / Midnight ごとに独立して生成・評価し、評価単位は `sequence × time_period` である。提案手法の入力は時間帯別状態遷移ネットワーク、LLM-onlyの入力は同じ代表状態表で写像した時間帯別代表状態系列であり、主な差はこの入力表現だけである。split LLM-onlyは、各時間帯内でHamming写像後の連続同一代表状態も圧縮するため、提案手法のネットワークで自己遷移を除く処理と揃う。時間帯境界をまたいでは圧縮しない。
 
 ## 期間分割（既定: holdout）
 
@@ -157,6 +157,7 @@ uv run python scripts/run_direct_log_baseline.py \
   --log-days 14 \
   --sensor-representation individual \
   --hamming-threshold 0 \
+  --smoothing-window-sec 5 \
   --llm-only-time-mode split \
   --extract-only
 ```
@@ -170,6 +171,7 @@ uv run python scripts/run_direct_log_baseline.py \
   --log-days 14 \
   --sensor-representation individual \
   --hamming-threshold 0 \
+  --smoothing-window-sec 5 \
   --llm-only-time-mode split \
   --extract-only \
   --runs 5
