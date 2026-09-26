@@ -20,6 +20,7 @@ from src.behavior_pattern_mining.evaluation.adl import (
     parse_timestamp,
     sequence_text,
 )
+from experiment_config import TIME_MODES
 
 
 ALLOWED_LABELS = [
@@ -230,14 +231,16 @@ def parse_sequence(value: Any) -> tuple[str, ...]:
 
 
 def time_band_for_timestamp(timestamp: Any) -> str:
-    hour = timestamp.hour
-    if 6 <= hour < 10:
-        return "Morning"
-    if 10 <= hour < 18:
-        return "Daytime"
-    if 18 <= hour < 24:
-        return "Night"
-    return "Midnight"
+    """Return the configured half-open time mode containing ``timestamp``."""
+    minute_of_day = timestamp.hour * 60 + timestamp.minute
+    for mode_name, (start, end) in TIME_MODES.items():
+        start_hour, start_minute = (int(value) for value in start.split(":"))
+        end_hour, end_minute = (int(value) for value in end.split(":"))
+        start_minute_of_day = start_hour * 60 + start_minute
+        end_minute_of_day = end_hour * 60 + end_minute
+        if start_minute_of_day <= minute_of_day < end_minute_of_day:
+            return mode_name
+    raise ValueError(f"timestamp does not belong to a configured time mode: {timestamp}")
 
 
 def _flat_interpretation_pattern(
@@ -275,13 +278,18 @@ def _flat_interpretation_pattern(
         or item.get("adl_labels")
         or item.get("ADLラベル")
     )
+    resolved_time_band = str(time_band).strip() or "All"
+    if resolved_time_band == "All":
+        resolved_time_band = str(
+            item.get("time_band") or item.get("time_period") or "All"
+        ).strip() or "All"
     return InterpretationPattern(
         pattern_id=resolved_pattern_id,
         group_pattern_id=resolved_group_pattern_id,
         pattern_name=pattern_name,
         sequence=sequence,
         pred_adl_labels=label_normalization.normalized_labels,
-        time_band=time_band,
+        time_band=resolved_time_band,
         raw_pred_adl_labels=label_normalization.raw_labels,
         unknown_pred_adl_labels=label_normalization.unknown_labels,
         prediction_status=label_normalization.status,

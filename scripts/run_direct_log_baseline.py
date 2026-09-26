@@ -68,6 +68,15 @@ def parse_args() -> argparse.Namespace:
         help="Aruba feature representation shared with the proposed method.",
     )
     parser.add_argument(
+        "--llm-only-time-mode",
+        choices=["split", "legacy"],
+        default="split",
+        help=(
+            "split (default): call the LLM separately for each configured time period; "
+            "legacy: reproduce the previous one-prompt whole-period baseline."
+        ),
+    )
+    parser.add_argument(
         "--estimate-cost",
         action="store_true",
         help="Estimate Bedrock tokens and USD cost without model inference or evaluation.",
@@ -107,6 +116,7 @@ def main() -> None:
         sensor_map_path=sensor_map_path(ROOT_DIR, args.sensor_representation),
         estimate_cost=args.estimate_cost,
         output_dir=args.output_dir,
+        llm_only_time_mode=args.llm_only_time_mode,
     )
     if not args.extract_only and not args.estimate_cost:
         direct_log.main()

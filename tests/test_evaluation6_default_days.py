@@ -24,7 +24,7 @@ class Evaluation6DefaultDaysTests(unittest.TestCase):
 
         self.assertEqual(args.days, 14)
         self.assertIn("15_1_14days", str(args.patterns_proposed))
-        self.assertIn("llm_direct_15_1_14days", str(args.patterns_direct))
+        self.assertIn("llm_direct_aruba_individual_15_1_14days_time_split", str(args.patterns_direct))
         self.assertIn("6_adl_evaluation_14", str(args.state_series))
 
     def test_five_run_cli_writes_llm_usage_comparison(self) -> None:
@@ -143,6 +143,8 @@ class Evaluation6DefaultDaysTests(unittest.TestCase):
                 "--runs",
                 "5",
                 "--split-mode",
+                "legacy",
+                "--llm-only-time-mode",
                 "legacy",
             ]
             with patch.object(sys, "argv", argv):

@@ -115,11 +115,14 @@ def default_direct_path(
     run: int = 1,
     *,
     results_root: Path | None = None,
+    llm_only_time_mode: str = "split",
 ) -> Path:
     if dataset == "aruba":
         directory = f"llm_direct_{n_states}_{hamming_threshold}_{days}days"
     else:
         directory = f"llm_direct_{dataset}_{n_states}_{hamming_threshold}_{days}days"
+    if llm_only_time_mode == "split":
+        directory += "_time_split"
     return (results_root or current_model_results_root()) / directory / f"{run}.json"
 
 
@@ -456,6 +459,7 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     n_states = settings["n_states"]
     hamming = settings["hamming_threshold"]
     runs = settings["runs"]
+    llm_only_time_mode = settings.get("llm_only_time_mode", "split")
     labeled = as_path(settings["labeled_casas"])
     sensor_map = as_path(settings["sensor_map"])
     state_table = as_path(settings["state_table"])
@@ -504,6 +508,7 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_arg(direct_cmd, "--hamming-threshold", hamming)
     add_arg(direct_cmd, "--runs", runs)
     add_arg(direct_cmd, "--sensor-representation", representation)
+    add_arg(direct_cmd, "--llm-only-time-mode", llm_only_time_mode)
 
     compare_cmd = script_cmd(runner, "scripts/evaluate_6_compare_adl_interpretation_set.py")
     add_arg(compare_cmd, "--patterns-proposed", proposed)
@@ -529,6 +534,7 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     add_arg(compare_cmd, "--test-start-day", settings.get("test_start_day", 155))
     add_arg(compare_cmd, "--test-end-day", settings.get("test_end_day", 220))
     add_arg(compare_cmd, "--best-condition-manifest", as_path(settings.get("best_condition_manifest")))
+    add_arg(compare_cmd, "--llm-only-time-mode", llm_only_time_mode)
     add_flag(compare_cmd, "--skip-missing-runs", settings["skip_missing_runs"])
 
     suffix = short_suffix(n_states, hamming, days)
@@ -536,14 +542,24 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     final_dir = (
         output_dir
         if settings.get("split_mode", "holdout") == "holdout"
-        and output_dir.name.endswith("_holdout_test")
+        and "_holdout_test" in output_dir.name
         else output_dir if output_dir.name == suffix else output_dir / suffix
     )
     expected_proposed = [default_proposed_path(dataset, n_states, hamming, days, 1, results_root=model_root)]
-    expected_direct = [default_direct_path(dataset, n_states, hamming, days, 1, results_root=model_root)]
+    expected_direct = [
+        default_direct_path(
+            dataset, n_states, hamming, days, 1,
+            results_root=model_root, llm_only_time_mode=llm_only_time_mode,
+        )
+    ]
     if runs > 1:
         expected_proposed.append(default_proposed_path(dataset, n_states, hamming, days, runs, results_root=model_root))
-        expected_direct.append(default_direct_path(dataset, n_states, hamming, days, runs, results_root=model_root))
+        expected_direct.append(
+            default_direct_path(
+                dataset, n_states, hamming, days, runs,
+                results_root=model_root, llm_only_time_mode=llm_only_time_mode,
+            )
+        )
 
     return [
         EvaluationStep(

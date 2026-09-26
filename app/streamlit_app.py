@@ -743,15 +743,30 @@ def render_eval6_settings(common: dict) -> dict:
         ),
         key=f"eval6_patterns_proposed_{model_key}_{representation}",
     )
+    llm_only_time_mode = st.radio(
+        "LLM-only input",
+        options=["split", "legacy"],
+        format_func=lambda value: (
+            "Split by time period (default)" if value == "split" else "Legacy unsplit"
+        ),
+        horizontal=True,
+        help="splitはMorning / Daytime / Night / Midnightごとに独立してLLMへ入力します。",
+    )
     direct = st.text_input(
         "patterns-direct",
         rel_default(
             default_direct_path(
                 dataset,
-                int(n_states), int(hamming), int(days), results_root=model_root
+                int(n_states),
+                int(hamming),
+                int(days),
+                results_root=model_root,
+                llm_only_time_mode=llm_only_time_mode,
             )
         ),
-        key=f"eval6_patterns_direct_{model_key}_{representation}",
+        key=(
+            f"eval6_patterns_direct_{model_key}_{representation}_{llm_only_time_mode}"
+        ),
     )
     state_series = st.text_input("state-series", f"{default_intermediate}/state_series.csv", key=f"eval6_state_series_{representation}")
     adl_intervals = st.text_input("adl-intervals（任意。なければlabeled-casasから生成）", "output/adl_label_intervals.csv")
@@ -786,10 +801,12 @@ def render_eval6_settings(common: dict) -> dict:
     if representation != "room":
         default_eval6_output += f"_{representation}"
     default_eval6_output += "_holdout_test"
+    if llm_only_time_mode == "split":
+        default_eval6_output += "_direct_time_split"
     output_dir = st.text_input(
         "比較output-dir",
         default_eval6_output,
-        key=f"eval6_output_dir_{model_key}_{representation}",
+        key=f"eval6_output_dir_{model_key}_{representation}_{llm_only_time_mode}",
     )
 
     return {
@@ -804,6 +821,7 @@ def render_eval6_settings(common: dict) -> dict:
         "state_table": state_table,
         "patterns_proposed": proposed,
         "patterns_direct": direct,
+        "llm_only_time_mode": llm_only_time_mode,
         "patterns_proposed_template": proposed_template,
         "patterns_direct_template": direct_template,
         "best_condition_manifest": best_condition_manifest,

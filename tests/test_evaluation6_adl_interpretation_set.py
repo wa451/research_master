@@ -131,6 +131,35 @@ class Evaluation6ADLInterpretationSetTests(unittest.TestCase):
         self.assertEqual(summary["avg_api_response_duration_sec_per_run"], 8.0)
         self.assertEqual(summary["avg_total_tokens_per_run"], 44.0)
 
+    def test_split_direct_usage_sums_four_time_period_calls(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "direct_metrics.csv"
+            with path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=[
+                        "run", "time_period", "status", "duration_sec",
+                        "prompt_tokens", "response_tokens", "total_tokens",
+                    ],
+                )
+                writer.writeheader()
+                for period in ("Morning", "Daytime", "Night", "Midnight"):
+                    writer.writerow(
+                        {
+                            "run": 1, "time_period": period, "status": "success",
+                            "duration_sec": 1, "prompt_tokens": 10,
+                            "response_tokens": 2, "total_tokens": 12,
+                        }
+                    )
+            rows, missing = load_direct_usage_by_run(
+                path, [1], llm_only_time_mode="split"
+            )
+
+        self.assertEqual(missing, [])
+        self.assertEqual(rows[0]["recorded_api_calls"], 4)
+        self.assertEqual(rows[0]["prompt_tokens"], 40.0)
+        self.assertEqual(rows[0]["total_tokens"], 48.0)
+
     def test_exact_set_match_ignores_order(self) -> None:
         metrics = set_metrics(["Meal", "Relax"], ["Relax", "Meal"])
 
@@ -282,6 +311,37 @@ class Evaluation6ADLInterpretationSetTests(unittest.TestCase):
         self.assertEqual([pattern.pattern_id for pattern in patterns], ["P001_Morning", "P001_Midnight"])
         self.assertEqual([pattern.group_pattern_id for pattern in patterns], ["P001", "P001"])
         self.assertEqual([pattern.time_band for pattern in patterns], ["Morning", "Midnight"])
+
+    def test_flat_direct_pattern_time_period_is_used_for_occurrence_filtering(self) -> None:
+        payload = [
+            {
+                "pattern_id": "D001_Morning",
+                "time_period": "Morning",
+                "sequence": ["状態8", "状態13"],
+                "pattern_name": "morning direct",
+                "ADL系列ラベル": ["Wake-up"],
+            }
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "patterns.json"
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            patterns = load_interpretation_patterns(path)
+
+        self.assertEqual(patterns[0].time_band, "Morning")
+        self.assertTrue(
+            occurrence_is_within_time_band(
+                ts("2020-01-01 06:00:00"),
+                ts("2020-01-01 06:01:00"),
+                patterns[0].time_band,
+            )
+        )
+        self.assertFalse(
+            occurrence_is_within_time_band(
+                ts("2020-01-01 18:00:00"),
+                ts("2020-01-01 18:01:00"),
+                patterns[0].time_band,
+            )
+        )
 
     def test_loader_warns_for_legacy_noise_or_ambiguous_labels(self) -> None:
         payload = [

@@ -2,9 +2,11 @@
 
 > **モデル別保存:** proposed/direct-log JSON、checkpoint、usage、比較結果はそれぞれ `results/<model>/aruba_*`、`results/<model>/llm_direct_*`、`results/<model>/6_adl_match/` に保存する。holdout既定の比較結果は条件名末尾を `_holdout_test` として旧全220日成果物と分ける。`.env` のモデルから自動決定されるため、通常は出力先指定不要である。`output/6_adl_evaluation_*/state_series.csv` は全モデルで共有するモデル非依存入力として残す。以下の旧 `output/.../llm_*` / `results/6_*` はGemini移行元のlegacy表記である。
 
+LLM-onlyの既定は `--llm-only-time-mode split` であり、各runで4時間帯へ分割して最大4回のLLM呼出しを行う。`--llm-only-time-mode legacy` を明示すると、IoT2026時点の「14日全体を1回で入力する」方式を再現できる。この選択肢は、評価期間を決める `--split-mode` とは独立している。
+
 ## 評価の要約
 
-LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出現区間がCASAS正解ADL区間と重なった結果から得られるADL集合を比較する。評価はset一致で行い、ラベル順序は使わない。パターン名、ADL集合、解釈根拠は同じ系列解釈に基づく一体的な出力であり、本評価をパターン名と根拠の意味的正当性を確認する主要な定量代理評価として位置付ける。ただし、自然言語根拠の文単位の忠実性を直接評価するものではない。評価6では提案手法単体の評価は行わず、提案手法と、同じ期間の前処理済み代表状態系列を直接LLMへ入力するLLM単独ベースラインを、先頭14日の入力条件に揃えて比較する。提案手法では、同じ `遷移のパターン` が複数時間帯で抽出された場合、表示・保存上は1つのグループにまとめ、評価時には `sequence × time_band` 単位へ展開する。
+LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出現区間がCASAS正解ADL区間と重なった結果から得られるADL集合を比較する。評価はset一致で行い、ラベル順序は使わない。パターン名、ADL集合、解釈根拠は同じ系列解釈に基づく一体的な出力であり、本評価をパターン名と根拠の意味的正当性を確認する主要な定量代理評価として位置付ける。ただし、自然言語根拠の文単位の忠実性を直接評価するものではない。評価6では提案手法単体の評価は行わず、先頭14日の入力条件を揃えた提案手法とLLM-onlyを比較する。両手法とも既存の Morning / Daytime / Night / Midnight ごとに独立して生成・評価し、評価単位は `sequence × time_period` である。提案手法の入力は時間帯別状態遷移ネットワーク、LLM-onlyの入力は同じ代表状態表で写像した時間帯別代表状態系列であり、主な差はこの入力表現だけである。
 
 ## 期間分割（既定: holdout）
 
@@ -59,7 +61,7 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 | 入力 | 正式14日評価で明示するパス | 役割 |
 |---|---|---|
 | 提案手法LLM JSON | `output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json` | `time_band_interpretations` を持つ提案手法出力。 |
-| LLM単独ベースラインJSON | `output/llm_direct_15_0_14days/1.json` | 同期間の前処理済み代表状態系列をLLMへ直接入力した出力。 |
+| LLM単独ベースラインJSON | `results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json` | 同期間の前処理済み代表状態系列を時間帯ごとにLLMへ直接入力した出力。各patternに `time_period` を保存する。 |
 | 14日条件の全220日照合系列 | `output/6_adl_evaluation_15_0_14days/state_series.csv` | 先頭14日で作成した代表状態定義を固定し全220日へ写像する入力。holdout既定ではDay 155–220だけを照合する。 |
 | ADL正解データ | `new_labeled_data/aruba.txt` | CASAS activity `begin/end` からADL正解区間を内部生成する。 |
 
@@ -143,25 +145,39 @@ uv run python scripts/evaluate_adl_labels.py \
 
 ### 5. 🟨 **条件付き** LLM単独ベースラインを生成する
 
-`output/llm_direct_15_0_14days/1.json` がなければ実行する。1回分だけ比較する場合はこのコマンドでよい。
+既定のindividual状態表では、`results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json` を作る。Morning / Daytime / Night / Midnight は独立した入力であり、空の時間帯はAPIを呼ばず `status=no_input` と記録する。API成功だがpatternがない時間帯は `status=empty_prediction` と記録する。
 
 ```bash
 uv run python scripts/run_direct_log_baseline.py \
   --log-days 14 \
   --hamming-threshold 0 \
+  --llm-only-time-mode split \
   --extract-only
 ```
 
 ### 6. 🟩 **スキップ可** LLM単独ベースラインを5回分生成する
 
-5回平均を出す場合に実行する。`output/llm_direct_15_0_14days/1.json` から `5.json` までを作成する。既にADLラベル付き出力が存在するrunはスキップされる。
+5回平均を出す場合に実行する。split方式では各runの4時間帯分のprompt/completion/total tokenとstatusを1つのmetrics CSVへ保存し、run metadataには4時間帯合計の `prompt_tokens`、`completion_tokens`、`api_total_tokens` も保存する。比較時にはその4時間帯の合計をLLM-onlyのrun合計として使う。
 
 ```bash
 uv run python scripts/run_direct_log_baseline.py \
   --log-days 14 \
   --hamming-threshold 0 \
+  --llm-only-time-mode split \
   --extract-only \
   --runs 5
+```
+
+#### IoT2026のLLM-onlyを再現する場合
+
+時間帯分割を使わない旧方式は削除していない。評価期間の `--split-mode` とは別に、生成・比較の両方へ `--llm-only-time-mode legacy` を指定する。
+
+```bash
+uv run python scripts/run_direct_log_baseline.py \
+  --log-days 14 --hamming-threshold 0 --llm-only-time-mode legacy --extract-only
+
+uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
+  --llm-only-time-mode legacy --split-mode legacy
 ```
 
 ### 7. 🟥 **必須** 手法間比較を実行する
@@ -171,26 +187,7 @@ uv run python scripts/run_direct_log_baseline.py \
 ```bash
 uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
   --patterns-proposed output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
-  --patterns-direct output/llm_direct_15_0_14days/1.json \
-  --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
-  --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/6_adl_match/15_0_14days \
-  --min-overlap-ratio-for-true-label 0.10 \
-  --days 14 \
-  --n-states 15 \
-  --hamming-threshold 0
-```
-
-### 8. 🟩 **スキップ可** 5回分の平均を出す
-
-Step 3とStep 6で5回分のパターン出力を作成したあとに実行する。`output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json` から `_5.json` まで、かつ `output/llm_direct_15_0_14days/1.json` から `5.json` までを使って平均を出す。
-
-```bash
-uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
-  --patterns-proposed output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
-  --patterns-direct output/llm_direct_15_0_14days/1.json \
-  --proposed-metrics-template 'output/aruba_15_0_14days/llm_modes_metrics_15_0_14days_run{run}.csv' \
-  --direct-metrics output/llm_direct_15_0_14days/llm_direct_metrics_14days.csv \
+  --patterns-direct results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json \
   --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
   --labeled-casas new_labeled_data/aruba.txt \
   --output-dir results/6_adl_match/15_0_14days \
@@ -198,7 +195,28 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
   --days 14 \
   --n-states 15 \
   --hamming-threshold 0 \
-  --runs 5
+  --llm-only-time-mode split
+```
+
+### 8. 🟩 **スキップ可** 5回分の平均を出す
+
+Step 3とStep 6で5回分のパターン出力を作成したあとに実行する。`output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json` から `_5.json` まで、かつsplit LLM-onlyの `results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json` から `5.json` までを使って平均を出す。
+
+```bash
+uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
+  --patterns-proposed output/aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
+  --patterns-direct results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json \
+  --proposed-metrics-template 'output/aruba_15_0_14days/llm_modes_metrics_15_0_14days_run{run}.csv' \
+  --direct-metrics results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/llm_direct_metrics_14days.csv \
+  --state-series output/6_adl_evaluation_15_0_14days/state_series.csv \
+  --labeled-casas new_labeled_data/aruba.txt \
+  --output-dir results/6_adl_match/15_0_14days \
+  --min-overlap-ratio-for-true-label 0.10 \
+  --days 14 \
+  --n-states 15 \
+  --hamming-threshold 0 \
+  --runs 5 \
+  --llm-only-time-mode split
 ```
 
 一部のrunだけ存在する状態で平均を確認する場合は、次を追加する。
@@ -304,13 +322,13 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 
 | 手法 | 入力 | 評価方法 |
 |---|---|---|
-| `proposed` | 14日版状態遷移ネットワークから抽出したLLM JSON。 | `time_band_interpretations` を `sequence × time_band` に展開し、対象時間帯内の出現だけでset比較する。 |
-| `direct_log_baseline` | 14日分の前処理済み代表状態系列を直接LLMへ入力して抽出したJSON。 | 同じ `state_series.csv` 上で系列出現を検索し、同じset評価を行う。 |
+| `proposed` | 14日版の時間帯別状態遷移ネットワークから抽出したLLM JSON。 | `time_band_interpretations` を `sequence × time_period` に展開し、対象時間帯内の出現だけでset比較する。 |
+| `direct_log_baseline` | 14日分の前処理済み代表状態系列を同じ4時間帯ごとにLLMへ入力して抽出したJSON。 | 各JSON recordの `time_period` を使い、同じ `state_series.csv` の当該時間帯内だけで系列出現を検索する。 |
 
 ## 処理手順の内部仕様
 
 1. LLM出力JSONから `ADL系列ラベル` と `遷移のパターン` を読む。
-2. 提案手法の `time_band_interpretations` は `sequence × time_band` 単位へ展開する。
+2. 提案手法の `time_band_interpretations` とsplit LLM-onlyの `time_period` は、ともに `sequence × time_period` 単位の評価recordにする。
 3. パターン出現区間を用意する。比較スクリプトでは、両手法を同じ `state_series.csv` 上で検索し直す。詳細CSVには、この検索結果に基づく `num_occurrences` も保存する。
 4. `time_band` が `All` でない評価レコードは、半開区間 `[start,end)` の開始時刻と `end-\epsilon` がともに当該時間帯へ属するoccurrenceだけを使う。境界を横断する出現は除外し、件数と割合を保存する。`All` は時間帯制約を持たないため除外しないが、監査用の横断件数は保存する。
 5. `new_labeled_data/aruba.txt` からADL正解区間を内部生成する。
@@ -318,7 +336,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 7. `category_overlap / total_overlap >= --min-overlap-ratio-for-true-label` のカテゴリを正解ADL集合に入れる。
 8. LLMの `ADL系列ラベル` を10カテゴリ語彙に対して検証する。欠落は `prediction_status=missing`、語彙外を1つでも含む場合は `prediction_status=unknown` とし、rawラベルを保持して警告する。
 9. 出現なし、正解ADL重なりなし、予測欠落、語彙外を別々の評価状態として記録し、定義済みの分母規則でset指標を計算する。
-10. 提案手法は各runの時間帯別メトリクスを合計し、LLM単独ベースラインは各runのメトリクスを使って、run合計の平均と標準偏差を算出する。
+10. 両手法とも各runの時間帯別メトリクスを合計し、run合計の平均と標準偏差を算出する。split LLM-onlyは各時間帯のprompt tokens、completion tokens、total tokensを保存する。
 
 欠損パターンrunは手法ごとに独立してskipされ、LLM使用量も手法ごとの完全runだけで平均される。また、ラベル別・時間帯別CSVは全runのdetail行をpoolして集計する。pairedな共通run、run等重み、detail poolのどれを正式集計とするかは未解決であり、[KI-09](../research/known_issues.md#ki-09) で追跡している。
 
@@ -329,7 +347,8 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 `evaluation6_llm_usage_comparison.csv` は、入力形式の異なる2手法を「1 runの抽出全体」で比較する。
 
 - 提案手法: Morning / Daytime / Night / Midnight の記録済み成功API呼び出しをrun内で合計する。
-- LLM単独ベースライン: 同期間の前処理済み代表状態系列を直接入力した記録済み成功API呼び出しをrun値とする。
+- LLM単独ベースライン（split）: Morning / Daytime / Night / Midnight の記録済みAPI呼び出しをrun内で合計する。`no_input` はAPI呼び出し・tokenとも0であり、`empty_prediction` は通常のAPI使用量として保存する。
+- LLM単独ベースライン（legacy）: 14日全体を1回で入力した従来の記録済み成功API呼び出しをrun値とする。
 - `--runs 5` の場合: 上記のrun合計を、各手法で完全な記録があるrunについて平均し、標準偏差も保存する。
 - `duration_sec` はGemini APIの応答待ち時間であり、前処理・プロンプト構築・ファイル保存を含む全工程時間ではない。
 - パース失敗などの失敗API呼び出しは既存メトリクスに含まれない。

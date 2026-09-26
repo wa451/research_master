@@ -53,6 +53,7 @@ from src.behavior_pattern_mining.evaluation.period_splits import (
 from src.behavior_pattern_mining.data.sensor_representation import (
     DEFAULT_SENSOR_REPRESENTATION,
     SENSOR_REPRESENTATIONS,
+    artifact_dataset_name,
 )
 
 
@@ -220,6 +221,22 @@ def condition_suffix(days: int, n_states: int | None, hamming_threshold: int | N
     return f"{resolved_n_states}_{resolved_hamming}_{days}days"
 
 
+def default_direct_patterns_path(
+    days: int,
+    n_states: int,
+    hamming_threshold: int,
+    llm_only_time_mode: str,
+    sensor_representation: str,
+) -> Path:
+    dataset_name = artifact_dataset_name(DATASET_NAME, sensor_representation)
+    suffix = f"llm_direct_{n_states}_{hamming_threshold}_{days}days"
+    if dataset_name != DATASET_NAME:
+        suffix = f"llm_direct_{dataset_name}_{n_states}_{hamming_threshold}_{days}days"
+    if llm_only_time_mode == "split":
+        suffix += "_time_split"
+    return current_model_results_root() / suffix / "1.json"
+
+
 def resolve_output_dir(output_dir: Path | None, suffix: str) -> Path:
     """Resolve the final condition-specific result directory.
 
@@ -267,10 +284,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--patterns-direct",
         type=Path,
-        default=current_model_results_root()
-        / f"llm_direct_{N_STATES}_{HAMMING_THRESHOLD}_{EVAL6_DAYS}days"
-        / "1.json",
+        default=None,
         help="Direct-log baseline LLM pattern JSON containing ADL系列ラベル",
+    )
+    parser.add_argument(
+        "--llm-only-time-mode",
+        choices=["split", "legacy"],
+        default="split",
+        help="split evaluates time-period-specific LLM-only patterns; legacy uses unsplit patterns.",
     )
     parser.add_argument(
         "--patterns-direct-template",
@@ -404,6 +425,14 @@ def parse_args() -> argparse.Namespace:
         args.generation_days = args.days
     elif args.generation_days != args.days:
         raise ValueError("--generation-days must equal --days because artifact paths use --days")
+    if args.patterns_direct is None:
+        args.patterns_direct = default_direct_patterns_path(
+            args.days,
+            args.n_states if args.n_states is not None else N_STATES,
+            args.hamming_threshold if args.hamming_threshold is not None else HAMMING_THRESHOLD,
+            args.llm_only_time_mode,
+            args.sensor_representation,
+        )
     if args.best_condition_manifest is not None:
         payload = json.loads(args.best_condition_manifest.read_text(encoding="utf-8"))
         representation = payload.get("sensor_representation")
@@ -432,6 +461,14 @@ def parse_args() -> argparse.Namespace:
             manifest_value = payload.get(field)
             if manifest_value is not None and getattr(args, field) != manifest_value:
                 raise ValueError(f"--{field.replace('_', '-')} conflicts with --best-condition-manifest")
+        if args.patterns_direct == default_direct_patterns_path(
+            args.days, N_STATES, HAMMING_THRESHOLD, args.llm_only_time_mode,
+            args.sensor_representation,
+        ):
+            args.patterns_direct = default_direct_patterns_path(
+                args.days, manifest_k, manifest_h, args.llm_only_time_mode,
+                args.sensor_representation,
+            )
     return args
 
 
@@ -626,6 +663,8 @@ def main() -> None:
     )
     if args.split_mode == "holdout":
         output_suffix = f"{output_suffix}_holdout_test"
+    if args.llm_only_time_mode == "split":
+        output_suffix = f"{output_suffix}_direct_time_split"
     args.output_dir = resolve_output_dir(args.output_dir, output_suffix)
     if not args.state_series.exists():
         raise FileNotFoundError(f"--state-series does not exist: {args.state_series}")
@@ -748,6 +787,7 @@ def main() -> None:
     direct_usage_rows, direct_missing_rows = load_direct_usage_by_run(
         resolved_direct_metrics_path,
         evaluated_runs_by_method["direct_log_baseline"],
+        llm_only_time_mode=args.llm_only_time_mode,
     )
     llm_usage_run_rows.extend(direct_usage_rows)
     missing_llm_usage.extend(direct_missing_rows)
@@ -850,6 +890,7 @@ def main() -> None:
         **split_metadata,
         "sensor_representation": args.sensor_representation,
         "best_condition_manifest": str(args.best_condition_manifest) if args.best_condition_manifest else None,
+        "llm_only_time_mode": args.llm_only_time_mode,
         "n_states": args.n_states,
         "hamming_threshold": args.hamming_threshold,
         "state_series": str(args.state_series),
@@ -888,7 +929,13 @@ def main() -> None:
                 "Sum recorded successful API calls within each run, then average "
                 "the run totals across runs with complete metrics."
             ),
-            "duration_scope": "Gemini API response duration only",
+            "duration_scope": "LLM API response duration only",
+            "direct_log_time_period_policy": (
+                "split mode sums successful Morning/Daytime/Night/Midnight calls per run; "
+                "no_input periods make no API call"
+                if args.llm_only_time_mode == "split"
+                else "legacy mode uses one whole-generation-period LLM call per run"
+            ),
             "run_rows": llm_usage_run_rows,
             "methods": {
                 row["method"]: row

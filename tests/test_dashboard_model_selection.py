@@ -10,6 +10,7 @@ import unittest
 
 from app.command_builder import (
     PROJECT_ROOT,
+    build_evaluation6_steps,
     build_evaluation7_steps,
     build_evaluation9_steps,
     default_direct_path,
@@ -44,8 +45,41 @@ class DashboardModelSelectionTests(unittest.TestCase):
         )
         self.assertEqual(
             default_direct_path("aruba", 15, 0, 14, results_root=terra_root),
+            terra_root / "llm_direct_15_0_14days_time_split/1.json",
+        )
+        self.assertEqual(
+            default_direct_path(
+                "aruba", 15, 0, 14, results_root=terra_root,
+                llm_only_time_mode="legacy",
+            ),
             terra_root / "llm_direct_15_0_14days/1.json",
         )
+
+    def test_evaluation6_builder_passes_split_mode_to_generation_and_comparison(self) -> None:
+        root = dashboard_model("us.openai.gpt-5.6-terra").results_root(PROJECT_ROOT)
+        settings = {
+            "runner": "python", "dataset": "aruba", "days": 14,
+            "n_states": 15, "hamming_threshold": 0, "runs": 1,
+            "labeled_casas": "new_labeled_data/aruba.txt",
+            "sensor_map": "configs/aruba_sensor_map_individual.json",
+            "state_table": "state/aruba_15_0_14days.txt",
+            "patterns_proposed": root / "aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json",
+            "patterns_direct": root / "llm_direct_15_0_14days_time_split/1.json",
+            "state_series": "output/6_adl_evaluation_15_0_14days/state_series.csv",
+            "intermediate_output_dir": "output/6_adl_evaluation_15_0_14days",
+            "output_dir": root / "6_adl_match_holdout_test_direct_time_split",
+            "model_results_root": root, "sensor_representation": "individual",
+            "min_overlap_ratio_for_true_label": 0.1, "wake_window_minutes": 30.0,
+            "match_mode": "exact", "max_skip_duration_minutes": 1.0,
+            "skip_missing_runs": False, "split_mode": "holdout",
+            "generation_days": 14, "validation_start_day": 15,
+            "validation_end_day": 154, "test_start_day": 155, "test_end_day": 220,
+            "llm_only_time_mode": "split",
+        }
+        steps = build_evaluation6_steps(settings)
+        commands = [" ".join(step.command) for step in steps]
+
+        self.assertEqual(sum("--llm-only-time-mode split" in command for command in commands), 2)
 
     def test_builders_use_the_selected_model_root_for_expected_outputs(self) -> None:
         terra_root = dashboard_model("us.openai.gpt-5.6-terra").results_root(PROJECT_ROOT)

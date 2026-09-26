@@ -129,8 +129,10 @@ def load_proposed_run_usage(
 def load_direct_usage_by_run(
     path: Path,
     runs: Iterable[int],
+    *,
+    llm_only_time_mode: str = "legacy",
 ) -> tuple[list[dict], list[dict]]:
-    """Load direct-log metrics and return complete run rows plus missing details."""
+    """Load direct-log metrics and aggregate legacy or split-time-period runs."""
     requested_runs = list(runs)
     if not path.exists():
         return [], [
@@ -152,13 +154,47 @@ def load_direct_usage_by_run(
     usage_rows: list[dict] = []
     missing_rows: list[dict] = []
     for run in requested_runs:
-        usage, reason = aggregate_recorded_calls(
-            "direct_log_baseline",
-            run,
-            rows_by_run.get(run, []),
-            path,
-            expected_recorded_calls=1,
-        )
+        run_rows = rows_by_run.get(run, [])
+        if llm_only_time_mode == "split":
+            expected_periods = {"Morning", "Daytime", "Night", "Midnight"}
+            actual_periods = {str(row.get("time_period") or "") for row in run_rows}
+            if len(run_rows) != len(expected_periods) or actual_periods != expected_periods:
+                usage, reason = None, "time_period_metrics_missing"
+            else:
+                api_rows = [
+                    row for row in run_rows
+                    if str(row.get("status") or "success") != "no_input"
+                ]
+                if not api_rows:
+                    # All four periods explicitly had no representative-state input,
+                    # so no API call and zero aggregate usage are known facts.
+                    usage = {
+                        "method": "direct_log_baseline",
+                        "run": run,
+                        "recorded_api_calls": 0,
+                        "api_response_duration_sec": 0.0,
+                        "prompt_tokens": 0.0,
+                        "response_tokens": 0.0,
+                        "total_tokens": 0.0,
+                        "source_path": str(path),
+                    }
+                    reason = None
+                else:
+                    usage, reason = aggregate_recorded_calls(
+                        "direct_log_baseline",
+                        run,
+                        api_rows,
+                        path,
+                        expected_recorded_calls=len(api_rows),
+                    )
+        else:
+            usage, reason = aggregate_recorded_calls(
+                "direct_log_baseline",
+                run,
+                run_rows,
+                path,
+                expected_recorded_calls=1,
+            )
         if usage is not None:
             usage_rows.append(usage)
         else:

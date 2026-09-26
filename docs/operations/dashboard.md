@@ -110,10 +110,10 @@ macOSでは、リポジトリ直下の `start_dashboard.command` をダブルク
    `scripts/evaluate_adl_labels.py` で、先頭14日から作成した代表状態定義を固定して全220日を写像した比較用の照合系列を `output/6_adl_evaluation_15_0_14days/state_series.csv` へ保存します。`14days` は抽出・LLM入力条件であり、照合期間は全220日です。
 
 4. LLM単独ベースラインを生成  
-   `scripts/run_direct_log_baseline.py --log-days 14 --extract-only` を実行します。
+   既定では `scripts/run_direct_log_baseline.py --log-days 14 --llm-only-time-mode split --extract-only` を実行します。既存の Morning / Daytime / Night / Midnight ごとに代表状態系列を分け、各時間帯を独立してLLMへ入力します。画面の「LLM-only input」で `Split by time period (default)` またはIoT2026再現用の `Legacy unsplit` を選べます。
 
 5. 評価6の手法間比較を実行  
-   `scripts/evaluate_6_compare_adl_interpretation_set.py` を実行します。主な出力は `evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_llm_usage_comparison.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_*_by_method.csv`, `evaluation6_comparison_summary.json` です。
+   `scripts/evaluate_6_compare_adl_interpretation_set.py` を実行します。split選択時は両手法を `sequence × time_period` 単位で評価し、LLM-onlyの出現検索もpattern自身の時間帯だけに制限します。主な出力は `evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_llm_usage_comparison.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_*_by_method.csv`, `evaluation6_comparison_summary.json` です。
 
 評価6・7画面では旧sentinelラベルの選択欄を表示しない。`no_occurrence`, `no_adl_overlap`, `prediction missing`, `unknown` は評価ロジックで固定された別状態であり、conditional/end-to-end指標とcoverage/rateへ一貫して反映される。旧CLI引数は既存コマンドとの互換性のため受理されるが、アプリが新規生成するコマンドには付与しない。
 
