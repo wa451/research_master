@@ -18,10 +18,14 @@ SPEC.loader.exec_module(evaluation6)
 
 
 class Evaluation6DefaultDaysTests(unittest.TestCase):
-    def test_default_condition_uses_14_days(self) -> None:
+    def test_ambiguous_holdout_requires_manifest_or_explicit_condition(self) -> None:
         with patch.object(sys, "argv", [str(SCRIPT_PATH)]):
-            args = evaluation6.parse_args()
+            with self.assertRaisesRegex(ValueError, "best-condition-manifest"):
+                evaluation6.parse_args()
 
+    def test_legacy_default_condition_uses_14_days(self) -> None:
+        with patch.object(sys, "argv", [str(SCRIPT_PATH), "--split-mode", "legacy"]):
+            args = evaluation6.parse_args()
         self.assertEqual(args.days, 14)
         self.assertIn("15_1_14days", str(args.patterns_proposed))
         self.assertIn("llm_direct_aruba_individual_15_1_14days_time_split", str(args.patterns_direct))
@@ -170,6 +174,11 @@ class Evaluation6DefaultDaysTests(unittest.TestCase):
             summary["llm_usage_comparison"]["missing_metrics"],
             [],
         )
+        self.assertEqual((summary["n_states"], summary["hamming_threshold"]), (15, 1))
+        self.assertEqual(summary["sensor_representation"], "individual")
+        self.assertEqual(summary["generation_days"], 14)
+        self.assertIsNotNone(summary["proposed_metrics"])
+        self.assertEqual(summary["output_dir"], str(output_dir))
 
 
 if __name__ == "__main__":

@@ -50,6 +50,12 @@ from src.behavior_pattern_mining.evaluation.period_splits import (
     clip_intervals,
     resolve_split,
 )
+from src.behavior_pattern_mining.evaluation.evaluation6_manifest import (
+    complete_holdout_condition,
+    formal_artifact_paths,
+    load_evaluation7_best_condition_manifest,
+    same_path,
+)
 from src.behavior_pattern_mining.data.sensor_representation import (
     DEFAULT_SENSOR_REPRESENTATION,
     SENSOR_REPRESENTATIONS,
@@ -260,15 +266,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Compare evaluation 6 set metrics for proposed and direct-log LLM outputs"
     )
-    parser.add_argument(
-        "--patterns-proposed",
-        type=Path,
-        default=current_model_results_root()
-        / f"{DATASET_NAME}_{param_suffix}"
-        / f"llm_sequences_modes_{param_suffix}_1.json",
-        help="Proposed-method LLM pattern JSON containing ADL系列ラベル",
-    )
-    parser.add_argument("--sensor-representation", choices=SENSOR_REPRESENTATIONS, default=DEFAULT_SENSOR_REPRESENTATION)
+    parser.add_argument("--patterns-proposed", type=Path, default=None, help="Proposed-method LLM pattern JSON containing ADL系列ラベル")
+    parser.add_argument("--sensor-representation", choices=SENSOR_REPRESENTATIONS, default=None)
     parser.add_argument("--best-condition-manifest", type=Path, default=None)
     parser.add_argument(
         "--patterns-proposed-template",
@@ -280,7 +279,7 @@ def parse_args() -> argparse.Namespace:
             "llm_sequences_modes_15_1_14days_{run}.json"
         ),
     )
-    add_split_arguments(parser)
+    add_split_arguments(parser, use_defaults=False)
     parser.add_argument(
         "--patterns-direct",
         type=Path,
@@ -324,7 +323,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--state-series",
         type=Path,
-        default=ROOT_DIR / "output" / f"6_adl_evaluation_{EVAL6_DAYS}" / "state_series.csv",
+        default=None,
         help="State interval CSV used to search occurrences for both methods",
     )
     parser.add_argument(
@@ -394,7 +393,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--days",
         type=int,
-        default=EVAL6_DAYS,
+        default=None,
         help="Number of days used for this evaluation condition. Stored in the summary JSON.",
     )
     parser.add_argument(
@@ -421,54 +420,92 @@ def parse_args() -> argparse.Namespace:
         help="Skip missing method/run pattern files instead of stopping. Skipped files are recorded in the summary JSON.",
     )
     args = parser.parse_args()
-    if args.generation_days is None:
-        args.generation_days = args.days
-    elif args.generation_days != args.days:
-        raise ValueError("--generation-days must equal --days because artifact paths use --days")
-    if args.patterns_direct is None:
-        args.patterns_direct = default_direct_patterns_path(
-            args.days,
-            args.n_states if args.n_states is not None else N_STATES,
-            args.hamming_threshold if args.hamming_threshold is not None else HAMMING_THRESHOLD,
-            args.llm_only_time_mode,
-            args.sensor_representation,
-        )
-    if args.best_condition_manifest is not None:
-        payload = json.loads(args.best_condition_manifest.read_text(encoding="utf-8"))
-        representation = payload.get("sensor_representation")
-        if representation != args.sensor_representation:
-            raise ValueError(
-                "best-condition manifest sensor_representation does not match "
-                f"--sensor-representation: {representation!r} != {args.sensor_representation!r}"
-            )
-        manifest_k = int(payload["n_states"])
-        manifest_h = int(payload["hamming_threshold"])
-        if args.n_states is not None and args.n_states != manifest_k:
-            raise ValueError("--n-states conflicts with --best-condition-manifest")
-        if args.hamming_threshold is not None and args.hamming_threshold != manifest_h:
-            raise ValueError("--hamming-threshold conflicts with --best-condition-manifest")
-        args.n_states = manifest_k
-        args.hamming_threshold = manifest_h
-        if args.split_mode != payload.get("split_mode"):
-            raise ValueError("--split-mode conflicts with --best-condition-manifest")
+    explicit = {
+        field: getattr(args, field)
         for field in (
-            "generation_days",
-            "validation_start_day",
-            "validation_end_day",
-            "test_start_day",
-            "test_end_day",
-        ):
-            manifest_value = payload.get(field)
-            if manifest_value is not None and getattr(args, field) != manifest_value:
+            "days", "n_states", "hamming_threshold", "sensor_representation",
+            "split_mode", "generation_days", "validation_start_day",
+            "validation_end_day", "test_start_day", "test_end_day",
+        )
+    }
+    if args.best_condition_manifest is not None:
+        condition = complete_holdout_condition(
+            load_evaluation7_best_condition_manifest(args.best_condition_manifest),
+            default_generation_days=EVAL6_DAYS,
+        )
+        manifest_values = {
+            "days": condition.generation_days,
+            "n_states": condition.n_states,
+            "hamming_threshold": condition.hamming_threshold,
+            "sensor_representation": condition.sensor_representation,
+            "generation_days": condition.generation_days,
+            "split_mode": condition.split_mode,
+            "validation_start_day": condition.validation_start_day,
+            "validation_end_day": condition.validation_end_day,
+            "test_start_day": condition.test_start_day,
+            "test_end_day": condition.test_end_day,
+        }
+        for field, manifest_value in manifest_values.items():
+            if manifest_value is not None and explicit[field] is not None and explicit[field] != manifest_value:
                 raise ValueError(f"--{field.replace('_', '-')} conflicts with --best-condition-manifest")
-        if args.patterns_direct == default_direct_patterns_path(
-            args.days, N_STATES, HAMMING_THRESHOLD, args.llm_only_time_mode,
-            args.sensor_representation,
-        ):
-            args.patterns_direct = default_direct_patterns_path(
-                args.days, manifest_k, manifest_h, args.llm_only_time_mode,
-                args.sensor_representation,
-            )
+        if condition.split_mode not in (None, "holdout"):
+            raise ValueError("--best-condition-manifest must describe a holdout Evaluation 7 condition")
+        args.days = condition.generation_days
+        args.n_states = condition.n_states
+        args.hamming_threshold = condition.hamming_threshold
+        args.sensor_representation = condition.sensor_representation
+        args.generation_days = condition.generation_days
+        args.split_mode = condition.split_mode or "holdout"
+        args.validation_start_day = condition.validation_start_day
+        args.validation_end_day = condition.validation_end_day
+        args.test_start_day = condition.test_start_day
+        args.test_end_day = condition.test_end_day
+        paths = formal_artifact_paths(
+            project_root=ROOT_DIR,
+            results_root=current_model_results_root(),
+            dataset=DATASET_NAME,
+            condition=condition,
+            llm_only_time_mode=args.llm_only_time_mode,
+        )
+        for field in ("patterns_proposed", "patterns_direct", "state_series"):
+            supplied = getattr(args, field)
+            if supplied is not None and not same_path(supplied, paths[field]):
+                raise ValueError(f"--{field.replace('_', '-')} conflicts with --best-condition-manifest artifact path")
+            setattr(args, field, paths[field])
+        if args.direct_metrics is not None and not same_path(args.direct_metrics, paths["direct_metrics"]):
+            raise ValueError("--direct-metrics conflicts with --best-condition-manifest artifact path")
+        args.direct_metrics = paths["direct_metrics"]
+        if args.proposed_metrics_template is not None or args.patterns_proposed_template is not None or args.patterns_direct_template is not None:
+            raise ValueError("templates cannot be combined with --best-condition-manifest formal holdout evaluation")
+        if args.output_dir is not None and not same_path(args.output_dir, paths["output_dir"]):
+            raise ValueError("--output-dir conflicts with --best-condition-manifest artifact path")
+        args.output_dir = paths["output_dir"]
+        args._formal_manifest = True
+    else:
+        args.days = args.days if args.days is not None else EVAL6_DAYS
+        args.sensor_representation = args.sensor_representation or DEFAULT_SENSOR_REPRESENTATION
+        args.split_mode = args.split_mode or "holdout"
+        args.generation_days = args.generation_days if args.generation_days is not None else args.days
+        args.validation_start_day = args.validation_start_day if args.validation_start_day is not None else 15
+        args.validation_end_day = args.validation_end_day if args.validation_end_day is not None else 154
+        args.test_start_day = args.test_start_day if args.test_start_day is not None else 155
+        args.test_end_day = args.test_end_day if args.test_end_day is not None else 220
+        if args.generation_days != args.days:
+            raise ValueError("--generation-days must equal --days because artifact paths use --days")
+        if args.split_mode == "holdout" and (explicit["n_states"] is None or explicit["hamming_threshold"] is None):
+            raise ValueError("--best-condition-manifest is required for formal holdout evaluation unless --n-states and --hamming-threshold are explicit")
+        args.n_states = args.n_states if args.n_states is not None else N_STATES
+        args.hamming_threshold = args.hamming_threshold if args.hamming_threshold is not None else HAMMING_THRESHOLD
+        artifact_dataset = artifact_dataset_name(DATASET_NAME, args.sensor_representation)
+        suffix = f"{args.n_states}_{args.hamming_threshold}_{args.days}days"
+        args.patterns_proposed = args.patterns_proposed or (current_model_results_root() / f"{artifact_dataset}_{suffix}" / f"llm_sequences_modes_{suffix}_1.json")
+        args.patterns_direct = args.patterns_direct or default_direct_patterns_path(args.days, args.n_states, args.hamming_threshold, args.llm_only_time_mode, args.sensor_representation)
+        if args.state_series is None:
+            if args.split_mode == "legacy" and explicit["n_states"] is None and explicit["hamming_threshold"] is None:
+                args.state_series = ROOT_DIR / "output" / f"6_adl_evaluation_{args.days}" / "state_series.csv"
+            else:
+                args.state_series = ROOT_DIR / "output" / f"6_adl_evaluation_{artifact_dataset}_{suffix}" / "state_series.csv"
+        args._formal_manifest = False
     return args
 
 
@@ -665,7 +702,24 @@ def main() -> None:
         output_suffix = f"{output_suffix}_holdout_test"
     if args.llm_only_time_mode == "split":
         output_suffix = f"{output_suffix}_direct_time_split"
-    args.output_dir = resolve_output_dir(args.output_dir, output_suffix)
+    if not args._formal_manifest:
+        args.output_dir = resolve_output_dir(args.output_dir, output_suffix)
+    if args._formal_manifest:
+        missing_paths = []
+        if not args.state_series.exists():
+            missing_paths.append(f"state_series: {args.state_series}")
+        for run in range(1, args.runs + 1):
+            for method, path in (
+                ("proposed", path_for_run(args.patterns_proposed, run, None)),
+                ("direct", path_for_run(args.patterns_direct, run, None)),
+            ):
+                if not path.exists():
+                    missing_paths.append(f"{method} run {run}: {path}")
+        if missing_paths:
+            raise FileNotFoundError(
+                "Formal holdout manifest artifacts are missing:\n- "
+                + "\n- ".join(missing_paths)
+            )
     if not args.state_series.exists():
         raise FileNotFoundError(f"--state-series does not exist: {args.state_series}")
 
@@ -882,6 +936,14 @@ def main() -> None:
         "patterns_direct": str(args.patterns_direct),
         "patterns_direct_template": args.patterns_direct_template,
         "proposed_metrics_template": args.proposed_metrics_template,
+        "proposed_metrics": str(
+            proposed_metrics_path_for_run(
+                args.patterns_proposed,
+                1,
+                args.proposed_metrics_template,
+                condition_suffix(args.days, args.n_states, args.hamming_threshold),
+            )
+        ),
         "direct_metrics": str(resolved_direct_metrics_path),
         "runs_requested": args.runs,
         "skip_missing_runs": args.skip_missing_runs,
@@ -890,10 +952,12 @@ def main() -> None:
         **split_metadata,
         "sensor_representation": args.sensor_representation,
         "best_condition_manifest": str(args.best_condition_manifest) if args.best_condition_manifest else None,
+        "best_condition_manifest_path": str(args.best_condition_manifest) if args.best_condition_manifest else None,
         "llm_only_time_mode": args.llm_only_time_mode,
         "n_states": args.n_states,
         "hamming_threshold": args.hamming_threshold,
         "state_series": str(args.state_series),
+        "output_dir": str(args.output_dir),
         "adl_intervals": adl_source,
         "allowed_labels": ALLOWED_LABELS,
         "min_overlap_ratio_for_true_label": args.min_overlap_ratio_for_true_label,

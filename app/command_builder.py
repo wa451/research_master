@@ -15,6 +15,11 @@ from experiment_config import SMOOTHING_WINDOW_SEC, current_model_results_root
 from src.behavior_pattern_mining.evaluation.evaluation7_staged import (
     select_top_condition_rows,
 )
+from src.behavior_pattern_mining.evaluation.evaluation6_manifest import (
+    complete_holdout_condition,
+    formal_artifact_paths,
+    load_evaluation7_best_condition_manifest,
+)
 from src.behavior_pattern_mining.data.sensor_representation import artifact_dataset_name
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -469,6 +474,52 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     intermediate_dir = as_path(settings["intermediate_output_dir"])
     output_dir = as_path(settings["output_dir"])
     model_root = settings_model_results_root(settings)
+    manifest_path = as_path(settings.get("best_condition_manifest"))
+
+    if manifest_path is not None:
+        condition = complete_holdout_condition(
+            load_evaluation7_best_condition_manifest(manifest_path),
+            default_generation_days=14,
+        )
+        expected_values = {
+            "days": condition.generation_days,
+            "n_states": condition.n_states,
+            "hamming_threshold": condition.hamming_threshold,
+            "sensor_representation": condition.sensor_representation,
+            "generation_days": condition.generation_days,
+            "split_mode": condition.split_mode,
+            "validation_start_day": condition.validation_start_day,
+            "validation_end_day": condition.validation_end_day,
+            "test_start_day": condition.test_start_day,
+            "test_end_day": condition.test_end_day,
+        }
+        for field, expected in expected_values.items():
+            supplied = settings.get(field)
+            if expected is not None and supplied is not None and supplied != expected:
+                raise ValueError(f"{field} conflicts with evaluation7 best-condition manifest")
+        if condition.split_mode != "holdout":
+            raise ValueError("evaluation7 best-condition manifest is not a formal holdout condition")
+        representation = condition.sensor_representation
+        dataset = artifact_dataset_name(settings["dataset"], representation)
+        days = condition.generation_days
+        n_states = condition.n_states
+        hamming = condition.hamming_threshold
+        canonical = formal_artifact_paths(
+            project_root=PROJECT_ROOT,
+            results_root=model_root,
+            dataset=settings["dataset"],
+            condition=condition,
+            llm_only_time_mode=llm_only_time_mode,
+        )
+        # The dashboard's path widgets may still show the previous condition.
+        # Once its manual condition fields match the manifest, use canonical
+        # manifest paths rather than passing those stale defaults to the CLI.
+        proposed = canonical["patterns_proposed"]
+        direct = canonical["patterns_direct"]
+        state_series = canonical["state_series"]
+        intermediate_dir = state_series.parent
+        output_dir = canonical["output_dir"]
+        state_table = default_state_table(dataset, n_states, hamming, days)
 
     build_cmd = script_cmd(runner, "scripts/run_build_network_from_labeled_casas.py")
     add_arg(build_cmd, "--labeled-casas", labeled)

@@ -70,13 +70,14 @@ class EvaluationSplit:
         }
 
 
-def add_split_arguments(parser) -> None:
-    parser.add_argument("--split-mode", choices=SPLIT_MODES, default="holdout")
+def add_split_arguments(parser, *, use_defaults: bool = True) -> None:
+    """Add split options, optionally preserving whether each value was explicit."""
+    parser.add_argument("--split-mode", choices=SPLIT_MODES, default="holdout" if use_defaults else None)
     parser.add_argument("--generation-days", type=int, default=None)
-    parser.add_argument("--validation-start-day", type=int, default=15)
-    parser.add_argument("--validation-end-day", type=int, default=154)
-    parser.add_argument("--test-start-day", type=int, default=155)
-    parser.add_argument("--test-end-day", type=int, default=220)
+    parser.add_argument("--validation-start-day", type=int, default=15 if use_defaults else None)
+    parser.add_argument("--validation-end-day", type=int, default=154 if use_defaults else None)
+    parser.add_argument("--test-start-day", type=int, default=155 if use_defaults else None)
+    parser.add_argument("--test-end-day", type=int, default=220 if use_defaults else None)
 
 
 def resolve_split(

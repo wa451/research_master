@@ -28,28 +28,22 @@
 
 ## 正式条件と実行順序
 
-正式14日条件はK=15、h=0、days=14である。次を順に作る。
+正式holdoutのK/hは固定値ではなくEvaluation 7のbest-condition manifestを正本とする。manifestからK/h、sensor representation、generation日数、期間境界とcanonical成果物パスを同時に解決し、不一致の手動指定は停止する。次を順に作る。
 
 1. ラベル付きCASASから14日条件の状態表・ネットワークを作る。
 2. 現モデルの提案LLM JSONを1回（または5回）生成する。
 3. その状態表を固定した全220日照合state seriesを `output/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv` に作る。正式workflowは`network-equivalent`、network構築と同じ5秒の遅延OFF平滑化を明示し、`--state-series-days`は指定しない（KI-06採用済み仕様）。
 4. 同じ14日代表状態系列を4時間帯に分け、direct-log baselineを1回（または5回）生成する。direct-logも提案手法と同じ `map_vector_to_state` のHamming写像を使う（KI-04採用済み仕様）。
-5. 比較CLIへ双方JSON、state series、labeled CASAS、`--split-mode holdout --generation-days 14 --validation-start-day 15 --validation-end-day 154 --test-start-day 155 --test-end-day 220`、`--llm-only-time-mode split`、`--min-overlap-ratio-for-true-label 0.10 --days 14 --n-states 15 --hamming-threshold 0`を明示して実行する。
+5. 比較CLIへbest-condition manifestとlabeled CASASを渡す。正式holdoutでは成果物パス・K/h・期間値を個別指定しない。
 
 前段の標準コマンドは、networkを`run_build_network_from_labeled_casas.py --days 14 --n-states 15 --hamming-threshold 0 --smoothing-window-sec 5`で作り、提案側を`run_llm_extraction.py --days 14 --n-states 15 --hamming-threshold 0 [--runs 5]`、direct側を`run_direct_log_baseline.py --log-days 14 --state-days 14 --n-states 15 --hamming-threshold 0 --smoothing-window-sec 5 --llm-only-time-mode split --extract-only [--runs 5]`で作る。比較は次の形である。
 
 ```bash
 uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
-  --patterns-proposed results/<model>/aruba_individual_15_0_14days/llm_sequences_modes_15_0_14days_1.json \
-  --patterns-direct results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json \
-  --state-series output/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv \
+  --best-condition-manifest results/<model>/7_param_search_14d_5runs_individual_holdout/evaluation7_best_condition_manifest.json \
   --labeled-casas new_labeled_data/aruba.txt \
-  --output-dir results/<model>/6_adl_match_individual_holdout_test_direct_time_split \
-  --split-mode holdout --generation-days 14 \
-  --validation-start-day 15 --validation-end-day 154 \
-  --test-start-day 155 --test-end-day 220 \
   --llm-only-time-mode split \
-  --min-overlap-ratio-for-true-label 0.10 --days 14 --n-states 15 --hamming-threshold 0
+  --min-overlap-ratio-for-true-label 0.10
 ```
 
 5 runには`--runs 5`を追加し、proposedのmetrics templateとdirect metricsを明示する。具体的なtemplateは`results/<model>/aruba_15_0_14days/llm_modes_metrics_15_0_14days_run{run}.csv`、direct metricsは`results/<model>/llm_direct_15_0_14days/llm_direct_metrics_14days.csv`である。

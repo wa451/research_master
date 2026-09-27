@@ -20,7 +20,7 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 
 内部では半開区間 `[start, end)` として state series とADL区間を切り出し、境界をまたぐADL区間も各期間へclipする。このため同じイベントやADL時間がvalidation/testに二重計上されない。state series 自体は14日条件の状態表を全220日へ適用した入力だが、評価6の照合に見える部分はDay 155–220だけである。
 
-`--best-condition-manifest results/<model>/7_param_search_14d_5runs_*_holdout/evaluation7_best_condition_manifest.json` を指定すると、そのmanifestの `K,h` を使用する。手動の `--n-states` / `--hamming-threshold` も残すが、manifestと値が不一致なら安全のためエラーにする。既存の全220日採点を再現する場合は `--split-mode legacy` を指定する。この場合も生成期間は先頭14日のままで、採点だけが全期間となる。
+正式holdoutは `--best-condition-manifest results/<model>/7_param_search_14d_5runs_*_holdout/evaluation7_best_condition_manifest.json` を正本にする。manifestから `K,h`、sensor representation、generation日数、validation/test境界を読み、提案JSON、split LLM-only JSON、state series、metrics、出力先を同一条件へ自動解決する。これらを手動で指定した場合は一致時だけ許可し、不一致または判定不能なパスはエラーにする。manifestなしのholdoutは `--n-states` と `--hamming-threshold` を明示しなければ停止する。既存の全220日採点を再現する場合は `--split-mode legacy` を指定する。この場合も生成期間は先頭14日のままで、採点だけが全期間となる。
 
 ## RQ
 

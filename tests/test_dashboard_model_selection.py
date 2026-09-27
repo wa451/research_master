@@ -22,6 +22,10 @@ from app.model_selection import (
     dashboard_model,
 )
 from app.utils import run_command
+from src.behavior_pattern_mining.evaluation.evaluation6_manifest import (
+    formal_artifact_paths,
+    load_evaluation7_best_condition_manifest,
+)
 
 
 class DashboardModelSelectionTests(unittest.TestCase):
@@ -93,6 +97,53 @@ class DashboardModelSelectionTests(unittest.TestCase):
         for step in (build_step, direct_step):
             smoothing_index = step.command.index("--smoothing-window-sec")
             self.assertEqual(step.command[smoothing_index + 1], "7")
+
+    def test_evaluation6_builder_uses_manifest_condition_artifact_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            manifest_path = root / "evaluation7_best_condition_manifest.json"
+            manifest_path.write_text(
+                '{"K":20,"h":1,"sensor_representation":"individual",'
+                '"generation_days":14,"split_mode":"holdout",'
+                '"validation_start_day":15,"validation_end_day":154,'
+                '"test_start_day":155,"test_end_day":220}',
+                encoding="utf-8",
+            )
+            model_root = dashboard_model("us.openai.gpt-5.6-terra").results_root(PROJECT_ROOT)
+            condition = load_evaluation7_best_condition_manifest(manifest_path)
+            paths = formal_artifact_paths(
+                project_root=PROJECT_ROOT,
+                results_root=model_root,
+                dataset="aruba",
+                condition=condition,
+                llm_only_time_mode="split",
+            )
+            settings = {
+                "runner": "python", "dataset": "aruba", "days": 14,
+                "n_states": 20, "hamming_threshold": 1, "runs": 1,
+                "labeled_casas": "new_labeled_data/aruba.txt",
+                "sensor_map": "configs/aruba_sensor_map_individual.json",
+                "state_table": "state/aruba_individual_20_1_14days.txt",
+                "patterns_proposed": paths["patterns_proposed"],
+                "patterns_direct": paths["patterns_direct"],
+                "state_series": paths["state_series"],
+                "intermediate_output_dir": paths["state_series"].parent,
+                "output_dir": paths["output_dir"],
+                "model_results_root": model_root, "sensor_representation": "individual",
+                "min_overlap_ratio_for_true_label": 0.1, "wake_window_minutes": 30.0,
+                "match_mode": "exact", "max_skip_duration_minutes": 1.0,
+                "skip_missing_runs": False, "split_mode": "holdout",
+                "generation_days": 14, "validation_start_day": 15,
+                "validation_end_day": 154, "test_start_day": 155, "test_end_day": 220,
+                "llm_only_time_mode": "split", "best_condition_manifest": manifest_path,
+            }
+            steps = build_evaluation6_steps(settings)
+
+        compare = next(step for step in steps if step.step_id == "eval6_compare")
+        self.assertIn(str(manifest_path), compare.command)
+        self.assertIn(str(paths["patterns_proposed"]), compare.command)
+        self.assertIn(str(paths["patterns_direct"]), compare.command)
+        self.assertIn(str(paths["state_series"]), compare.command)
 
     def test_builders_use_the_selected_model_root_for_expected_outputs(self) -> None:
         terra_root = dashboard_model("us.openai.gpt-5.6-terra").results_root(PROJECT_ROOT)

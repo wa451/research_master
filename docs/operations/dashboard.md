@@ -115,6 +115,8 @@ macOSでは、リポジトリ直下の `start_dashboard.command` をダブルク
 5. 評価6の手法間比較を実行  
    `scripts/evaluate_6_compare_adl_interpretation_set.py` をholdout（Day 155–220）で実行します。split選択時は両手法を `sequence × time_period` 単位で評価し、LLM-onlyの出現検索もpattern自身の時間帯だけに制限します。主な出力は `evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_llm_usage_comparison.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_*_by_method.csv`, `evaluation6_comparison_summary.json` です。
 
+Evaluation 7のbest-condition manifestを指定した場合、DashboardはK/h・sensor representation・期間境界の手入力がmanifestと一致することを確認し、比較・生成の成果物パスはmanifest条件のcanonical pathへ解決する。不一致のK/hや表現はコマンド実行前に停止する。
+
 評価6・7画面では旧sentinelラベルの選択欄を表示しない。`no_occurrence`, `no_adl_overlap`, `prediction missing`, `unknown` は評価ロジックで固定された別状態であり、conditional/end-to-end指標とcoverage/rateへ一貫して反映される。旧CLI引数は既存コマンドとの互換性のため受理されるが、アプリが新規生成するコマンドには付与しない。
 
 アプリの標準条件は、評価7の選定結果に合わせて代表状態数 `K=15`、ハミング距離閾値 `0` です。個別センサ既定の中間出力には `output/6_adl_evaluation_aruba_individual_15_0_14days/` を使い、Kやハミング距離を変えた場合も `output/6_adl_evaluation_aruba_individual_{K}_{hamming}_{days}days/` を使います。部屋統合を選んだ場合だけ既存互換の `aruba_` 名を使います。

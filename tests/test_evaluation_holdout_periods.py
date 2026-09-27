@@ -204,9 +204,98 @@ class EvaluationHoldoutPeriodTests(unittest.TestCase):
                 json.dumps({"n_states": 10, "hamming_threshold": 1, "sensor_representation": "room", "split_mode": "holdout"}),
                 encoding="utf-8",
             )
-            with patch.object(sys, "argv", ["evaluation6", "--best-condition-manifest", str(manifest)]):
-                with self.assertRaisesRegex(ValueError, "sensor_representation"):
+            with patch.object(sys, "argv", [
+                "evaluation6", "--best-condition-manifest", str(manifest),
+                "--sensor-representation", "individual",
+            ]):
+                with self.assertRaisesRegex(ValueError, "sensor-representation"):
                     evaluation6.parse_args()
+
+    def test_evaluation6_manifest_resolves_the_complete_formal_condition_and_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest = Path(tmpdir) / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "K": 20,
+                        "h": 1,
+                        "sensor_representation": "individual",
+                        "generation_days": 14,
+                        "split_mode": "holdout",
+                        "validation_start_day": 15,
+                        "validation_end_day": 154,
+                        "test_start_day": 155,
+                        "test_end_day": 220,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(sys, "argv", ["evaluation6", "--best-condition-manifest", str(manifest)]):
+                args = evaluation6.parse_args()
+
+        self.assertEqual((args.n_states, args.hamming_threshold), (20, 1))
+        self.assertEqual(args.sensor_representation, "individual")
+        self.assertEqual(args.generation_days, 14)
+        self.assertIn("aruba_individual_20_1_14days", str(args.patterns_proposed))
+        self.assertIn("llm_direct_aruba_individual_20_1_14days_time_split", str(args.patterns_direct))
+        self.assertIn("6_adl_evaluation_aruba_individual_20_1_14days", str(args.state_series))
+        self.assertIn("6_adl_match_individual_holdout_test_direct_time_split", str(args.output_dir))
+
+    def test_evaluation6_manifest_rejects_condition_and_artifact_conflicts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            manifest = root / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "n_states": 20,
+                        "hamming_threshold": 1,
+                        "sensor_representation": "individual",
+                        "generation_days": 14,
+                        "split_mode": "holdout",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            conflict_cases = [
+                (["--days", "10"], "days"),
+                (["--n-states", "15"], "n-states"),
+                (["--hamming-threshold", "0"], "hamming-threshold"),
+                (["--sensor-representation", "room"], "sensor-representation"),
+                (["--test-start-day", "100"], "test-start-day"),
+                (["--patterns-proposed", str(root / "aruba_individual_15_0_14days" / "wrong.json")], "artifact path"),
+            ]
+            for extra, message in conflict_cases:
+                with patch.object(sys, "argv", ["evaluation6", "--best-condition-manifest", str(manifest), *extra]):
+                    with self.assertRaisesRegex(ValueError, message):
+                        evaluation6.parse_args()
+
+            with patch.object(sys, "argv", ["evaluation6", "--best-condition-manifest", str(manifest)]):
+                expected = evaluation6.parse_args().patterns_proposed
+            with patch.object(sys, "argv", [
+                "evaluation6", "--best-condition-manifest", str(manifest),
+                "--patterns-proposed", str(expected),
+            ]):
+                self.assertEqual(evaluation6.parse_args().patterns_proposed, expected)
+
+    def test_evaluation6_manifest_reports_all_missing_required_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest = Path(tmpdir) / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "K": 999,
+                        "h": 9,
+                        "sensor_representation": "individual",
+                        "generation_days": 14,
+                        "split_mode": "holdout",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(sys, "argv", ["evaluation6", "--best-condition-manifest", str(manifest)]):
+                with self.assertRaisesRegex(FileNotFoundError, "(?s)state_series.*proposed run 1.*direct run 1"):
+                    evaluation6.main()
 
 
 if __name__ == "__main__":
