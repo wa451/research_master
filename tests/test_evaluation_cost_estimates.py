@@ -130,10 +130,7 @@ class EvaluationCostEstimateTests(unittest.TestCase):
         )
         self.assertEqual(args.evaluations, [5, 6])
         self.assertEqual(args.models, ["model-a", "model-b"])
-        self.assertEqual(
-            args.evaluation9_duration_experiment,
-            Path("output/9_hestia/duration"),
-        )
+        self.assertIsNone(args.evaluation9_duration_experiment)
 
     def test_plans_cover_each_evaluation_and_full_rerun_ignores_checkpoints(self) -> None:
         checkpoint = self.root / (

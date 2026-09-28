@@ -154,6 +154,7 @@ def discover_result_files(base_dirs: Iterable[Path]) -> list[Path]:
 
 def discover_result_dirs() -> list[Path]:
     model_root = current_model_results_root()
+    model_output = current_model_output_root()
     candidates = [
         model_root / "9_hestia",
         model_root / "5_pattern_quality_fixed",
@@ -172,10 +173,10 @@ def discover_result_dirs() -> list[Path]:
         PROJECT_ROOT / "results" / "api_smoke_tests",
         PROJECT_ROOT / "results" / "8_vs_llm_own_id_fixed",
         PROJECT_ROOT / "results" / "8_proposed_own_id_fixed",
-        PROJECT_ROOT / "output" / "6_adl_evaluation_14",
-        PROJECT_ROOT / "output" / "6_adl_evaluation_15_1_14days",
-        PROJECT_ROOT / "output" / "6_adl_evaluation_30",
-        PROJECT_ROOT / "output" / "6_adl_evaluation_30_1_30days",
+        model_output / "6_adl_evaluation_14",
+        model_output / "6_adl_evaluation_15_1_14days",
+        model_output / "6_adl_evaluation_30",
+        model_output / "6_adl_evaluation_30_1_30days",
     ]
     dirs: set[Path] = set()
     for candidate in candidates:

@@ -26,6 +26,7 @@ from experiment_config import (
     N_STATES,
     ROOT_DIR,
     current_model_identity,
+    current_model_output_root,
     current_model_results_root,
 )
 from src.behavior_pattern_mining.evaluation.adl import (
@@ -85,18 +86,18 @@ def default_output_dir() -> Path:
 
 
 def default_baseline_cache_dir() -> Path:
-    return ROOT_DIR / "output" / "5_adl_correspondence_baselines_fixed"
+    return current_model_output_root() / "5_adl_correspondence_baselines_fixed"
 
 
 def default_paths() -> dict[str, Path]:
     param_suffix = f"{N_STATES}_{HAMMING_THRESHOLD}_{DAYS}days"
-    input_output_dir = ROOT_DIR / "output" / f"{DATASET_NAME}_{param_suffix}"
+    input_output_dir = current_model_output_root() / f"{DATASET_NAME}_{param_suffix}"
     llm_output_dir = current_model_results_root() / f"{DATASET_NAME}_{param_suffix}"
     return {
         "frequency": input_output_dir / f"state_sequence_counts_{param_suffix}.json",
-        "rule_light": ROOT_DIR / "output" / "5_rule_filter" / "frequency_rule_light.csv",
-        "rule_medium": ROOT_DIR / "output" / "5_rule_filter" / "frequency_rule_medium.csv",
-        "rule_strong": ROOT_DIR / "output" / "5_rule_filter" / "frequency_rule_strong.csv",
+        "rule_light": current_model_output_root() / "5_rule_filter" / "frequency_rule_light.csv",
+        "rule_medium": current_model_output_root() / "5_rule_filter" / "frequency_rule_medium.csv",
+        "rule_strong": current_model_output_root() / "5_rule_filter" / "frequency_rule_strong.csv",
         "proposed": llm_output_dir / f"llm_sequences_modes_{param_suffix}_1.json",
     }
 

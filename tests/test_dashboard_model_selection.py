@@ -35,10 +35,16 @@ class DashboardModelSelectionTests(unittest.TestCase):
             "us.openai.gpt-5.6-sol",
         )
         roots = {model.results_root(PROJECT_ROOT) for model in DASHBOARD_MODELS}
+        output_roots = {model.output_root(PROJECT_ROOT) for model in DASHBOARD_MODELS}
         self.assertEqual(len(roots), len(DASHBOARD_MODELS))
+        self.assertEqual(len(output_roots), len(DASHBOARD_MODELS))
         self.assertEqual(
             dashboard_model(DEFAULT_DASHBOARD_MODEL_ID).results_root(PROJECT_ROOT),
             PROJECT_ROOT / "results/gpt-5.6-sol",
+        )
+        self.assertEqual(
+            dashboard_model(DEFAULT_DASHBOARD_MODEL_ID).output_root(PROJECT_ROOT),
+            PROJECT_ROOT / "output/gpt-5.6-sol",
         )
 
     def test_selected_root_is_used_for_default_llm_artifacts(self) -> None:
@@ -61,6 +67,7 @@ class DashboardModelSelectionTests(unittest.TestCase):
 
     def test_evaluation6_builder_passes_split_mode_to_generation_and_comparison(self) -> None:
         root = dashboard_model("us.openai.gpt-5.6-terra").results_root(PROJECT_ROOT)
+        output_root = dashboard_model("us.openai.gpt-5.6-terra").output_root(PROJECT_ROOT)
         settings = {
             "runner": "python", "dataset": "aruba", "days": 14,
             "n_states": 15, "hamming_threshold": 0, "runs": 1,
@@ -69,10 +76,10 @@ class DashboardModelSelectionTests(unittest.TestCase):
             "state_table": "state/aruba_15_0_14days.txt",
             "patterns_proposed": root / "aruba_15_0_14days/llm_sequences_modes_15_0_14days_1.json",
             "patterns_direct": root / "llm_direct_15_0_14days_time_split/1.json",
-            "state_series": "output/6_adl_evaluation_15_0_14days/state_series.csv",
-            "intermediate_output_dir": "output/6_adl_evaluation_15_0_14days",
+            "state_series": output_root / "6_adl_evaluation_15_0_14days/state_series.csv",
+            "intermediate_output_dir": output_root / "6_adl_evaluation_15_0_14days",
             "output_dir": root / "6_adl_match_holdout_test_direct_time_split",
-            "model_results_root": root, "sensor_representation": "individual",
+            "model_results_root": root, "model_output_root": output_root, "sensor_representation": "individual",
             "min_overlap_ratio_for_true_label": 0.1, "wake_window_minutes": 30.0,
             "match_mode": "exact", "max_skip_duration_minutes": 1.0,
             "skip_missing_runs": False, "split_mode": "holdout",
@@ -110,10 +117,12 @@ class DashboardModelSelectionTests(unittest.TestCase):
                 encoding="utf-8",
             )
             model_root = dashboard_model("us.openai.gpt-5.6-terra").results_root(PROJECT_ROOT)
+            model_output = dashboard_model("us.openai.gpt-5.6-terra").output_root(PROJECT_ROOT)
             condition = load_evaluation7_best_condition_manifest(manifest_path)
             paths = formal_artifact_paths(
                 project_root=PROJECT_ROOT,
                 results_root=model_root,
+                output_root=model_output,
                 dataset="aruba",
                 condition=condition,
                 llm_only_time_mode="split",
@@ -129,7 +138,7 @@ class DashboardModelSelectionTests(unittest.TestCase):
                 "state_series": paths["state_series"],
                 "intermediate_output_dir": paths["state_series"].parent,
                 "output_dir": paths["output_dir"],
-                "model_results_root": model_root, "sensor_representation": "individual",
+                "model_results_root": model_root, "model_output_root": model_output, "sensor_representation": "individual",
                 "min_overlap_ratio_for_true_label": 0.1, "wake_window_minutes": 30.0,
                 "match_mode": "exact", "max_skip_duration_minutes": 1.0,
                 "skip_missing_runs": False, "split_mode": "holdout",
@@ -147,6 +156,7 @@ class DashboardModelSelectionTests(unittest.TestCase):
 
     def test_builders_use_the_selected_model_root_for_expected_outputs(self) -> None:
         terra_root = dashboard_model("us.openai.gpt-5.6-terra").results_root(PROJECT_ROOT)
+        terra_output = dashboard_model("us.openai.gpt-5.6-terra").output_root(PROJECT_ROOT)
         evaluation7 = build_evaluation7_steps(
             {
                 "runner": "python",
@@ -158,9 +168,10 @@ class DashboardModelSelectionTests(unittest.TestCase):
                 "hamming_thresholds": [0],
                 "labeled_casas": "new_labeled_data/aruba.txt",
                 "sensor_map": "configs/aruba_sensor_map_individual.json",
-                "adl_intervals": "output/adl_label_intervals.csv",
+                "adl_intervals": terra_output / "adl_label_intervals.csv",
                 "output_dir": terra_root / "7_param_search",
                 "model_results_root": terra_root,
+                "model_output_root": terra_output,
                 "min_overlap_ratio_for_true_label": 0.1,
                 "wake_window_minutes": 30.0,
                 "match_mode": "exact",

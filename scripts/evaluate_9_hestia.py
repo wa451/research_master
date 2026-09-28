@@ -13,7 +13,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from experiment_config import current_model_identity, current_model_results_root
+from experiment_config import (
+    current_model_identity,
+    current_model_output_root,
+    current_model_results_root,
+)
 
 from src.behavior_pattern_mining.evaluation.evaluation9_hestia import (
     STAGES,
@@ -30,7 +34,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--plan", type=Path, help="JSON/YAML plan; default: Hestia noise-free pilot"
     )
     parser.add_argument(
-        "--experiment", type=Path, default=Path("output/9_hestia/pilot")
+        "--experiment", type=Path, default=None
     )
     parser.add_argument(
         "--output-dir",
@@ -58,12 +62,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
         identity = current_model_identity()
+        experiment = args.experiment or current_model_output_root() / "9_hestia/pilot"
         output_dir = args.output_dir or current_model_results_root() / "9_hestia/pilot"
         commands = build_commands(
             stage=args.stage,
             hestia_root=args.hestia_root,
             plan=args.plan,
-            experiment=args.experiment,
+            experiment=experiment,
             output_dir=output_dir,
             method=args.method,
             allow_api=args.allow_api,

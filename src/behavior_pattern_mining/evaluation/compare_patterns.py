@@ -29,7 +29,7 @@ from experiment_config import (
     DAYS,
     HAMMING_THRESHOLD,
     N_STATES,
-    ROOT_DIR,
+    current_model_output_root,
 )
 from src.behavior_pattern_mining.evaluation.metrics import (
     EvaluationResult,
@@ -47,7 +47,7 @@ from src.behavior_pattern_mining.evaluation.metrics import (
 # ユーザー設定（必要に応じて変更）
 # =============================
 # パラメータに基づく出力フォルダ
-OUTPUT_DIR = ROOT_DIR / "output" / f"{DATASET_NAME}_{N_STATES}_{HAMMING_THRESHOLD}_{DAYS}days"
+OUTPUT_DIR = current_model_output_root() / f"{DATASET_NAME}_{N_STATES}_{HAMMING_THRESHOLD}_{DAYS}days"
 PARAM_SUFFIX = f"{N_STATES}_{HAMMING_THRESHOLD}_{DAYS}days"
 
 BASELINE_PATH = OUTPUT_DIR / f"prob_threshold_sequences_{PARAM_SUFFIX}.json"

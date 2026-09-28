@@ -1,4 +1,4 @@
-"""Model-specific result paths and provenance for LLM-generated artifacts."""
+"""Model-specific output/result paths and provenance for generated artifacts."""
 
 from __future__ import annotations
 
@@ -99,12 +99,28 @@ def model_results_root(project_root: Path, identity: ModelIdentity) -> Path:
     return project_root / "results" / identity.result_name
 
 
+def model_output_root(project_root: Path, identity: ModelIdentity) -> Path:
+    """Return the active model's namespace for generated intermediate artifacts."""
+    return project_root / "output" / identity.result_name
+
+
 def model_result_path(
     project_root: Path,
     identity: ModelIdentity,
     *parts: str | Path,
 ) -> Path:
     path = model_results_root(project_root, identity)
+    for part in parts:
+        path /= part
+    return path
+
+
+def model_output_path(
+    project_root: Path,
+    identity: ModelIdentity,
+    *parts: str | Path,
+) -> Path:
+    path = model_output_root(project_root, identity)
     for part in parts:
         path /= part
     return path

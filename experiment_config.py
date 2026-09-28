@@ -5,6 +5,7 @@ from pathlib import Path
 from src.behavior_pattern_mining.config import get_config_value, load_config
 from src.behavior_pattern_mining.llm.result_paths import (
     ModelIdentity,
+    model_output_root,
     model_results_root,
     resolve_project_model_identity,
 )
@@ -70,6 +71,11 @@ def current_model_identity() -> ModelIdentity:
 
 def current_model_results_root() -> Path:
     return model_results_root(ROOT_DIR, current_model_identity())
+
+
+def current_model_output_root() -> Path:
+    """Return the active model's namespace for generated ``output/`` artifacts."""
+    return model_output_root(ROOT_DIR, current_model_identity())
 
 TRANSITION_PROBABILITY_THRESHOLD = float(
     get_config_value(CONFIG, "baselines.transition_probability.threshold", 0.2)

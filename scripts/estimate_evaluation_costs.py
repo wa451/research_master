@@ -20,6 +20,7 @@ from experiment_config import (
     LLM_MODEL_NAME,
     LLM_PROVIDER,
     LLM_TEMPERATURE,
+    current_model_output_root,
 )
 from src.behavior_pattern_mining.llm.client import load_dotenv, resolve_llm_runtime_config
 from src.behavior_pattern_mining.llm.evaluation_costs import (
@@ -53,26 +54,26 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--evaluation9-experiment",
         type=Path,
-        default=Path("output/9_hestia/full"),
+        default=None,
         help="Prepared Hestia standard experiment directory.",
     )
     parser.add_argument(
         "--evaluation9-duration-experiment",
         type=Path,
-        default=Path("output/9_hestia/duration"),
+        default=None,
         help="Prepared Hestia train-duration experiment directory.",
     )
     parser.add_argument(
         "--evaluation10-output-dir",
         type=Path,
-        default=Path("output/10_switchbot/2026-09-01_2026-09-08"),
+        default=None,
         help="Prepared Evaluation 10 output directory containing preparation.json and network/.",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("output/cost_estimates"),
-        help="Directory for estimate CSV/JSON (default: output/cost_estimates).",
+        default=None,
+        help="Directory for estimate CSV/JSON (default: output/<model>/cost_estimates).",
     )
     return parser
 
@@ -106,17 +107,20 @@ def main(argv: list[str] | None = None) -> int:
     if len(set(model_ids)) != len(model_ids):
         raise ValueError("--models must not contain duplicate model IDs")
     llm_configs = [replace(llm_config, model_name=model_id) for model_id in model_ids]
+    model_output_root = current_model_output_root()
     plans = build_evaluation_plans(
         root=ROOT_DIR,
         evaluations=args.evaluations,
-        evaluation9_experiment=_resolve(args.evaluation9_experiment),
+        evaluation9_experiment=_resolve(args.evaluation9_experiment or model_output_root / "9_hestia/full"),
         evaluation9_duration_experiment=_resolve(
-            args.evaluation9_duration_experiment
+            args.evaluation9_duration_experiment or model_output_root / "9_hestia/duration"
         ),
-        evaluation10_output_dir=_resolve(args.evaluation10_output_dir),
+        evaluation10_output_dir=_resolve(
+            args.evaluation10_output_dir or model_output_root / "10_switchbot/2026-09-01_2026-09-08"
+        ),
     )
     reports = estimate_models(llm_configs=llm_configs, plans=plans)
-    output_dir = _resolve(args.output_dir)
+    output_dir = _resolve(args.output_dir or model_output_root / "cost_estimates")
     suffix = (
         f"{args.evaluations[0]}_{args.evaluations[-1]}"
         if args.evaluations

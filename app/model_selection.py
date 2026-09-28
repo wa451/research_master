@@ -13,6 +13,7 @@ from pathlib import Path
 from src.behavior_pattern_mining.llm.result_paths import (
     ModelIdentity,
     model_identity,
+    model_output_root,
     model_results_root,
 )
 
@@ -35,6 +36,9 @@ class DashboardModel:
 
     def results_root(self, project_root: Path) -> Path:
         return model_results_root(project_root, self.identity)
+
+    def output_root(self, project_root: Path) -> Path:
+        return model_output_root(project_root, self.identity)
 
     def environment_overrides(self) -> dict[str, str]:
         if self.provider == "google_gemini":

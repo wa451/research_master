@@ -22,6 +22,7 @@ if str(ROOT_DIR_FOR_IMPORTS) not in sys.path:
 from experiment_config import (
     ROOT_DIR,
     current_model_identity,
+    current_model_output_root,
     current_model_results_root,
 )
 from scripts.evaluate_6_compare_adl_interpretation_set import (
@@ -380,7 +381,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--adl-intervals",
         type=Path,
-        default=ROOT_DIR / "output" / "adl_label_intervals.csv",
+        default=current_model_output_root() / "adl_label_intervals.csv",
         help="ADL truth interval CSV used only for --analysis-scope proposed_154days.",
     )
     parser.add_argument(

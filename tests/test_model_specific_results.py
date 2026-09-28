@@ -9,12 +9,13 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from experiment_config import ROOT_DIR, current_model_results_root
+from experiment_config import ROOT_DIR, current_model_output_root, current_model_results_root
 from scripts.evaluate_6_compare_adl_interpretation_set import default_output_root
 from scripts.evaluate_7_parameter_sensitivity_adl_interpretation import default_pattern_path
 from scripts.evaluate_8_frequency_stratified_adl_consistency import default_output_dir
 from scripts.evaluate_adl_correspondence import default_paths as evaluation5_default_paths
 from scripts.migrate_gemini_results import cleanup_verified_sources
+from scripts.migrate_legacy_output_namespace import build_copy_plan as build_output_copy_plan
 from src.behavior_pattern_mining.llm.result_paths import (
     MODEL_RESULT_NAMES,
     ensure_model_artifact_directory,
@@ -57,6 +58,10 @@ class ModelSpecificResultTests(unittest.TestCase):
                 self.assertEqual(
                     current_model_results_root(),
                     ROOT_DIR / "results" / result_name,
+                )
+                self.assertEqual(
+                    current_model_output_root(),
+                    ROOT_DIR / "output" / result_name,
                 )
 
     def test_evaluations_5_to_8_default_to_active_model_root(self) -> None:
@@ -158,7 +163,23 @@ class ModelSpecificResultTests(unittest.TestCase):
             self.assertEqual(deleted, [str(source)])
             self.assertFalse(source.exists())
             self.assertIn(str(root / "output/legacy"), pruned)
-            self.assertTrue(destination.exists())
+
+    def test_output_migration_only_plans_legacy_root_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            legacy = root / "output/6_adl_evaluation_15/state_series.csv"
+            current = root / "output/gemini-2.5-pro/already_here.txt"
+            other_model = root / "output/gpt-5.6-sol/other.txt"
+            for path in (legacy, current, other_model):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(path.name, encoding="utf-8")
+
+            plan = build_output_copy_plan(root, result_name="gemini-2.5-pro")
+
+            self.assertEqual(
+                plan,
+                {legacy: root / "output/gemini-2.5-pro/6_adl_evaluation_15/state_series.csv"},
+            )
 
     def test_cleanup_rejects_a_mismatched_destination_without_deleting_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

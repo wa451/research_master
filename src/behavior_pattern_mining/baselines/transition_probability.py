@@ -29,6 +29,7 @@ from experiment_config import (
     TRANSITION_EXCLUDED_STATES,
     TRANSITION_PROBABILITY_THRESHOLD,
     TRANSITION_TOP_N,
+    current_model_output_root,
 )
 
 
@@ -44,8 +45,7 @@ EXCLUDED_STATES = TRANSITION_EXCLUDED_STATES
 ALLOW_REVISIT = TRANSITION_ALLOW_REVISIT
 TOP_N = TRANSITION_TOP_N  # 0 の場合は全件表示
 OUTPUT_DIR = (
-    ROOT_DIR
-    / "output"
+    current_model_output_root()
     / f"{DATASET_NAME}_{N_STATES}_{HAMMING_THRESHOLD}_{DAYS}days"
 )
 OUTPUT_FILE_PREFIX = (

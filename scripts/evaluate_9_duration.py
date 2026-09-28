@@ -13,7 +13,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from experiment_config import current_model_identity, current_model_results_root
+from experiment_config import (
+    current_model_identity,
+    current_model_output_root,
+    current_model_results_root,
+)
 
 from src.behavior_pattern_mining.evaluation.evaluation9_duration import (
     DEFAULT_TRAIN_DAYS,
@@ -34,7 +38,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=Path("Hestia/examples/experiments/noise_free_duration.yaml"),
     )
     parser.add_argument(
-        "--experiment", type=Path, default=Path("output/9_hestia/duration")
+        "--experiment", type=Path, default=None
     )
     parser.add_argument(
         "--output-dir",
@@ -55,11 +59,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
         identity = current_model_identity()
+        experiment = args.experiment or current_model_output_root() / "9_hestia/duration"
         output_dir = args.output_dir or current_model_results_root() / "9_hestia/duration"
         commands = build_duration_commands(
             stage=args.stage,
             hestia_root=args.hestia_root,
-            experiment=args.experiment,
+            experiment=experiment,
             plan=args.plan,
             output_dir=output_dir,
             train_days=parse_train_days(args.train_days),

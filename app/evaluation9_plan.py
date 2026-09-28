@@ -36,8 +36,6 @@ PRESET_DIRECTORY_NAMES = {
 }
 DURATION_PRESET = "期間感度評価"
 DURATION_TRAIN_DAYS = (3, 7, 14, 28)
-EFFECTIVE_PLAN_DIR = Path("output/logs/evaluation_dashboard/evaluation9_plans")
-EVALUATION9_BACKUP_DIR = Path("output/logs/evaluation_dashboard/evaluation9_backups")
 
 
 @dataclass(frozen=True)
@@ -158,16 +156,6 @@ def experiment_snapshot_matches(
         return False
 
 
-def _managed_output_path(path: Path, root: Path, label: str) -> Path:
-    resolved = path.expanduser().resolve()
-    managed_root = root.expanduser().resolve()
-    if resolved == managed_root or not resolved.is_relative_to(managed_root):
-        raise ValueError(f"{label} must be a child of {managed_root}")
-    if path.is_symlink():
-        raise ValueError(f"{label} must not be a symbolic link: {path}")
-    return resolved
-
-
 def _managed_evaluation9_results(path: Path, project_root: Path) -> Path:
     results_root = (project_root / "results").resolve()
     resolved = path.expanduser().resolve()
@@ -177,10 +165,33 @@ def _managed_evaluation9_results(path: Path, project_root: Path) -> Path:
     valid_prefixes = {("9_hestia",)} | {
         (name, "9_hestia") for name in set(MODEL_RESULT_NAMES.values())
     }
-    if not any(relative.parts[: len(prefix)] == prefix for prefix in valid_prefixes):
+    if not any(
+        relative.parts[: len(prefix)] == prefix and len(relative.parts) > len(prefix)
+        for prefix in valid_prefixes
+    ):
         raise ValueError(f"results directory must be under an Evaluation 9 root: {resolved}")
     if path.is_symlink():
         raise ValueError(f"results directory must not be a symbolic link: {path}")
+    return resolved
+
+
+def _managed_evaluation9_experiment(path: Path, project_root: Path) -> Path:
+    """Accept legacy or model-namespaced Evaluation 9 generation roots."""
+    output_root = (project_root / "output").resolve()
+    resolved = path.expanduser().resolve()
+    if not resolved.is_relative_to(output_root) or resolved == output_root:
+        raise ValueError(f"experiment directory must be under output: {resolved}")
+    relative = resolved.relative_to(output_root)
+    valid_prefixes = {("9_hestia",)} | {
+        (name, "9_hestia") for name in set(MODEL_RESULT_NAMES.values())
+    }
+    if not any(
+        relative.parts[: len(prefix)] == prefix and len(relative.parts) > len(prefix)
+        for prefix in valid_prefixes
+    ):
+        raise ValueError(f"experiment directory must be under an Evaluation 9 root: {resolved}")
+    if path.is_symlink():
+        raise ValueError(f"experiment directory must not be a symbolic link: {path}")
     return resolved
 
 
@@ -193,9 +204,7 @@ def archive_evaluation9_outputs(
     timestamp: str | None = None,
 ) -> dict[str, Any]:
     """Move managed Evaluation 9 outputs into a recoverable archive."""
-    experiment = _managed_output_path(
-        experiment, project_root / "output/9_hestia", "experiment directory"
-    )
+    experiment = _managed_evaluation9_experiment(experiment, project_root)
     output_dir = _managed_evaluation9_results(output_dir, project_root)
     if not experiment.exists():
         raise ValueError(f"experiment directory does not exist: {experiment}")

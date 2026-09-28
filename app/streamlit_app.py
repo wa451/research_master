@@ -34,8 +34,6 @@ from app.command_builder import (  # noqa: E402
 from app.evaluation9_plan import (  # noqa: E402
     DURATION_PRESET,
     DURATION_TRAIN_DAYS,
-    EFFECTIVE_PLAN_DIR,
-    EVALUATION9_BACKUP_DIR,
     PRESET_PLAN_FILENAMES,
     archive_evaluation9_outputs,
     build_effective_plan,
@@ -70,6 +68,7 @@ from app.utils import (  # noqa: E402
 )
 from experiment_config import (  # noqa: E402
     SMOOTHING_WINDOW_SEC,
+    current_model_output_root,
     current_model_results_root,
 )
 from src.behavior_pattern_mining.evaluation.evaluation7_staged import (  # noqa: E402
@@ -87,7 +86,6 @@ from src.behavior_pattern_mining.data.sensor_representation import (  # noqa: E4
 )
 
 
-LOG_ROOT = PROJECT_ROOT / "output" / "logs" / "evaluation_dashboard"
 DEFAULT_N_STATES = 15
 DEFAULT_HAMMING_THRESHOLD = 0
 
@@ -119,6 +117,20 @@ def model_results_relative(common: dict | None = None) -> str:
         else current_model_results_root()
     )
     return root.relative_to(PROJECT_ROOT).as_posix()
+
+
+def model_output_relative(common: dict | None = None) -> str:
+    root = (
+        Path(common["model_output_root"])
+        if common and common.get("model_output_root")
+        else current_model_output_root()
+    )
+    return root.relative_to(PROJECT_ROOT).as_posix()
+
+
+def log_root(settings: dict) -> Path:
+    """Keep dashboard histories and logs with the model that produced them."""
+    return Path(settings["model_output_root"]) / "logs" / "evaluation_dashboard"
 
 RESULT_GUIDES: dict[str, list[dict[str, str]]] = {
     "評価4": [
@@ -367,8 +379,9 @@ def common_sidebar() -> dict:
     )
     model = dashboard_model(model_id)
     model_root = model.results_root(PROJECT_ROOT)
+    model_output = model.output_root(PROJECT_ROOT)
     st.sidebar.caption(
-        f"保存先: `{display_path(model_root)}` / provider: `{model.provider}`"
+        f"保存先: `{display_path(model_output)}`, `{display_path(model_root)}` / provider: `{model.provider}`"
     )
     runner = st.sidebar.selectbox("Python実行方法", ["uv run python", "python"], index=0)
     run_name = st.sidebar.text_input("run名（ログ用）", "manual")
@@ -402,6 +415,7 @@ def common_sidebar() -> dict:
         "model_id": model.model_id,
         "model_label": model.label,
         "model_results_root": str(model_root),
+        "model_output_root": str(model_output),
         "model_environment": model.environment_overrides(),
     }
 
@@ -460,9 +474,12 @@ def render_eval4_settings(common: dict) -> dict:
         default_eval4_output,
         key=f"eval4_output_dir_{model_key}_{representation}",
     )
+    default_eval4_state_series = f"{model_output_relative(common)}/4_adl_detect"
+    if representation != "room":
+        default_eval4_state_series += f"_{representation}"
     write_state = st.text_input(
         "write-state-series",
-        f"{default_eval4_output}/state_series.csv",
+        f"{default_eval4_state_series}/state_series.csv",
         key=f"eval4_write_state_series_{model_key}_{representation}",
     )
 
@@ -507,9 +524,9 @@ def render_eval5_settings(common: dict) -> dict:
     representation, dataset, default_sensor_map = render_sensor_representation("eval5")
     suffix = short_suffix(int(n_states), int(hamming), int(days))
     default_eval5_intermediate = (
-        f"output/5_adl_evaluation_{suffix}_fixed"
+        f"{model_output_relative(common)}/5_adl_evaluation_{suffix}_fixed"
         if dataset == "aruba"
-        else f"output/5_adl_evaluation_{dataset}_{suffix}_fixed"
+        else f"{model_output_relative(common)}/5_adl_evaluation_{dataset}_{suffix}_fixed"
     )
     st.markdown("**入力パス**")
     labeled = st.text_input("ラベル付きCASAS", "new_labeled_data/aruba.txt")
@@ -524,10 +541,10 @@ def render_eval5_settings(common: dict) -> dict:
         key=f"eval5_state_table_{representation}",
     )
     sensor_map = st.text_input("センサーマップ", default_sensor_map, key=f"eval5_sensor_map_{representation}")
-    patterns_frequency = st.text_input("patterns-frequency", f"output/{dataset}_{suffix}/state_sequence_counts_{suffix}.json", key=f"eval5_frequency_{representation}")
-    patterns_rule_light = st.text_input("patterns-rule-light", "output/5_rule_filter/frequency_rule_light.csv")
-    patterns_rule_medium = st.text_input("patterns-rule-medium", "output/5_rule_filter/frequency_rule_medium.csv")
-    patterns_rule_strong = st.text_input("patterns-rule-strong", "output/5_rule_filter/frequency_rule_strong.csv")
+    patterns_frequency = st.text_input("patterns-frequency", f"{model_output_relative(common)}/{dataset}_{suffix}/state_sequence_counts_{suffix}.json", key=f"eval5_frequency_{representation}")
+    patterns_rule_light = st.text_input("patterns-rule-light", f"{model_output_relative(common)}/5_rule_filter/frequency_rule_light.csv")
+    patterns_rule_medium = st.text_input("patterns-rule-medium", f"{model_output_relative(common)}/5_rule_filter/frequency_rule_medium.csv")
+    patterns_rule_strong = st.text_input("patterns-rule-strong", f"{model_output_relative(common)}/5_rule_filter/frequency_rule_strong.csv")
     model_root = Path(common["model_results_root"])
     model_key = common["model_id"]
     patterns_proposed = st.text_input(
@@ -596,9 +613,9 @@ def render_eval5_settings(common: dict) -> dict:
         baseline_cache_dir = st.text_input(
             "baseline-cache-dir",
             (
-                "output/5_adl_correspondence_baselines_fixed"
+                f"{model_output_relative(common)}/5_adl_correspondence_baselines_fixed"
                 if dataset == "aruba"
-                else f"output/5_adl_correspondence_baselines_{representation}_fixed"
+                else f"{model_output_relative(common)}/5_adl_correspondence_baselines_{representation}_fixed"
             ),
         )
         st.caption("FP-Growth / transition_probability の生成済みパターンを保存し、同じ条件では再利用します。")
@@ -724,9 +741,9 @@ def render_eval6_settings(common: dict) -> dict:
     representation, dataset, default_sensor_map = render_sensor_representation("eval6")
     suffix = short_suffix(int(n_states), int(hamming), int(days))
     default_intermediate = (
-        f"output/6_adl_evaluation_{suffix}"
+        f"{model_output_relative(common)}/6_adl_evaluation_{suffix}"
         if dataset == "aruba"
-        else f"output/6_adl_evaluation_{dataset}_{suffix}"
+        else f"{model_output_relative(common)}/6_adl_evaluation_{dataset}_{suffix}"
     )
     st.markdown("**入力パス**")
     labeled = st.text_input("ラベル付きCASAS", "new_labeled_data/aruba.txt")
@@ -769,7 +786,7 @@ def render_eval6_settings(common: dict) -> dict:
         ),
     )
     state_series = st.text_input("state-series", f"{default_intermediate}/state_series.csv", key=f"eval6_state_series_{representation}")
-    adl_intervals = st.text_input("adl-intervals（任意。なければlabeled-casasから生成）", "output/adl_label_intervals.csv")
+    adl_intervals = st.text_input("adl-intervals（任意。なければlabeled-casasから生成）", f"{model_output_relative(common)}/adl_label_intervals.csv")
 
     with st.expander("複数run用テンプレート（任意）"):
         proposed_template = st.text_input("patterns-proposed-template", "")
@@ -864,7 +881,7 @@ def render_eval7_settings(common: dict) -> dict:
     st.markdown("**入力パス**")
     labeled = st.text_input("ラベル付きCASAS", "new_labeled_data/aruba.txt")
     sensor_map = st.text_input("センサーマップ", default_sensor_map, key=f"eval7_sensor_map_{representation}")
-    adl_intervals = st.text_input("adl-intervals（任意。labeled-casasが存在すればそちらを優先）", "output/adl_label_intervals.csv")
+    adl_intervals = st.text_input("adl-intervals（任意。labeled-casasが存在すればそちらを優先）", f"{model_output_relative(common)}/adl_label_intervals.csv")
     with st.expander("条件別パステンプレート（任意）"):
         st.caption("使用可能: {dataset}, {n_states}, {hamming_threshold}, {hamming}, {days}, {run}, {suffix}")
         patterns_template = st.text_input(
@@ -880,9 +897,9 @@ def render_eval7_settings(common: dict) -> dict:
             "state-series-template",
             "",
             placeholder=(
-                "output/6_adl_evaluation_{suffix}/state_series.csv"
+                f"{model_output_relative(common)}/6_adl_evaluation_{{suffix}}/state_series.csv"
                 if dataset == "aruba"
-                else "output/6_adl_evaluation_aruba_individual_{suffix}/state_series.csv"
+                else f"{model_output_relative(common)}/6_adl_evaluation_aruba_individual_{{suffix}}/state_series.csv"
             ),
             key=f"eval7_state_series_template_{representation}",
         )
@@ -1063,7 +1080,7 @@ def render_eval8_settings(common: dict) -> dict:
         patterns_proposed = ""
         state_series = st.text_input(
             "state-series（評価8でown-ID出現数を再構築）",
-            f"output/6_adl_evaluation_{suffix}/state_series.csv",
+            f"{model_output_relative(common)}/6_adl_evaluation_{suffix}/state_series.csv",
         )
         labeled_casas = ""
         adl_intervals = ""
@@ -1083,7 +1100,7 @@ def render_eval8_settings(common: dict) -> dict:
             key=f"eval8_patterns_proposed_{common['model_id']}",
         )
         state_series_default = (
-            "output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv"
+            f"{model_output_relative(common)}/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv"
             if (int(n_states), int(hamming)) == (DEFAULT_N_STATES, DEFAULT_HAMMING_THRESHOLD)
             else ""
         )
@@ -1091,7 +1108,7 @@ def render_eval8_settings(common: dict) -> dict:
         if not state_series_default:
             st.caption("Kまたはハミング距離を変更した場合は、その条件で作成した154日state-series CSVを指定してください。")
         labeled_casas = st.text_input("ラベル付きCASAS", "new_labeled_data/aruba.txt")
-        adl_intervals = st.text_input("adl-intervals（任意）", "output/adl_label_intervals.csv")
+        adl_intervals = st.text_input("adl-intervals（任意）", f"{model_output_relative(common)}/adl_label_intervals.csv")
         patterns_proposed_template = st.text_input(
             "patterns-proposed-template（任意）",
             "",
@@ -1196,7 +1213,7 @@ def render_eval9_settings(common: dict) -> dict:
         st.session_state["eval9_llm_runs"] = base_plan.llm_runs
         st.session_state["eval9_seeds"] = ", ".join(str(seed) for seed in base_plan.seeds)
         suffix = preset_directory_name(preset)
-        st.session_state["eval9_experiment"] = f"output/9_hestia/{suffix}"
+        st.session_state["eval9_experiment"] = f"{model_output_relative(common)}/9_hestia/{suffix}"
         st.session_state["eval9_output_dir"] = (
             f"{model_results_relative(common)}/9_hestia/{suffix}"
         )
@@ -1241,7 +1258,8 @@ def render_eval9_settings(common: dict) -> dict:
     )
     output_dir = st.text_input("評価9の集計先", key="eval9_output_dir")
     effective_plan_path = save_effective_plan(
-        effective_plan, PROJECT_ROOT / EFFECTIVE_PLAN_DIR
+        effective_plan,
+        Path(common["model_output_root"]) / "logs" / "evaluation_dashboard" / "evaluation9_plans",
     )
     st.caption(f"実行用plan: `{effective_plan_path.relative_to(PROJECT_ROOT)}`")
 
@@ -1285,7 +1303,7 @@ def render_eval9_settings(common: dict) -> dict:
     ) is False:
         plan_hash = effective_plan_path.stem.rsplit("_", 1)[-1][:8]
         directory_name = preset_directory_name(preset)
-        suggested_experiment = f"output/9_hestia/{directory_name}_{plan_hash}"
+        suggested_experiment = f"{model_output_relative(common)}/9_hestia/{directory_name}_{plan_hash}"
         suggested_output = (
             f"{model_results_relative(common)}/9_hestia/{directory_name}_{plan_hash}"
         )
@@ -1326,14 +1344,17 @@ def render_eval9_settings(common: dict) -> dict:
                     experiment=resolved_experiment,
                     output_dir=resolved_output_dir,
                     project_root=PROJECT_ROOT,
-                    archive_root=PROJECT_ROOT / EVALUATION9_BACKUP_DIR,
+                    archive_root=Path(common["model_output_root"])
+                    / "logs"
+                    / "evaluation_dashboard"
+                    / "evaluation9_backups",
                 )
             except (OSError, ValueError) as exc:
                 st.error(f"バックアップできませんでした: {exc}")
             else:
                 archive_directory = str(archive["archive_directory"])
                 append_history(
-                    LOG_ROOT,
+                    log_root(common),
                     {
                         "evaluation": common["evaluation"],
                         "action": "archive_outputs_for_plan_change",
@@ -1388,7 +1409,7 @@ def render_eval10_settings(common: dict) -> dict:
     )
     snapshot_name = Path(snapshot.rstrip("/")).name or "snapshot"
     output_dir = st.text_input(
-        "中間成果物ディレクトリ", f"output/10_switchbot/{snapshot_name}"
+        "中間成果物ディレクトリ", f"{model_output_relative(common)}/10_switchbot/{snapshot_name}"
     )
     results_dir = st.text_input(
         "評価10の集計先",
@@ -1476,7 +1497,8 @@ def render_step(step: EvaluationStep, settings: dict) -> None:
 
         button_label = "dry-run記録" if settings["dry_run"] else "このステップを実行"
         if st.button(button_label, key=f"run_{step.step_id}"):
-            log_dir = ensure_log_dir(LOG_ROOT, settings["evaluation"], settings["run_name"])
+            selected_log_root = log_root(settings)
+            log_dir = ensure_log_dir(selected_log_root, settings["evaluation"], settings["run_name"])
             log_path = log_dir / f"{step.step_id}.log"
             record = {
                 "evaluation": settings["evaluation"],
@@ -1490,7 +1512,7 @@ def render_step(step: EvaluationStep, settings: dict) -> None:
                 "model_environment": settings["model_environment"],
                 "log_path": display_path(log_path),
             }
-            append_history(LOG_ROOT, record)
+            append_history(selected_log_root, record)
             if settings["dry_run"]:
                 log_path.write_text(
                     f"# 実行環境: {model_environment_preview(settings)}\n"
@@ -1617,7 +1639,8 @@ def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
     if not st.button(label, key=f"run_all_{settings['evaluation']}_{mode}"):
         return
 
-    log_dir = ensure_log_dir(LOG_ROOT, settings["evaluation"], f"{settings['run_name']}_batch")
+    selected_log_root = log_root(settings)
+    log_dir = ensure_log_dir(selected_log_root, settings["evaluation"], f"{settings['run_name']}_batch")
     st.info(f"一括実行ログ: {display_path(log_dir)}")
 
     completed = 0
@@ -1652,12 +1675,12 @@ def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
                 f"$ {command_preview(step.command)}\n\nSTOPPED: missing required inputs.\n{missing_text}\n",
                 encoding="utf-8",
             )
-            append_history(LOG_ROOT, {**record, "status": "blocked_missing_inputs"})
+            append_history(selected_log_root, {**record, "status": "blocked_missing_inputs"})
             st.error(f"停止: 必要な入力が不足しています / log: {display_path(log_path)}")
             st.text(missing_text)
             break
 
-        append_history(LOG_ROOT, record)
+        append_history(selected_log_root, record)
         if settings["dry_run"]:
             log_path.write_text(
                 f"# 実行環境: {model_environment_preview(settings)}\n"
@@ -1885,15 +1908,16 @@ def render_results(default_dirs: list[Path], current_evaluation: str | None = No
             render_csv_result_table(pd.concat(frames, ignore_index=True), key_prefix="run_comparison")
 
 
-def render_logs() -> None:
+def render_logs(common: dict) -> None:
     st.subheader("ログ確認")
-    records = load_history(LOG_ROOT)
+    selected_log_root = log_root(common)
+    records = load_history(selected_log_root)
     if not records:
         st.info("まだコマンド履歴がありません。")
         return
     df = pd.DataFrame(records)
     st.dataframe(df, use_container_width=True)
-    log_files = sorted(LOG_ROOT.rglob("*.log")) if LOG_ROOT.exists() else []
+    log_files = sorted(selected_log_root.rglob("*.log")) if selected_log_root.exists() else []
     if log_files:
         labels = [display_path(path) for path in log_files]
         selected = st.selectbox("ログファイル", labels, index=len(labels) - 1)
@@ -1957,7 +1981,8 @@ def main() -> None:
             steps = build_evaluation10_steps(settings)
 
         st.info(
-            f"この評価のLLM: {common['model_label']}。LLM生成物と評価結果は "
+            f"この評価のLLM: {common['model_label']}。中間生成物・ログは "
+            f"`{model_output_relative(common)}/`、LLM出力と評価結果は "
             f"`{model_results_relative(common)}/` に分離して保存します。"
         )
         st.markdown("### ステップ")
@@ -1978,7 +2003,7 @@ def main() -> None:
         render_hestia_studio(common)
 
     with log_tab:
-        render_logs()
+        render_logs(common)
 
 
 if __name__ == "__main__":

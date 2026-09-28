@@ -21,6 +21,7 @@ from experiment_config import (
     MIN_SEQUENCE_LENGTH,
     N_STATES,
     ROOT_DIR,
+    current_model_results_root,
     TRANSITION_PROBABILITY_THRESHOLD,
 )
 from src.behavior_pattern_mining.evaluation.groundedness import (
@@ -54,8 +55,7 @@ MARKOV_GRAPH_PATH = (
 # PATTERN_GLOB = f"llm_sequences_modes_{N_STATES}_{HAMMING_THRESHOLD}_{DAYS}days_*.json"
 
 RUN_OUTPUT_DIR = (
-    ROOT_DIR
-    / "output"
+    current_model_results_root()
     / f"llm_direct_{DAYS}"
 )
 PATTERN_GLOB = f"*.json"

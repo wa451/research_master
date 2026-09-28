@@ -18,6 +18,7 @@ from experiment_config import (
     DATASET_NAME,
     ROOT_DIR,
     current_model_identity,
+    current_model_output_root,
     current_model_results_root,
 )
 from scripts.evaluate_6_compare_adl_interpretation_set import (
@@ -262,7 +263,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--adl-intervals",
         type=Path,
-        default=ROOT_DIR / "output" / "adl_label_intervals.csv",
+        default=current_model_output_root() / "adl_label_intervals.csv",
         help="ADL truth interval CSV. Used only when --labeled-casas is absent or missing.",
     )
     parser.add_argument(
@@ -371,10 +372,10 @@ def default_state_series_path(
     dataset: str, n_states: int, hamming_threshold: int, days: int
 ) -> Path:
     if dataset == DATASET_NAME and n_states == 15 and hamming_threshold == 1 and days == 30:
-        return ROOT_DIR / "output" / "6_adl_evaluation_30" / "state_series.csv"
+        return current_model_output_root() / "6_adl_evaluation_30" / "state_series.csv"
     suffix = condition_id(n_states, hamming_threshold, days)
     directory = f"6_adl_evaluation_{suffix}" if dataset == DATASET_NAME else f"6_adl_evaluation_{dataset}_{suffix}"
-    return ROOT_DIR / "output" / directory / "state_series.csv"
+    return current_model_output_root() / directory / "state_series.csv"
 
 
 def resolve_pattern_path(args: argparse.Namespace, n_states: int, hamming_threshold: int, run: int) -> Path:

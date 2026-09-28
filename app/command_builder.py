@@ -11,7 +11,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from experiment_config import SMOOTHING_WINDOW_SEC, current_model_results_root
+from experiment_config import (
+    SMOOTHING_WINDOW_SEC,
+    current_model_output_root,
+    current_model_results_root,
+)
 from src.behavior_pattern_mining.evaluation.evaluation7_staged import (
     select_top_condition_rows,
 )
@@ -137,14 +141,20 @@ def settings_model_results_root(settings: dict[str, Any]) -> Path:
     return selected or current_model_results_root()
 
 
+def settings_model_output_root(settings: dict[str, Any]) -> Path:
+    selected = as_path(settings.get("model_output_root"))
+    return selected or current_model_output_root()
+
+
 def default_eval_state_series_path(
-    dataset: str, n_states: int, hamming_threshold: int, days: int
+    dataset: str, n_states: int, hamming_threshold: int, days: int, *, output_root: Path | None = None
 ) -> Path:
+    root = output_root or current_model_output_root()
     if dataset == "aruba" and n_states == 15 and hamming_threshold == 1 and days in {14, 30}:
-        return PROJECT_ROOT / "output" / f"6_adl_evaluation_{days}" / "state_series.csv"
+        return root / f"6_adl_evaluation_{days}" / "state_series.csv"
     suffix = short_suffix(n_states, hamming_threshold, days)
     dirname = f"6_adl_evaluation_{suffix}" if dataset == "aruba" else f"6_adl_evaluation_{dataset}_{suffix}"
-    return PROJECT_ROOT / "output" / dirname / "state_series.csv"
+    return root / dirname / "state_series.csv"
 
 
 def template_path(template: str, dataset: str, n_states: int, hamming_threshold: int, days: int, run: int | None = None) -> Path:
@@ -507,6 +517,7 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
         canonical = formal_artifact_paths(
             project_root=PROJECT_ROOT,
             results_root=model_root,
+            output_root=settings_model_output_root(settings),
             dataset=settings["dataset"],
             condition=condition,
             llm_only_time_mode=llm_only_time_mode,
@@ -870,7 +881,12 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                         template_path(settings["state_series_template"], dataset, n_states, hamming, days)
                     )
                 else:
-                    required.append(default_eval_state_series_path(dataset, n_states, hamming, days))
+                    required.append(
+                        default_eval_state_series_path(
+                            dataset, n_states, hamming, days,
+                            output_root=settings_model_output_root(settings),
+                        )
+                    )
                 for run_id in run_ids:
                     if patterns_template:
                         required.append(
@@ -909,7 +925,10 @@ def build_evaluation7_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                 state_series = (
                     template_path(settings["state_series_template"], dataset, n_states, hamming, days)
                     if settings.get("state_series_template")
-                    else default_eval_state_series_path(dataset, n_states, hamming, days)
+                    else default_eval_state_series_path(
+                        dataset, n_states, hamming, days,
+                        output_root=settings_model_output_root(settings),
+                    )
                 )
                 intermediate_dir = state_series.parent
                 first_pattern = (
@@ -1123,7 +1142,7 @@ def build_llm_response_smoke_test_step(settings: dict[str, Any]) -> EvaluationSt
 
 def build_evaluation9_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     hestia = as_path(settings.get("hestia_root", "Hestia"))
-    experiment = as_path(settings.get("experiment", "output/9_hestia/pilot"))
+    experiment = as_path(settings.get("experiment")) or settings_model_output_root(settings) / "9_hestia/pilot"
     output_dir = as_path(
         settings.get("output_dir", settings_model_results_root(settings) / "9_hestia/pilot")
     )

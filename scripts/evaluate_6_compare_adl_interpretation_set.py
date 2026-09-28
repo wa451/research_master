@@ -19,6 +19,7 @@ from experiment_config import (
     N_STATES,
     ROOT_DIR,
     current_model_identity,
+    current_model_output_root,
     current_model_results_root,
 )
 from src.behavior_pattern_mining.evaluation.adl import (
@@ -329,7 +330,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--adl-intervals",
         type=Path,
-        default=ROOT_DIR / "output" / "adl_label_intervals.csv",
+        default=current_model_output_root() / "adl_label_intervals.csv",
         help="ADL truth interval CSV",
     )
     parser.add_argument(
@@ -463,6 +464,7 @@ def parse_args() -> argparse.Namespace:
         paths = formal_artifact_paths(
             project_root=ROOT_DIR,
             results_root=current_model_results_root(),
+            output_root=current_model_output_root(),
             dataset=DATASET_NAME,
             condition=condition,
             llm_only_time_mode=args.llm_only_time_mode,
@@ -502,9 +504,9 @@ def parse_args() -> argparse.Namespace:
         args.patterns_direct = args.patterns_direct or default_direct_patterns_path(args.days, args.n_states, args.hamming_threshold, args.llm_only_time_mode, args.sensor_representation)
         if args.state_series is None:
             if args.split_mode == "legacy" and explicit["n_states"] is None and explicit["hamming_threshold"] is None:
-                args.state_series = ROOT_DIR / "output" / f"6_adl_evaluation_{args.days}" / "state_series.csv"
+                args.state_series = current_model_output_root() / f"6_adl_evaluation_{args.days}" / "state_series.csv"
             else:
-                args.state_series = ROOT_DIR / "output" / f"6_adl_evaluation_{artifact_dataset}_{suffix}" / "state_series.csv"
+                args.state_series = current_model_output_root() / f"6_adl_evaluation_{artifact_dataset}_{suffix}" / "state_series.csv"
         args._formal_manifest = False
     return args
 

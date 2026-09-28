@@ -15,8 +15,9 @@ from experiment_config import (
     ALLOW_LLM_CONTAINS_BASELINE as CONFIG_ALLOW_LLM_CONTAINS_BASELINE,
     DATASET_NAME,
     DAYS,
-    ROOT_DIR,
     HAMMING_THRESHOLD,
+    current_model_output_root,
+    current_model_results_root,
 )
 from src.behavior_pattern_mining.evaluation.metrics import (
     EvaluationResult,
@@ -32,20 +33,18 @@ from src.behavior_pattern_mining.evaluation.metrics import (
 # =============================
 # 確率ベースラインの出力ファイルパス
 BASELINE_PROB_PATH = Path(
-    ROOT_DIR
-    / "output"
+    current_model_output_root()
     / f"{DATASET_NAME}_{15}_{HAMMING_THRESHOLD}_{DAYS}days"
     / f"prob_threshold_sequences_{15}_{HAMMING_THRESHOLD}_{DAYS}days.json"
 )
 # 頻度ベースラインの出力ファイルパス
 BASELINE_COUNT_PATH = Path(
-    ROOT_DIR
-    / "output"
+    current_model_output_root()
     / f"{DATASET_NAME}_{15}_{1}_{DAYS}days"
     / f"state_sequence_counts_{15}_{1}_{DAYS}days.json"
 )
 # 直接ログベースのLLM抽出結果（複数run）
-DIRECT_LOG_OUTPUT_DIR = ROOT_DIR / "output" / f"llm_direct_{DAYS}"
+DIRECT_LOG_OUTPUT_DIR = current_model_results_root() / f"llm_direct_{DAYS}"
 
 # True: ベースラインがLLMを包含する場合もマッチとみなす
 ALLOW_BASELINE_CONTAINS_LLM = CONFIG_ALLOW_BASELINE_CONTAINS_LLM

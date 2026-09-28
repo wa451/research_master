@@ -16,6 +16,7 @@ from experiment_config import (
     N_STATES,
     ROOT_DIR,
     UNKNOWN_STATE,
+    current_model_output_root,
 )
 from src.behavior_pattern_mining.states.state_mapping import (
     clip_period,
@@ -52,8 +53,7 @@ COMPRESS_CONSECUTIVE_SAME_STATE: Final[bool] = True  # 同じ状態の連続を1
 # 出力設定
 TOP_K: Final[int] = FREQUENCY_TOP_K  # 0 の場合は全件を表示・保存。
 OUTPUT_DIR: Final[Path] = (
-    ROOT_DIR
-    / "output"
+    current_model_output_root()
     / f"{DATASET_NAME}_{N_STATES}_{HAMMING_THRESHOLD}_{PERIOD_DAYS}days"
 )
 OUTPUT_FILENAME: Final[str] = (

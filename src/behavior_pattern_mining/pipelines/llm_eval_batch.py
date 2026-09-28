@@ -20,7 +20,7 @@ from experiment_config import (
     LLM_BATCH_RUNS,
     LLM_MAX_RETRIES_PER_RUN,
     N_STATES,
-    ROOT_DIR,
+    current_model_output_root,
 )
 
 
@@ -36,11 +36,7 @@ OUTPUT_XLSX_PATH = None
 
 def main() -> None:
     # 出力フォルダ（今回の実行用）を作成
-    batch_dir = (
-        ROOT_DIR
-        / "output"
-        / f"{DATASET_NAME}_{N_STATES}_{HAMMING_THRESHOLD}_{DAYS}days"
-    )
+    batch_dir = current_model_output_root() / f"{DATASET_NAME}_{N_STATES}_{HAMMING_THRESHOLD}_{DAYS}days"
     batch_dir.mkdir(parents=True, exist_ok=True)
 
     # Excelの保存先を今回のフォルダに固定

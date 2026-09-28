@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
-from experiment_config import DATASET_NAME, DAYS, HAMMING_THRESHOLD, N_STATES, ROOT_DIR
+from experiment_config import DATASET_NAME, DAYS, HAMMING_THRESHOLD, N_STATES, ROOT_DIR, current_model_output_root
 from src.behavior_pattern_mining.llm.direct_log_extractor import (
     find_state_file,
     load_state_definition,
@@ -59,7 +59,7 @@ DEFAULT_MAX_INTERVAL_MINUTES = 60.0
 JSON_SAFE_INF = 999999.0
 
 PARAM_SUFFIX = f"{N_STATES}_{HAMMING_THRESHOLD}_{DAYS}days"
-OUTPUT_DIR = ROOT_DIR / "output" / f"{DATASET_NAME}_{N_STATES}_{HAMMING_THRESHOLD}_{DAYS}days"
+OUTPUT_DIR = current_model_output_root() / f"{DATASET_NAME}_{N_STATES}_{HAMMING_THRESHOLD}_{DAYS}days"
 DEFAULT_LLM_SEQUENCES_PATH = OUTPUT_DIR / f"llm_sequences_modes_{PARAM_SUFFIX}_1.json"
 DEFAULT_SOURCE_CSV_PATH = ROOT_DIR / "data" / f"{DATASET_NAME}.csv"
 DEFAULT_REPORT_PATH = OUTPUT_DIR / f"condition_evaluation_report_{PARAM_SUFFIX}_1.txt"

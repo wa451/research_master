@@ -18,6 +18,7 @@ from experiment_config import (
     N_STATES,
     ROOT_DIR,
     SMOOTHING_WINDOW_SEC,
+    current_model_results_root,
 )
 from src.behavior_pattern_mining.evaluation.adl import (
     ADL_CATEGORY_MAP,
@@ -54,7 +55,7 @@ from src.behavior_pattern_mining.data.sensor_representation import (
 
 def default_output_dir(representation: str) -> Path:
     suffix = "" if representation == "room" else f"_{representation}"
-    return ROOT_DIR / "results" / f"4_adl_detect{suffix}"
+    return current_model_results_root() / f"4_adl_detect{suffix}"
 
 
 def parse_args() -> argparse.Namespace:
@@ -99,7 +100,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--patterns",
         type=Path,
-        default=ROOT_DIR / "output" / f"{DATASET_NAME}_{param_suffix}" / f"llm_sequences_modes_{param_suffix}_1.json",
+        default=current_model_results_root() / f"{DATASET_NAME}_{param_suffix}" / f"llm_sequences_modes_{param_suffix}_1.json",
         help="LLM pattern JSON",
     )
     parser.add_argument(

@@ -88,6 +88,7 @@ def formal_artifact_paths(
     *,
     project_root: Path,
     results_root: Path,
+    output_root: Path | None = None,
     dataset: str,
     condition: Evaluation6ManifestCondition,
     llm_only_time_mode: str,
@@ -108,7 +109,10 @@ def formal_artifact_paths(
     return {
         "patterns_proposed": proposed_dir / f"llm_sequences_modes_{suffix}_1.json",
         "patterns_direct": results_root / direct_dir / "1.json",
-        "state_series": project_root / "output" / state_dir / "state_series.csv",
+        # ``output_root`` is supplied by current callers so generated state
+        # series share the selected LLM's namespace.  Keep the old root as a
+        # read-compatible default for third-party callers during migration.
+        "state_series": (output_root or project_root / "output") / state_dir / "state_series.csv",
         "proposed_metrics": proposed_dir / f"llm_modes_metrics_{suffix}_run1.csv",
         "direct_metrics": results_root / direct_dir / f"llm_direct_metrics_{condition.generation_days}days.csv",
         "output_dir": output_dir / suffix,
