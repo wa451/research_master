@@ -36,6 +36,14 @@ class BedrockInputTokenCount:
     warning: Optional[str] = None
 
 
+BEDROCK_CONVERSE_MAX_ATTEMPTS = 3
+BEDROCK_CONVERSE_RETRYABLE_ERROR_CODES = {
+    "InternalServerException",
+    "ServiceUnavailableException",
+    "ThrottlingException",
+}
+
+
 def bedrock_supports_temperature(model_name: str) -> bool:
     """Return whether a Bedrock Converse model accepts ``temperature``."""
     normalized_model_name = model_name.strip().lower()
@@ -539,6 +547,12 @@ def _bedrock_error_message(exc: Exception, *, model_name: str, region_name: str)
     )
 
 
+def _bedrock_error_code(exc: Exception) -> str:
+    response = getattr(exc, "response", None)
+    error = response.get("Error", {}) if isinstance(response, dict) else {}
+    return str(error.get("Code") or type(exc).__name__)
+
+
 def build_bedrock_messages(user_message: str) -> List[dict]:
     """Build the single source of truth for Converse and CountTokens messages."""
     return [
@@ -679,13 +693,24 @@ def call_bedrock(
         # that support the common Converse inference parameter.
         if temperature is not None and bedrock_supports_temperature(model_name):
             inference_config["temperature"] = temperature
-        start_time = time.monotonic()
-        response = client.converse(
-            modelId=model_name,
-            messages=messages,
-            inferenceConfig=inference_config,
-        )
-        duration_sec = time.monotonic() - start_time
+        for attempt in range(1, BEDROCK_CONVERSE_MAX_ATTEMPTS + 1):
+            start_time = time.monotonic()
+            try:
+                response = client.converse(
+                    modelId=model_name,
+                    messages=messages,
+                    inferenceConfig=inference_config,
+                )
+                duration_sec = time.monotonic() - start_time
+                break
+            except Exception as exc:
+                if (
+                    _bedrock_error_code(exc) in BEDROCK_CONVERSE_RETRYABLE_ERROR_CODES
+                    and attempt < BEDROCK_CONVERSE_MAX_ATTEMPTS
+                ):
+                    time.sleep(2 ** (attempt - 1))
+                    continue
+                raise
     except Exception as exc:
         raise RuntimeError(
             _bedrock_error_message(exc, model_name=model_name, region_name=region_name)

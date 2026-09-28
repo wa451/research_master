@@ -189,7 +189,7 @@ output/logs/evaluation_dashboard/
 |---|---|
 | `streamlit` が見つからない | `uv sync` 後に `uv run streamlit run app/streamlit_app.py` を使う。 |
 | 入力ファイルがmissingになる | 前段ステップが未実行か、K / hamming / days の条件が入力ファイル名とずれていないか確認する。評価7では `skip-missing-conditions` で未生成条件をスキップできる。 |
-| LLM抽出で失敗する | 選択したモデルに必要な認証を確認する。Geminiは `.env` の `GEMINI_API_KEY`、BedrockはAWS認証チェーン・リージョン・model accessが必要。ログには秘密値を出さないよう簡易redactionしています。 |
+| LLM抽出で失敗する | 選択したモデルに必要な認証を確認する。Geminiは `.env` の `GEMINI_API_KEY`、BedrockはAWS認証チェーン・リージョン・model accessが必要。Bedrockの一時的なサーバー・サービス停止・スロットリングはSDKの再試行後に最大3回まで再試行し、既に完了したモードのcheckpointは次回実行で再利用する。ログには秘密値を出さないよう簡易redactionしています。 |
 | 評価5/6でrunが足りない | `--runs` と実在するJSON数を揃えるか、`skip-missing-runs` を有効化する。 |
 | CLIでは動くが画面では動かない | コマンドプレビューをコピーし、同じworking directoryで実行して差分を見る。 |
 

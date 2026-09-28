@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from src.behavior_pattern_mining.config import get_config_value, load_config
+from src.behavior_pattern_mining.llm import client as llm_client
 from src.behavior_pattern_mining.llm.client import (
     call_bedrock,
     call_llm,
@@ -174,6 +175,49 @@ class LlmClientTests(unittest.TestCase):
             messages=[{"role": "user", "content": [{"text": "prompt"}]}],
             inferenceConfig={"maxTokens": 512},
         )
+
+    def test_bedrock_retries_transient_service_error(self) -> None:
+        transient_error = type("InternalServerException", (Exception,), {})(
+            "temporary failure"
+        )
+        transient_error.response = {
+            "Error": {
+                "Code": "InternalServerException",
+                "Message": "temporary failure",
+            }
+        }
+        bedrock_client = Mock()
+        bedrock_client.converse.side_effect = [
+            transient_error,
+            {
+                "output": {"message": {"content": [{"text": "ok"}]}},
+                "usage": {},
+            },
+        ]
+        boto3_module = Mock()
+        boto3_module.client.return_value = bedrock_client
+        sleep_calls: list[float] = []
+        original_sleep = llm_client.time.sleep
+
+        llm_client.time.sleep = sleep_calls.append
+        try:
+            with patch(
+                "src.behavior_pattern_mining.llm.client.importlib.import_module",
+                return_value=boto3_module,
+            ):
+                text, _, _, _ = call_bedrock(
+                    model_name="us.openai.gpt-5.6-sol",
+                    user_message="prompt",
+                    temperature=None,
+                    region_name="us-east-2",
+                    max_tokens=512,
+                )
+        finally:
+            llm_client.time.sleep = original_sleep
+
+        self.assertEqual(text, "ok")
+        self.assertEqual(bedrock_client.converse.call_count, 2)
+        self.assertEqual(sleep_calls, [1])
 
     def test_bedrock_missing_credentials_has_actionable_error(self) -> None:
         no_credentials_error = type("NoCredentialsError", (Exception,), {})
