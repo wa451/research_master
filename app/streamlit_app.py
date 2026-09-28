@@ -719,7 +719,7 @@ def render_eval6_settings(common: dict) -> dict:
     with col3:
         hamming = st.number_input("ハミング距離閾値", min_value=0, value=DEFAULT_HAMMING_THRESHOLD, step=1)
     with col4:
-        runs = st.number_input("runs", min_value=1, value=1, step=1)
+        runs = st.number_input("runs", min_value=1, value=5, step=1)
 
     representation, dataset, default_sensor_map = render_sensor_representation("eval6")
     suffix = short_suffix(int(n_states), int(hamming), int(days))
