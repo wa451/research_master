@@ -66,7 +66,7 @@ fragment包含率、活動観測可能件数、ADLのmicro・ラベル別指標�
 |---|---|
 | `Hestia/examples/experiments/noise_free_pilot.yaml` | 4条件 × 1seed × 4日、LLM各1反復の動作確認計画。前半2日・後半2日。 |
 | `Hestia/examples/experiments/controlled_gold_pilot.yaml` | 1人・2 target・4日・固定seed/揺らぎなしのAPI不要gold契約pilot。 |
-| `Hestia/examples/experiments/noise_free.yaml` | 本実験。3住宅 × 2条件（base / large variability）× 3seed = 18ログ。各ログ14日（train 7日/test 7日）、LLM各3反復。 |
+| `Hestia/examples/experiments/noise_free.yaml` | 本実験。3住宅 × 2条件（base / large variability）× 3seed = 18ログ。各ログ21日（train 14日/test 7日）、LLM各3反復。Arubaの正式評価と同じ14日間の履歴から系列を生成する。 |
 | `Hestia/examples/experiments/noise_free_duration.yaml` | 期間感度評価。既存本実験と同じ6条件・3seed・LLM各3反復で、各runの35日rawログを1回だけ生成する。 |
 | Webの「本実験・小規模確認」 | `noise_free.yaml`の全条件・全設定を継承し、seed=[11]、LLM 1反復だけへoverrideするeffective plan。6ログ、fresh最大24 API calls。 |
 | `output/<model>/9_hestia/pilot/experiment.json` | 確定した計画snapshot。 |
@@ -150,13 +150,13 @@ Hestiaの汎用条件として維持するが、この本実験planには含め�
 
 ## train期間感度評価
 
-「過去何日分のセンサログで性能が安定するか」を調べる追加実験で、既存の7日train本実験は変更しない。3日は短期間、7日は現行baseline、14日は2週間、28日は4週間の履歴を表す。testは全条件で7日固定とし、曜日を一巡させつつ評価期間長の違いを交絡させない。
+「過去何日分のセンサログで性能が安定するか」を調べる追加実験で、本実験と揃えた14日trainを正式baselineとする。3日は短期間、7日は1週間、14日は2週間、28日は4週間の履歴を表す。testは全条件で7日固定とし、曜日を一巡させつつ評価期間長の違いを交絡させない。
 
 各condition × seedについて35日ログを1回だけ生成し、Day 29〜35を共通testとする。trainはtest直前から遡るため、3日=Day 26〜28、7日=Day 22〜28、14日=Day 15〜28、28日=Day 1〜28である。同じrawログと同じtestを使うpaired comparisonであり、期間ごとのシミュレーション差を持ち込まない。`output/<model>/9_hestia/duration/raw/`が18個のraw run、`windows/train_{3,7,14,28}d/`が期間依存成果物である。派生windowにはraw生成markerのhash、window開始、train/test日数を保存し、状態表・network・checkpointを期間間で混同しない。
 
 各windowは対象train sliceだけで代表状態、canonical gold/catalog、状態遷移network、frequency候補、LLM入力を作る。testはそのwindowの代表状態表へ固定写像し、K、h、閾値、canonical選択、抽出には使用しない。28日状態表を短い条件へ流用しない。モデル、prompt、K=15、h=0、平滑化、targets、時間帯、採点は本実験と同一である。
 
-canonical goldはtrain期間ごとに変化し得る。このためexact-match `precision/recall/f1` は母集合が完全に同じ性能尺度とは限らず、単純な大小だけで結論を出さない。主比較では `adl_macro_f1`、`test_target_episode_coverage`、`test_visible_catalog_recall`を併読する。7日差分は同じcondition・seedを対応づけた「各期間の値 − 7日値」（相対変化率ではない差分）であり、LLM反復をseed内平均してからseed間平均・標本標準偏差を求める。
+canonical goldはtrain期間ごとに変化し得る。このためexact-match `precision/recall/f1` は母集合が完全に同じ性能尺度とは限らず、単純な大小だけで結論を出さない。主比較では `adl_macro_f1`、`test_target_episode_coverage`、`test_visible_catalog_recall`を併読する。14日差分は同じcondition・seedを対応づけた「各期間の値 − 14日値」（相対変化率ではない差分）であり、LLM反復をseed内平均してからseed間平均・標本標準偏差を求める。
 
 ```bash
 uv run python scripts/evaluate_9_duration.py --dry-run
@@ -168,9 +168,9 @@ uv run python scripts/evaluate_9_duration.py --stage extract --allow-api
 uv run python scripts/evaluate_9_duration.py --stage evaluate --method both
 ```
 
-`--train-days 3,7,14,28`でwindow一覧を明示できるが、7日baselineとraw planの最大train日数（28日）は必須である。API opt-inは既存評価と同じで、許可OFFは0 calls。fresh上限は `6 conditions × 3 seeds × 3 LLM runs × 4 time bands × 4 durations = 864 calls`、parse retry上限は現行3試行で2592回である。transport retryは含まない。raw生成は18回だけで、LLM抽出は異なるnetworkを持つ72 windowごとに行う。
+`--train-days 3,7,14,28`でwindow一覧を明示できるが、14日baselineとraw planの最大train日数（28日）は必須である。API opt-inは既存評価と同じで、許可OFFは0 calls。fresh上限は `6 conditions × 3 seeds × 3 LLM runs × 4 time bands × 4 durations = 864 calls`、parse retry上限は現行3試行で2592回である。transport retryは含まない。raw生成は18回だけで、LLM抽出は異なるnetworkを持つ72 windowごとに行う。
 
-出力は `results/<model>/9_hestia/duration/evaluation9_duration_summary.csv`、`evaluation9_duration_summary_runs.csv`、`evaluation9_duration_summary.json`。summaryはtrain/test日数、condition（`overall`を含む）、method、model、各指標のmean/std/n_seeds、run status、主要指標のpaired `*_delta_vs_7d_*`を持つ。`adl_macro_f1`、`test_target_episode_coverage`、`f1`のcondition別・overall SVGも生成し、Webの結果比較では同CSVを期間軸の折れ線で表示できる。
+出力は `results/<model>/9_hestia/duration/evaluation9_duration_summary.csv`、`evaluation9_duration_summary_runs.csv`、`evaluation9_duration_summary.json`。summaryはtrain/test日数、condition（`overall`を含む）、method、model、各指標のmean/std/n_seeds、run status、主要指標のpaired `*_delta_vs_14d_*`を持つ。期間感度プロトコルはv2であり、旧7日基準のsummaryとは混在させず再集計する。`adl_macro_f1`、`test_target_episode_coverage`、`f1`のcondition別・overall SVGも生成し、Webの結果比較では同CSVを期間軸の折れ線で表示できる。
 
 ## 比較と内部処理
 

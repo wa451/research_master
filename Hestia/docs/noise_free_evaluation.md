@@ -34,7 +34,7 @@ fixed variabilityは削除せず、汎用Hestia実験や別planから引き続�
 睡眠・衛生活動・外出も混在させます。これは管理された反復行動シナリオであり、
 実生活の完全な日程・行動分布を再現する設定ではありません。
 
-本実験は3住宅 × 2条件 × 3seed = 18ログ、各14日（train 7日/test 7日）で、LLMは
+本実験は3住宅 × 2条件 × 3seed = 18ログ、各21日（train 14日/test 7日）で、LLMは
 各ログ3反復です。全4時間帯がある場合、新規のモード抽出は最大216回で、さらに
 parse/通信retryがあり得ます。
 この規模は費用の承認を意味しません。接続確認用の従来pilotに加えて、正解系列の契約を
@@ -280,7 +280,7 @@ LLMは同一入力・同一snapshotの時間帯checkpointから再開し、完�
 
 prepareは各windowの`input/train.txt`だけから状態表・networkを作り、当該windowのtrain+共通testセンサ列だけを固定表へ写像する。truthもwindow範囲へ限定し、canonical catalogはwindowごとにtrain episodeだけから再作成する。test開始・終了は全windowで同一で、trainとは重複しない。prepared hashとLLM request fingerprintはwindowディレクトリ別であるため、異なるtrain期間のcheckpointを再利用しない。
 
-期間集計も通常評価と同じくLLM反復→seed内平均→seed間平均・標本標準偏差の順で行う。`overall`は同じseed内で6 conditionを平均してからseed間集計する。7日差分は共通seedを対応づけた「各期間の値 − 7日値」（相対変化率ではない差分）である。canonical goldはtrain期間ごとに変わり得るのでexact-match F1だけを同一母集団のように解釈せず、ADL macro-F1、test target episode coverage、test-visible catalog recallを併記する。
+期間集計も通常評価と同じくLLM反復→seed内平均→seed間平均・標本標準偏差の順で行う。`overall`は同じseed内で6 conditionを平均してからseed間集計する。14日差分は共通seedを対応づけた「各期間の値 − 14日値」（相対変化率ではない差分）である。canonical goldはtrain期間ごとに変わり得るのでexact-match F1だけを同一母集団のように解釈せず、ADL macro-F1、test target episode coverage、test-visible catalog recallを併記する。
 
 ## 既知の制約
 

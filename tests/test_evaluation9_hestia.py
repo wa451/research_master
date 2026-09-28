@@ -135,7 +135,7 @@ class Evaluation9Tests(unittest.TestCase):
                 "branched_variable",
             ],
         )
-        self.assertEqual(smoke.train_days, 7)
+        self.assertEqual(smoke.train_days, 14)
         self.assertEqual(smoke.test_days, 7)
         self.assertEqual(smoke.seeds, [11])
         self.assertEqual(smoke.llm_runs, 1)
@@ -145,6 +145,7 @@ class Evaluation9Tests(unittest.TestCase):
         self.assertEqual(len(full.conditions), 6)
         self.assertEqual(full.seeds, [11, 22, 33])
         self.assertEqual(full.llm_runs, 3)
+        self.assertEqual((full.train_days, full.test_days), (14, 7))
         self.assertEqual(estimate_scale(full).fresh_api_calls, 216)
 
         self.assertEqual(duration_path.name, "noise_free_duration.yaml")
@@ -300,6 +301,17 @@ class Evaluation9Tests(unittest.TestCase):
                 json.dumps(legacy_payload), encoding="utf-8"
             )
             self.assertFalse(experiment_snapshot_matches(pilot, experiment))
+
+    def test_legacy_seven_day_main_snapshot_is_rejected(self):
+        _, full = load_preset_plan(PROJECT_ROOT / "Hestia", "本実験")
+        with tempfile.TemporaryDirectory() as directory:
+            experiment = Path(directory)
+            legacy_payload = full.model_dump(mode="json")
+            legacy_payload["train_days"] = 7
+            (experiment / "experiment.json").write_text(
+                json.dumps(legacy_payload), encoding="utf-8"
+            )
+            self.assertFalse(experiment_snapshot_matches(full, experiment))
 
     def test_dashboard_builder_prefers_effective_plan_and_keeps_api_opt_in(self):
         effective = Path(

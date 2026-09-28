@@ -23,9 +23,11 @@ from smart_home_sim.experiments.artifacts import (
     write_json,
 )
 from smart_home_sim.experiments.duration import (
+    BASELINE_TRAIN_DAYS,
     DEFAULT_TRAIN_DAYS,
     aggregate_duration,
     generate_duration,
+    validate_train_days,
     write_duration_summary,
 )
 from smart_home_sim.experiments.evaluation import (
@@ -118,7 +120,7 @@ def test_matrix_is_one_factor_at_a_time() -> None:
 def test_full_evaluation_plan_has_only_base_and_large_variability() -> None:
     examples = Path(__file__).resolve().parents[1] / "examples/experiments"
     plan = load_plan(examples / "noise_free.yaml")
-    assert plan.train_days == plan.test_days == 7
+    assert (plan.train_days, plan.test_days) == (14, 7)
     assert plan.n_states == 15
     assert plan.hamming_threshold == 0
     assert plan.smoothing_window_sec == 0
@@ -218,6 +220,14 @@ def test_duration_windows_share_raw_log_and_fixed_test(tmp_path: Path) -> None:
     assert len({file_hash(run / "generated.json") for run in runs}) == 4
 
 
+def test_duration_windows_require_the_fourteen_day_baseline() -> None:
+    plan = ExperimentPlan(train_days=28, test_days=7, seeds=[11], llm_runs=1)
+    assert BASELINE_TRAIN_DAYS == 14
+    assert validate_train_days(plan, [3, 14, 28]) == [3, 14, 28]
+    with pytest.raises(ValueError, match="14-day baseline"):
+        validate_train_days(plan, [3, 7, 28])
+
+
 def test_duration_aggregation_is_seed_paired_and_writes_contract(tmp_path: Path) -> None:
     rows = []
     for days in DEFAULT_TRAIN_DAYS:
@@ -245,17 +255,28 @@ def test_duration_aggregation_is_seed_paired_and_writes_contract(tmp_path: Path)
                 )
     summaries = aggregate_duration(rows)
     assert {row["condition"] for row in summaries} == {"overall", "compact_base"}
+    seven = next(
+        row for row in summaries if row["condition"] == "compact_base" and row["train_days"] == 7
+    )
     fourteen = next(
         row for row in summaries if row["condition"] == "compact_base" and row["train_days"] == 14
     )
-    assert fourteen["f1_delta_vs_7d_mean"] == pytest.approx(0.25)
-    assert fourteen["f1_delta_vs_7d_n_seeds"] == 2
+    twenty_eight = next(
+        row for row in summaries if row["condition"] == "compact_base" and row["train_days"] == 28
+    )
+    assert seven["f1_delta_vs_14d_mean"] == pytest.approx(-0.25)
+    assert fourteen["f1_delta_vs_14d_mean"] == pytest.approx(0.0)
+    assert twenty_eight["f1_delta_vs_14d_mean"] == pytest.approx(0.5)
+    assert fourteen["f1_delta_vs_14d_n_seeds"] == 2
     assert fourteen["expected_runs"] == 4
     assert fourteen["_n_seeds"] == 2
     write_duration_summary(tmp_path, rows)
     assert (tmp_path / "evaluation9_duration_summary.csv").is_file()
     assert (tmp_path / "evaluation9_duration_summary_runs.csv").is_file()
     assert (tmp_path / "evaluation9_duration_summary.json").is_file()
+    summary_json = read_json(tmp_path / "evaluation9_duration_summary.json")
+    assert summary_json["protocol"] == "evaluation9_duration_v2"
+    assert summary_json["baseline_train_days"] == 14
     with (tmp_path / "evaluation9_duration_summary.csv").open(
         encoding="utf-8", newline=""
     ) as stream:
@@ -273,10 +294,11 @@ def test_duration_aggregation_is_seed_paired_and_writes_contract(tmp_path: Path)
         "_n_seeds",
         "f1_mean",
         "f1_std",
-        "f1_delta_vs_7d_mean",
-        "f1_delta_vs_7d_std",
-        "f1_delta_vs_7d_n_seeds",
+        "f1_delta_vs_14d_mean",
+        "f1_delta_vs_14d_std",
+        "f1_delta_vs_14d_n_seeds",
     } <= summary_fields
+    assert not {field for field in summary_fields if "delta_vs_7d" in field}
     with (tmp_path / "evaluation9_duration_summary_runs.csv").open(
         encoding="utf-8", newline=""
     ) as stream:

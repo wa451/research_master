@@ -66,10 +66,10 @@ class EvaluationCostEstimateTests(unittest.TestCase):
         self.hestia_duration = self.root / "output/9_hestia/duration"
         self.hestia_duration.mkdir(parents=True)
         (self.hestia_duration / "duration.json").write_text(
-            json.dumps({"train_days": [3, 7]}),
+            json.dumps({"train_days": [3, 7, 14, 28]}),
             encoding="utf-8",
         )
-        for train_days in (3, 7):
+        for train_days in (3, 7, 14, 28):
             duration_window = (
                 self.hestia_duration / "windows" / f"train_{train_days}d"
             )
@@ -146,13 +146,13 @@ class EvaluationCostEstimateTests(unittest.TestCase):
         self.assertEqual([plan.evaluation for plan in plans], [5, 6, 7, 8, 9, 10])
         self.assertEqual(
             [plan.request_count for plan in plans],
-            [5, 10, 140, 0, 6, 1],
+            [5, 10, 140, 0, 10, 1],
         )
         self.assertEqual(
             plans[2].run_plan,
             "28 conditions, days=14, runs=1-5 for every condition",
         )
-        self.assertIn("2 duration windows", plans[4].run_plan)
+        self.assertIn("4 duration windows", plans[4].run_plan)
         self.assertEqual(checkpoint.read_bytes(), before)
 
     def test_total_csv_json_and_count_tokens_never_use_converse(self) -> None:
@@ -200,7 +200,7 @@ class EvaluationCostEstimateTests(unittest.TestCase):
         self.assertEqual([row["evaluation"] for row in csv_rows], ["5", "6", "7", "8", "9", "10", "TOTAL"])
         self.assertEqual(payload["settings"]["checkpoint_policy"], "ignored (read-only)")
         self.assertFalse(payload["settings"]["inference_executed"])
-        self.assertEqual(payload["total"]["requests"], 162)
+        self.assertEqual(payload["total"]["requests"], 166)
         self.assertEqual(payload["model_id"], MODEL_ID)
 
     def test_fallback_is_recorded_per_evaluation(self) -> None:

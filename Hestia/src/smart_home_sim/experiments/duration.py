@@ -23,7 +23,8 @@ from smart_home_sim.experiments.evaluation import SUMMARY_METRICS, score_runs, s
 from smart_home_sim.experiments.plan import ExperimentPlan
 
 DEFAULT_TRAIN_DAYS = (3, 7, 14, 28)
-BASELINE_TRAIN_DAYS = 7
+BASELINE_TRAIN_DAYS = 14
+DURATION_PROTOCOL = "evaluation9_duration_v2"
 PRIMARY_DURATION_METRICS = (
     "adl_macro_f1",
     "f1",
@@ -42,7 +43,9 @@ def validate_train_days(plan: ExperimentPlan, train_days: list[int]) -> list[int
     if values[-1] != plan.train_days:
         raise ValueError("raw plan train_days must equal the longest duration window")
     if BASELINE_TRAIN_DAYS not in values:
-        raise ValueError("duration sensitivity must include the 7-day baseline")
+        raise ValueError(
+            f"duration sensitivity must include the {BASELINE_TRAIN_DAYS}-day baseline"
+        )
     return values
 
 
@@ -145,7 +148,7 @@ def generate_duration(
     output = output.resolve()
     manifest_path = output / "duration.json"
     manifest = {
-        "protocol": "evaluation9_duration_v1",
+        "protocol": DURATION_PROTOCOL,
         "train_days": values,
         "test_days": plan.test_days,
         "raw_plan": plan.model_dump(mode="json"),
@@ -301,7 +304,7 @@ def aggregate_duration(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             paired = [
                 current[seed] - baseline[seed] for seed in sorted(current.keys() & baseline.keys())
             ]
-            prefix = f"{metric}_delta_vs_7d"
+            prefix = f"{metric}_delta_vs_{BASELINE_TRAIN_DAYS}d"
             summary[f"{prefix}_mean"] = mean(paired) if paired else None
             summary[f"{prefix}_std"] = stdev(paired) if len(paired) > 1 else None
             summary[f"{prefix}_n_seeds"] = len(paired)
@@ -398,7 +401,7 @@ def write_duration_summary(output: Path, rows: list[dict[str, Any]]) -> None:
     write_json(
         output / "evaluation9_duration_summary.json",
         {
-            "protocol": "evaluation9_duration_v1",
+            "protocol": DURATION_PROTOCOL,
             "canonical_gold_varies_by_train_days": True,
             "baseline_train_days": BASELINE_TRAIN_DAYS,
             "runs": rows,

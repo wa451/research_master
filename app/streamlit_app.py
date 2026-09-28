@@ -293,7 +293,7 @@ RESULT_FILE_ORDER: dict[str, list[str]] = {
 RESULT_GUIDES["評価9"] = [
     {
         "files": "evaluation9_duration_summary.csv",
-        "how_to_read": "train_days別にoverallと6 conditionを比較します。7日差分は同じseed同士のpaired差です。canonical goldが期間ごとに変わるため、exact-match F1だけでなくADL macro-F1とtest coverageも併読します。",
+        "how_to_read": "train_days別にoverallと6 conditionを比較します。14日差分は同じseed同士のpaired差です。canonical goldが期間ごとに変わるため、exact-match F1だけでなくADL macro-F1とtest coverageも併読します。",
     },
     {
         "files": "evaluation9_summary.csv",
@@ -1226,7 +1226,7 @@ def render_eval9_settings(common: dict) -> dict:
     summary_columns[3].metric("llm_runs", base_plan.llm_runs)
     if duration:
         st.info(
-            "train期間: 3 / 7 / 14 / 28日、test期間: 7日固定。"
+            "train期間: 3 / 7 / 14 / 28日、比較基準: 14日、test期間: 7日固定。"
             "同一condition・seedの35日rawログを共有し、Day 29〜35を共通testにします。"
         )
 

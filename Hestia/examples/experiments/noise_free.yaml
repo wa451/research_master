@@ -3,7 +3,7 @@
 schema_version: 1
 observation_noise: false
 start_datetime: 2025-01-06T00:00:00+09:00
-train_days: 7
+train_days: 14
 test_days: 7
 seeds: [11, 22, 33]
 n_states: 15

@@ -53,13 +53,13 @@ uv run python scripts/evaluate_9_hestia.py --stage extract --allow-api
 uv run python scripts/evaluate_9_hestia.py --stage evaluate --method both
 ```
 
-本実験は`--plan Hestia/examples/experiments/noise_free.yaml --experiment output/9_hestia/full --output-dir results/<model>/9_hestia/full`を明示する。6 conditionは`compact_base`, `compact_variable`, `corridor_base`, `corridor_variable`, `branched_base`, `branched_variable`で、variableは開始時刻±45分、活動・step時間±30%の揺らぎである。
+本実験は`--plan Hestia/examples/experiments/noise_free.yaml --experiment output/9_hestia/full --output-dir results/<model>/9_hestia/full`を明示する。train 14日/test 7日で、Aruba正式評価と同じ14日間の履歴から系列を生成する。6 conditionは`compact_base`, `compact_variable`, `corridor_base`, `corridor_variable`, `branched_base`, `branched_variable`で、variableは開始時刻±45分、活動・step時間±30%の揺らぎである。
 
 Webは評価9を選び、plan preset/seed/LLM runを設定する。共通平滑化、K、日数、condition詳細を画面から変更せず、effective planとしてhash付き保存する。既存成果物はファイル存在でスキップせず、CLIのhash検証へ委譲する。plan/code変更・不完全生成なら新experiment/output先で停止する。既存と異なるplanを同じパスへ使う時は、UIが作るbackupへ退避する明示操作だけを使い、hash検証を無効化しない。
 
 ## duration感度
 
-`evaluate_9_duration.py`は既存7日train本実験を変えない追加評価。各condition×seedで35日rawを1回生成し、Day29–35を共通test、trainは直前の3/7/14/28日へ変えるpaired比較。各windowで状態表・canonical・network・checkpointを独立に作り、28日状態表を短期間へ流用しない。canonicalがtrain期間で変わるため、exact P/R/F1だけの単純大小で結論せず、`adl_macro_f1`、target coverage、visible catalog recallを併読する。7日との差は相対率でなく同condition/seedの値差である。
+`evaluate_9_duration.py`は本実験と同じ14日trainを正式baselineとする追加評価。各condition×seedで35日rawを1回生成し、Day29–35を共通test、trainは直前の3/7/14/28日へ変えるpaired比較。各windowで状態表・canonical・network・checkpointを独立に作り、28日状態表を短期間へ流用しない。canonicalがtrain期間で変わるため、exact P/R/F1だけの単純大小で結論せず、`adl_macro_f1`、target coverage、visible catalog recallを併読する。14日との差は相対率でなく同condition/seedの値差である。
 
 本実験は6 condition×3 seed×3 LLM run×4帯、durationはさらに4期間を掛ける（fresh最大864 API calls、parse retry上限2592、transport retry除く）。API許可前に予算を確認する。
 

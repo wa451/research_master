@@ -237,7 +237,7 @@ uv run python -m unittest discover -s tests
 
 ## 評価9: Hestia合成ログ
 
-Hestiaは `master-research/Hestia/` に配置する。Webアプリの「評価9」または `uv run python scripts/evaluate_9_hestia.py` でログ生成から採点まで実行できる（既定はAPIなし）。配置・入力契約・指標・実行方法は [評価9のガイド](docs/evaluations/evaluation_9_hestia.md) を参照。
+Hestiaは `master-research/Hestia/` に配置する。Webアプリの「評価9」または `uv run python scripts/evaluate_9_hestia.py` でログ生成から採点まで実行できる（既定はAPIなし）。本実験はtrain 14日/test 7日で、Aruba正式評価と同じ14日間の履歴から系列を生成する。配置・入力契約・指標・実行方法は [評価9のガイド](docs/evaluations/evaluation_9_hestia.md) を参照。
 
 ## 評価10: SwitchBot実宅ログ
 
