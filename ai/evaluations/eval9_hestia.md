@@ -32,9 +32,9 @@ Hestiaはこの親repoの`Hestia/`に含まれる。移動前の外部`/Users/wa
 
 ## 実験・モデル別成果物
 
-`experiment.json`、生成ログ、truth、prepared state/networkは`output/9_hestia/`。LLM JSON、mode checkpoint、usage、LLM個別採点は`results/<model>/9_hestia/<experiment>/artifacts/`、集計はそのexperiment直下。Hestia CLIへmodel-specific artifact rootが渡るため、別モデルのcomplete markerを再利用しない。
+`experiment.json`、生成ログ、truth、prepared state/networkは`output/<model>/9_hestia/`。LLM JSON、mode checkpoint、usage、LLM個別採点は`results/<model>/9_hestia/<experiment>/artifacts/`、集計はそのexperiment直下。Hestia CLIへmodel-specific artifact rootが渡るため、別モデルのcomplete markerを再利用しない。
 
-標準planは`Hestia/examples/experiments/noise_free_pilot.yaml`（4 condition×1 seed×4日、前半2/後半2、LLM各1反復）、API不要のgold契約確認は`controlled_gold_pilot.yaml`、本実験は`noise_free.yaml`（6 condition）。主出力は`evaluation9_summary.csv`（最初に読む）、seed/run/condition別`evaluation9_summary_runs.csv`、`evaluation9_summary.json`。Webのログ・effective planは`output/logs/evaluation_dashboard/`に残る。Studioの単体`events.csv`/`casas_motion_door.txt`にはplan・truth・train/test契約がないため、直接評価9の入力にしない。
+標準planは`Hestia/examples/experiments/noise_free_pilot.yaml`（4 condition×1 seed×4日、前半2/後半2、LLM各1反復）、API不要のgold契約確認は`controlled_gold_pilot.yaml`、本実験は`noise_free.yaml`（6 condition）。主出力は`evaluation9_summary.csv`（最初に読む）、seed/run/condition別`evaluation9_summary_runs.csv`、`evaluation9_summary.json`。Webのログ・effective planは`output/<model>/logs/evaluation_dashboard/`に残る。Studioの単体`events.csv`/`casas_motion_door.txt`にはplan・truth・train/test契約がないため、直接評価9の入力にしない。
 
 ## 実行段階・API安全性
 

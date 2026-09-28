@@ -20,7 +20,7 @@
 ## 流れと探索境界
 
 - 通常CSV → [run_build_network.py](../scripts/run_build_network.py) → `StateTransitionVisualizer.main` → 前処理 → 代表状態抽出・写像 → 遷移集計 → 状態表・時間帯別JSON → LLM / baseline → 評価。
-- `data/`・`new_labeled_data/` は入力、`state/` は状態表、`picture/` は図とLLM入力の遷移JSON、`output/` は抽出・中間物、`results/` は後段評価。成果物を確認する時だけ対象runの必要なファイルを読む。
+- `data/`・`new_labeled_data/` は入力、`state/` は状態表、`picture/` は図とLLM入力の遷移JSON、`output/<model>/` はbaseline・中間物・state series・ログ、`results/<model>/` はLLM出力・checkpoint・後段評価。成果物を確認する時だけ対象runの必要なファイルを読む。
 - `scripts/` は実行入口だが評価5〜8には入出力・集計も残る。`src/` だけ検索して調査完了としない。全体像が不足する場合のみ [code_inventory](../docs/architecture/code_inventory.md)、全Python台帳が必要な時のみ [python_file_inventory](../docs/architecture/python_file_inventory.md)。
 - 旧入口 `run_build_network.py`、`run_baselines.py`、`run_all.py`、`run_llm_eval_batch.py` は引数を解析せず実処理へ進む。`--help` による安全確認は禁止。他の入口も委譲先・import時処理を確認してから実行する。
 

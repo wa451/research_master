@@ -16,8 +16,8 @@
 
 ## 全評価に共通する作業規則
 
-- 生データ、ラベル、`data/`、生成済み `output/`・`results/` は変更・コミットしない。実験を実行する前に、API呼出し、入力条件、出力先を確認する。
-- 評価5〜10のLLM由来JSON、checkpoint、usage、評価結果は現在モデルごとに `results/<model>/` 配下へ分離する。状態系列、baseline、状態定義など明示的にモデル非依存とされた中間物は `output/`・`state/`・`picture/` に残る。評価4のCLI出力既定は現在も共有の `results/4_adl_detect/` であるため、モデル分離済みと仮定しない。古い `output/aruba_*` や `results/N_*` 表記はGemini移行元を示すことがある。
+- 生データ、ラベル、`data/`、生成済み `output/<model>/`・`results/<model>/` は変更・コミットしない。実験を実行する前に、API呼出し、入力条件、出力先を確認する。
+- 前処理・baseline・state series・ダッシュボードログは現在モデルごとに `output/<model>/`、LLM由来JSON、checkpoint、usage、評価結果は `results/<model>/` に分離する。状態表は `state/`、network/図は `picture/` に残る。評価4も同じモデル別契約を使う。ルート直下の旧 `output/*` と `results/*` はGemini移行元である。
 - Streamlitは既存CLIを呼ぶ薄い画面であり、評価ロジックをアプリへ複製しない。APIを伴う評価9・10では明示的なopt-inが必要である。
 - 評価4〜8のCASAS関連評価は、ラベル付き入力 `new_labeled_data/aruba.txt` とラベルなし `data/aruba.csv` / `data/aruba.txt` を取り違えない。state seriesの前処理条件、K、ハミング距離、日数を前段と下流で混在させない。
 - `mean_*` の後方互換列は評価6〜8では原則end-to-end値の別名である。conditionalとend-to-endの分母を混同しない。

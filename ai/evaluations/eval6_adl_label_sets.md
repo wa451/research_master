@@ -32,7 +32,7 @@
 
 1. ラベル付きCASASから14日条件の状態表・ネットワークを作る。
 2. 現モデルの提案LLM JSONを1回（または5回）生成する。
-3. その状態表を固定した全220日照合state seriesを `output/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv` に作る。正式workflowは`network-equivalent`、network構築と同じ5秒の遅延OFF平滑化を明示し、`--state-series-days`は指定しない（KI-06採用済み仕様）。
+3. その状態表を固定した全220日照合state seriesを `output/<model>/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv` に作る。正式workflowは`network-equivalent`、network構築と同じ5秒の遅延OFF平滑化を明示し、`--state-series-days`は指定しない（KI-06採用済み仕様）。
 4. 同じ14日代表状態系列を4時間帯に分け、direct-log baselineを1回（または5回）生成する。direct-logも提案手法と同じ `map_vector_to_state` のHamming写像を使う（KI-04採用済み仕様）。
 5. 比較CLIへbest-condition manifestとlabeled CASASを渡す。正式holdoutでは成果物パス・K/h・期間値を個別指定しない。
 
@@ -48,7 +48,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 
 5 runには`--runs 5`を追加し、proposedのmetrics templateとdirect metricsを明示する。具体的なtemplateは`results/<model>/aruba_15_0_14days/llm_modes_metrics_15_0_14days_run{run}.csv`、direct metricsは`results/<model>/llm_direct_15_0_14days/llm_direct_metrics_14days.csv`である。
 
-新規のproposed/direct JSON、checkpoint、usage、比較結果はそれぞれ`results/<model>/aruba_*`、`results/<model>/llm_direct_*`、`results/<model>/6_adl_match/`である。照合state seriesはモデル非依存で`output/`に共有する。human docsの`output/aruba_*`/`results/6_*`はGemini移行元を含む旧表記であり、CLI既定値も正式条件と一致しない（**KI-01**, **KI-08**）。パスとK/h/daysを省略しない。
+新規のstate series・ADL intervalは`output/<model>/`、proposed/direct JSON、checkpoint、usage、比較結果は`results/<model>/`である。ルート直下の旧`output/*`/`results/*`はGemini移行元であり、CLI既定値と正式条件の不一致は **KI-01**、**KI-08**で追跡する。パスとK/h/daysを省略しない。
 
 ## 出力・run集計・使用量
 

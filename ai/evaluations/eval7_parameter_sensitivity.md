@@ -21,7 +21,7 @@ set評価、許可10語彙、`missing`/`unknown`、time-bandの半開区間・�
 
 異なる条件のstate seriesを再利用しない。正式workflowは`evaluate_adl_labels.py --write-state-series --state-series-preprocessing network-equivalent`とnetwork構築と同じ遅延OFF平滑化を明示し、`--state-series-days 14`は指定しない（KI-06採用済み仕様）。評価5/6とのh=0/h=1不一致は **KI-01**。未生成条件は既定ではエラーで、探索だけ先に確認する時だけ`--skip-missing-conditions`を明示する。
 
-個別センサ条件のLLM JSON/checkpointは`results/<model>/aruba_individual_{K}_{h}_{days}days/`、正式なrun集計は`results/<model>/7_param_search_14d_5runs_individual_holdout/`に保存する。state series/networkはモデル非依存で表現名を含む`output/`/`picture/`に残る。モデルをまたいで成果物を探索してはならない。
+個別センサ条件のstate seriesは`output/<model>/`、LLM JSON/checkpointは`results/<model>/aruba_individual_{K}_{h}_{days}days/`、正式なrun集計は`results/<model>/7_param_search_14d_5runs_individual_holdout/`に保存する。networkは`picture/`に残る。モデルをまたいで成果物を探索してはならない。
 
 ## 標準ワークフロー
 

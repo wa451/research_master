@@ -5,7 +5,7 @@
 
 ## 目的と比較対象
 
-train期間で各パターンへADL集合を割り当て、test期間でその対応が維持されるかを使って、パターン1件単位の品質を比較する。対象は `frequency`、`rule_light`、`rule_medium`、`rule_strong`、`fp_growth`、`fp_growth_filtered`、`transition_probability`、`proposed`。提案手法のLLM JSONだけがモデル依存で、baseline・state series・状態定義は共有入力である。
+train期間で各パターンへADL集合を割り当て、test期間でその対応が維持されるかを使って、パターン1件単位の品質を比較する。対象は `frequency`、`rule_light`、`rule_medium`、`rule_strong`、`fp_growth`、`fp_growth_filtered`、`transition_probability`、`proposed`。baseline・state seriesも、提案手法JSONと同じ実行モデルの名前空間を使う。
 
 ここでの「Useful」は情報量の高さではない。ADLに支持され、構造的無意味でなく、長い系列の冗長な断片でないことを表す。
 
@@ -44,12 +44,12 @@ contextless_useless = structural_useless OR adl_unsupported
 | 入力 | 役割 |
 |---|---|
 | `state/aruba_15_0_154days.txt` またはnetwork JSON | state IDのactive sensors解決。どちらか必須、解決不能なら推測せずエラー |
-| `output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv` | 全手法共通の照合系列 |
+| `output/<model>/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv` | 全手法共通の照合系列 |
 | frequency / rule CSV | 明示指定がなければstate seriesから生成可能 |
 | FP-Growth / transition | trainから生成。cacheは条件一致時のみ再利用 |
 | proposed JSON | 現モデルの `results/<model>/aruba_15_0_154days/`。run 1〜5を評価可 |
 
-新規出力は `results/<model>/5_pattern_quality_fixed/` がCLI既定である。一方、研究文書の正式再集計例は legacy 名の `results/5_pattern_quality_without_low_information_judgment/` を明示する。新規実行ではモデル名を含む出力先を使い、過去成果物を上書きしない。K/hのCLI既定との不一致は **KI-01**。
+新規出力は `results/<model>/5_pattern_quality_fixed/` がCLI既定である。一方、研究文書の正式再集計例は legacy 名の `results/<model>/5_pattern_quality_without_low_information_judgment/` を明示する。新規実行ではモデル名を含む出力先を使い、過去成果物を上書きしない。K/hのCLI既定との不一致は **KI-01**。
 
 ## 実行と成果物
 

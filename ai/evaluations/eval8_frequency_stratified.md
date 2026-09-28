@@ -13,7 +13,7 @@
 | `comparison_30days` | 過去の30日details。互換用、正式標準ではない | 14日と別の明示出力先 |
 | `proposed_154days` | 154日proposed JSON（通常5 run）、state series、labeled CASAS | `results/<model>/8_proposed_own_id_fixed/` |
 
-この評価は新しいLLM呼出しをしない。評価6detailsや154日proposed JSONは**現在モデル**の`results/<model>/`から読み、照合state seriesはモデル非依存の`output/`に残す。
+この評価は新しいLLM呼出しをしない。評価6detailsや154日proposed JSONは**現在モデル**の`results/<model>/`、照合state seriesは同じモデルの`output/<model>/`から読む。
 
 ## 出現数の正式契約（変更注意）
 
