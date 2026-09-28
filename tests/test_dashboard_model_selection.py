@@ -16,7 +16,11 @@ from app.command_builder import (
     default_direct_path,
     default_proposed_path,
 )
-from app.streamlit_app import eval5_condition_widget_key
+from app.streamlit_app import (
+    DEFAULT_HAMMING_THRESHOLD,
+    DEFAULT_N_STATES,
+    eval5_condition_widget_key,
+)
 from app.model_selection import (
     DASHBOARD_MODELS,
     DEFAULT_DASHBOARD_MODEL_ID,
@@ -30,6 +34,10 @@ from src.behavior_pattern_mining.evaluation.evaluation6_manifest import (
 
 
 class DashboardModelSelectionTests(unittest.TestCase):
+    def test_dashboard_uses_evaluation7_selected_defaults(self) -> None:
+        self.assertEqual(DEFAULT_N_STATES, 10)
+        self.assertEqual(DEFAULT_HAMMING_THRESHOLD, 2)
+
     def test_evaluation5_condition_path_widget_keys_change_with_condition(self) -> None:
         base = dict(
             field="state_table",

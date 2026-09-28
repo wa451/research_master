@@ -160,7 +160,7 @@ uv run streamlit run app/streamlit_app.py
 
 結果タブでは `evaluation7_condition_summary.csv` と `evaluation7_summary.json` を確認でき、最適な代表状態数・ハミング距離も表示される。
 
-サイドバーの `APIテスト` は、評価実験と切り離した事前確認用である。`K=15, hamming=0, Morning` を既定として、選んだ1条件・1 run・1時間帯のプロンプトを実APIへ1回だけ送り、初回応答がJSON配列のみで返り、各要素が `パターン名`、`ADL系列ラベル`、`解釈の根拠`、`遷移のパターン` の4キーとプロンプトの値制約を満たすかを検証する。API許可は既定OFFで、失敗時もraw responseと検証JSONを `results/<model>/api_smoke_tests/` に保存する。これは正式な評価7の5 runやcheckpointを更新しない。
+サイドバーの `APIテスト` は、評価実験と切り離した事前確認用である。`K=10, hamming=2, Morning` を既定として、選んだ1条件・1 run・1時間帯のプロンプトを実APIへ1回だけ送り、初回応答がJSON配列のみで返り、各要素が `パターン名`、`ADL系列ラベル`、`解釈の根拠`、`遷移のパターン` の4キーとプロンプトの値制約を満たすかを検証する。API許可は既定OFFで、失敗時もraw responseと検証JSONを `results/<model>/api_smoke_tests/` に保存する。これは正式な評価7の5 runやcheckpointを更新しない。
 
 ## 注意点
 

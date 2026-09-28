@@ -57,7 +57,7 @@ macOSでは、リポジトリ直下の `start_dashboard.command` をダブルク
 
 モデル選択は、画面が起動する子プロセスにだけ `LLM_PROVIDER` とモデルIDを渡します。リポジトリ直下の `.env` は変更しません。Bedrockモデルでは `.env` または通常のAWS認証チェーンに有効なAWS認証情報とリージョンを、Geminiでは `GEMINI_API_KEY` をあらかじめ設定してください。GPT-5.6 Sol/Terra/LunaのBedrock Converse呼出しは `temperature` を受け付けないため、この項目を送信せずBedrock既定値を使い、成果物メタデータでは `temperature: null` と記録します。画面上の入力JSON・中間出力・ログの既定値は `output/<model>/`、LLM出力と評価結果の既定値は `results/<model>/` へ切り替わります。
 
-評価4・5・6・8の代表状態数とハミング距離閾値は、評価7の選定結果に合わせて `K=15`、`hamming=0` を既定値にしています。評価7は感度分析のため、複数条件を指定する探索範囲を維持します。
+評価4・5・6・8の代表状態数とハミング距離閾値は、評価7の選定結果に合わせて `K=10`、`hamming=2` を既定値にしています。評価7は感度分析のため、複数条件を指定する探索範囲を維持します。
 
 `seed` や `overwrite` は対象CLIに実在する引数がないため、UI項目として追加していません。
 
@@ -107,7 +107,7 @@ macOSでは、リポジトリ直下の `start_dashboard.command` をダブルク
    `scripts/run_llm_extraction.py --days 14` を実行します。`--runs` で複数runを生成できます。
 
 3. 評価6用 `state_series.csv` を作成  
-   `scripts/evaluate_adl_labels.py --state-series-preprocessing network-equivalent` で、先頭14日から作成した代表状態定義を固定し、network構築と同じ遅延OFF平滑化で全220日を写像した比較用の照合系列を `output/<model>/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv` へ保存します。`--state-series-days` は指定しません。`14days` は抽出・LLM入力条件であり、照合期間は全220日です。部屋統合を選んだ場合だけ既存互換の `aruba_` 名を使います。
+   `scripts/evaluate_adl_labels.py --state-series-preprocessing network-equivalent` で、先頭14日から作成した代表状態定義を固定し、network構築と同じ遅延OFF平滑化で全220日を写像した比較用の照合系列を `output/<model>/6_adl_evaluation_aruba_individual_10_2_14days/state_series.csv` へ保存します。`--state-series-days` は指定しません。`14days` は抽出・LLM入力条件であり、照合期間は全220日です。部屋統合を選んだ場合だけ既存互換の `aruba_` 名を使います。
 
 4. LLM単独ベースラインを生成  
    既定では `scripts/run_direct_log_baseline.py --log-days 14 --llm-only-time-mode split --extract-only` を実行します。既存の Morning / Daytime / Night / Midnight ごとに代表状態系列を分け、各時間帯を独立してLLMへ入力します。画面の「LLM-only input」で `Split by time period (default)` またはIoT2026再現用の `Legacy unsplit` を選べます。
@@ -119,7 +119,7 @@ Evaluation 7のbest-condition manifestを指定した場合、DashboardはK/h・
 
 評価6・7画面では旧sentinelラベルの選択欄を表示しない。`no_occurrence`, `no_adl_overlap`, `prediction missing`, `unknown` は評価ロジックで固定された別状態であり、conditional/end-to-end指標とcoverage/rateへ一貫して反映される。旧CLI引数は既存コマンドとの互換性のため受理されるが、アプリが新規生成するコマンドには付与しない。
 
-アプリの標準条件は、評価7の選定結果に合わせて代表状態数 `K=15`、ハミング距離閾値 `0` です。個別センサ既定の中間出力には `output/<model>/6_adl_evaluation_aruba_individual_15_0_14days/` を使い、Kやハミング距離を変えた場合も `output/<model>/6_adl_evaluation_aruba_individual_{K}_{hamming}_{days}days/` を使います。部屋統合を選んだ場合だけ既存互換の `aruba_` 名を使います。
+アプリの標準条件は、評価7の選定結果に合わせて代表状態数 `K=10`、ハミング距離閾値 `2` です。個別センサ既定の中間出力には `output/<model>/6_adl_evaluation_aruba_individual_10_2_14days/` を使い、Kやハミング距離を変えた場合も `output/<model>/6_adl_evaluation_aruba_individual_{K}_{hamming}_{days}days/` を使います。部屋統合を選んだ場合だけ既存互換の `aruba_` 名を使います。
 
 ## 評価7のステップ
 
@@ -143,13 +143,13 @@ Streamlit画面は正式条件（14日・全28条件・各5 run）を固定で�
 
 ## APIテスト
 
-サイドバーの「評価・テストを選択」で `APIテスト` を選ぶ。任意の正式K/h条件・1時間帯（既定: `K=15, hamming=0, Morning`）を選び、明示許可後に**実APIを1回だけ**呼び出せます。通常抽出と同じプロンプトとLLM adapterを使うが、retryやcheckpoint再利用は行わず、JSON配列・4必須キー・許可ADLラベル・系列長の厳密な契約を検証します。結果は `results/<model>/api_smoke_tests/` に分離され、評価4〜10の入力・checkpoint・集計には使いません。
+サイドバーの「評価・テストを選択」で `APIテスト` を選ぶ。任意の正式K/h条件・1時間帯（既定: `K=10, hamming=2, Morning`）を選び、明示許可後に**実APIを1回だけ**呼び出せます。通常抽出と同じプロンプトとLLM adapterを使うが、retryやcheckpoint再利用は行わず、JSON配列・4必須キー・許可ADLラベル・系列長の厳密な契約を検証します。結果は `results/<model>/api_smoke_tests/` に分離され、評価4〜10の入力・checkpoint・集計には使いません。
 
 ## 評価8のステップ
 
 参照ドキュメント: `docs/evaluations/evaluation_8_frequency_stratified_adl_consistency.md`
 
-評価8ではラジオボタンで「154日: 提案手法のみ」（既定）または「14日: 提案手法 vs LLM単独ベースライン」を選択して実行する。代表状態数K（既定15）、ハミング距離閾値（既定0）、runs（既定5）を変更できる。頻度帯方式は選択式ではなく、三分位と固定回数帯を一度のコマンドで両方実行する。各pattern ID自身の出現だけを取得し、同じ物理区間を一意化した後の件数からrunごとに帯を再割当てする。比較scopeでも評価6詳細CSVの旧出現数をそのまま使わず、画面で指定した同条件のstate-series CSVからown-ID出現数を再構築する。入力評価は重複実行せず、同じ評価レコードから2方式を集計し、指定したoutput directoryの `tertile/` と `fixed/` に分けて保存する。固定帯の下限（既定`0,1,10,100,1000,10000`）は変更できる。154日・提案手法のみの`fixed/`には、帯別の平均パターン数分布とPrecision / Recall / F1図も保存できる。修正版の標準出力先は `results/<model>/8_proposed_own_id_fixed/` と `results/<model>/8_vs_llm_own_id_fixed/` で、run別CSV、修正前後件数、重複監査、重み総和検証を保存する。
+評価8ではラジオボタンで「154日: 提案手法のみ」（既定）または「14日: 提案手法 vs LLM単独ベースライン」を選択して実行する。代表状態数K（既定10）、ハミング距離閾値（既定2）、runs（既定5）を変更できる。頻度帯方式は選択式ではなく、三分位と固定回数帯を一度のコマンドで両方実行する。各pattern ID自身の出現だけを取得し、同じ物理区間を一意化した後の件数からrunごとに帯を再割当てする。比較scopeでも評価6詳細CSVの旧出現数をそのまま使わず、画面で指定した同条件のstate-series CSVからown-ID出現数を再構築する。入力評価は重複実行せず、同じ評価レコードから2方式を集計し、指定したoutput directoryの `tertile/` と `fixed/` に分けて保存する。固定帯の下限（既定`0,1,10,100,1000,10000`）は変更できる。154日・提案手法のみの`fixed/`には、帯別の平均パターン数分布とPrecision / Recall / F1図も保存できる。修正版の標準出力先は `results/<model>/8_proposed_own_id_fixed/` と `results/<model>/8_vs_llm_own_id_fixed/` で、run別CSV、修正前後件数、重複監査、重み総和検証を保存する。
 
 ## 評価10のステップ
 

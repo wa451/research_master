@@ -86,8 +86,8 @@ from src.behavior_pattern_mining.data.sensor_representation import (  # noqa: E4
 )
 
 
-DEFAULT_N_STATES = 15
-DEFAULT_HAMMING_THRESHOLD = 0
+DEFAULT_N_STATES = 10
+DEFAULT_HAMMING_THRESHOLD = 2
 
 
 def render_sensor_representation(scope: str) -> tuple[str, str, str]:
