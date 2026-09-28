@@ -33,7 +33,7 @@
 | ラベル付きCASAS | `new_labeled_data/aruba.txt` | ADL begin/endラベルとセンサーイベントを含む正解データ。 |
 | 代表状態テーブル | `state/aruba_15_1_154days.txt` | センサー状態を代表状態IDに対応付ける。 |
 | センサーマップ | `configs/aruba_sensor_map.json` | `M003` などを代表状態テーブルの列名へ対応付ける。 |
-| LLM抽出パターン | `output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json` | 評価対象の系列パターン。 |
+| LLM抽出パターン | `results/<model>/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json` | 評価対象の系列パターン。 |
 | 最小継続時間設定 | `configs/adl_min_duration.json` | 推奨手順で明示指定するADLカテゴリ別の短時間予測除外設定。CLI既定はファイル未指定で、実装内既定値を使う。 |
 
 評価4では、ADL正解ラベルと代表状態系列の再構築に `new_labeled_data/aruba.txt` を使う。`data/aruba.csv` は使わない。
@@ -42,18 +42,18 @@
 
 | 出力 | 内容 |
 |---|---|
-| `results/4_adl_detect/pattern_occurrences.csv` | パターン出現区間。 |
-| `results/4_adl_detect/pattern_adl_mapping.csv` | パターンごとのADL割当。 |
-| `results/4_adl_detect/merged_predictions.csv` | 同じADLの近接予測をマージした区間。 |
-| `results/4_adl_detect/filtered_predictions.csv` | 最小継続時間フィルタ後の予測区間。 |
-| `results/4_adl_detect/adl_metrics_iou_0.3.csv` | IoU `0.3` のADLカテゴリ別Precision / Recall / F1。 |
-| `results/4_adl_detect/adl_metrics_iou_0.5.csv` | IoU `0.5` のADLカテゴリ別Precision / Recall / F1。 |
-| `results/4_adl_detect/boundary_metrics_iou_0.3.csv` | IoU `0.3` の境界誤差。 |
-| `results/4_adl_detect/boundary_metrics_iou_0.5.csv` | IoU `0.5` の境界誤差。 |
-| `results/4_adl_detect/adl_interval_hit_metrics.csv` | ADL区間内hit評価。 |
-| `results/4_adl_detect/adl_interval_hit_details.csv` | 各正解区間のhit/miss詳細。 |
-| `results/4_adl_detect/evaluation_summary.json` | 入力パス、閾値、後処理件数、平均指標。 |
-| `results/4_adl_detect/state_series.csv` | `--write-state-series` 指定時に保存する代表状態系列CSV。下流で再利用する場合は、抽出側・下流側と前処理条件が一致するか確認する。評価6・7の正式workflowは別途 `network-equivalent` を明示した系列を使う。 |
+| `results/<model>/4_adl_detect/pattern_occurrences.csv` | パターン出現区間。 |
+| `results/<model>/4_adl_detect/pattern_adl_mapping.csv` | パターンごとのADL割当。 |
+| `results/<model>/4_adl_detect/merged_predictions.csv` | 同じADLの近接予測をマージした区間。 |
+| `results/<model>/4_adl_detect/filtered_predictions.csv` | 最小継続時間フィルタ後の予測区間。 |
+| `results/<model>/4_adl_detect/adl_metrics_iou_0.3.csv` | IoU `0.3` のADLカテゴリ別Precision / Recall / F1。 |
+| `results/<model>/4_adl_detect/adl_metrics_iou_0.5.csv` | IoU `0.5` のADLカテゴリ別Precision / Recall / F1。 |
+| `results/<model>/4_adl_detect/boundary_metrics_iou_0.3.csv` | IoU `0.3` の境界誤差。 |
+| `results/<model>/4_adl_detect/boundary_metrics_iou_0.5.csv` | IoU `0.5` の境界誤差。 |
+| `results/<model>/4_adl_detect/adl_interval_hit_metrics.csv` | ADL区間内hit評価。 |
+| `results/<model>/4_adl_detect/adl_interval_hit_details.csv` | 各正解区間のhit/miss詳細。 |
+| `results/<model>/4_adl_detect/evaluation_summary.json` | 入力パス、閾値、後処理件数、平均指標。 |
+| `output/<model>/4_adl_detect/state_series.csv` | `--write-state-series` 指定時に保存する代表状態系列CSV。下流で再利用する場合は、抽出側・下流側と前処理条件が一致するか確認する。評価6・7の正式workflowは別途 `network-equivalent` を明示した系列を使う。 |
 
 ## 結果の読み方
 
@@ -81,7 +81,7 @@ uv run python scripts/run_build_network_from_labeled_casas.py \
 
 ### 2. 🟨 **条件付き** 状態遷移ネットワークからLLMパターンを抽出する
 
-`output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json` がなければ実行する。既に同じ条件のLLM出力がある場合はスキップしてよい。前段と同じ条件を明示する。
+`results/<model>/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json` がなければ実行する。既に同じ条件のLLM出力がある場合はスキップしてよい。前段と同じ条件を明示する。
 
 ```bash
 uv run python scripts/run_llm_extraction.py \
@@ -100,8 +100,8 @@ uv run python scripts/evaluate_adl_labels.py \
   --labeled-casas new_labeled_data/aruba.txt \
   --state-table state/aruba_15_1_154days.txt \
   --sensor-map configs/aruba_sensor_map.json \
-  --patterns output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
-  --output-dir results/4_adl_detect \
+  --patterns results/<model>/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json \
+  --output-dir results/<model>/4_adl_detect \
   --iou-thresholds 0.3 0.5 \
   --wake-window-minutes 30 \
   --match-mode exact \
@@ -111,12 +111,12 @@ uv run python scripts/evaluate_adl_labels.py \
   --merge-gap-minutes 5 \
   --min-duration-config configs/adl_min_duration.json \
   --hit-tolerance-minutes 10 \
-  --write-state-series results/4_adl_detect/state_series.csv
+  --write-state-series output/<model>/4_adl_detect/state_series.csv
 ```
 
 ### 4. 🟩 **スキップ可** 代表状態系列CSVだけを再利用する
 
-`results/4_adl_detect/state_series.csv` が既にあり、同じ評価4条件の下流処理だけを実行したい場合は評価4の再実行を省いてよい。ただし、保存時の `event-driven` / `network-equivalent`、平滑化、期間、K/hが下流条件と一致する場合に限る。評価6・7の正式入力には、別途 `network-equivalent` で作成した条件一致のCSVを使う。このStepの追加コマンドはない。
+`output/<model>/4_adl_detect/state_series.csv` が既にあり、同じ評価4条件の下流処理だけを実行したい場合は評価4の再実行を省いてよい。ただし、保存時の `event-driven` / `network-equivalent`、平滑化、期間、K/hが下流条件と一致する場合に限る。評価6・7の正式入力には、別途 `network-equivalent` で作成した条件一致のCSVを使う。このStepの追加コマンドはない。
 
 ## 比較対象
 
@@ -147,8 +147,8 @@ uv run python scripts/evaluate_adl_labels.py \
 | `--event-log` | 未指定 | ラベルなしイベントログからevent-driven系列を再構築する場合だけ指定。 |
 | `--state-table` | configのK/h/daysから組み立てる | `state/aruba_15_1_154days.txt`。 |
 | `--sensor-map` | `configs/aruba_sensor_map.json` | 同左。 |
-| `--patterns` | configのK/h/daysから組み立てたrun 1 JSON | `output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json`。 |
-| `--output-dir` | `results/4_adl_detect` | 同左。 |
+| `--patterns` | configのK/h/daysから組み立てたrun 1 JSON | `results/<model>/aruba_15_1_154days/llm_sequences_modes_15_1_154days_1.json`。 |
+| `--output-dir` | `results/<model>/4_adl_detect` | 同左。 |
 | `--iou-thresholds` | `0.3 0.5` | 同左。 |
 | `--wake-window-minutes` | `30` | 同左。ただしADL分類規則は未解決（[KI-07](../research/known_issues.md)）。 |
 | `--match-mode` | `exact` | 同左。`skip-other` も選択可能。 |
@@ -156,7 +156,7 @@ uv run python scripts/evaluate_adl_labels.py \
 | `--hamming-threshold` | config値（現在 `1`） | 状態表・パターン抽出条件と一致させる。正式hは未解決（[KI-01](../research/known_issues.md)）。 |
 | `--split-date` | 未指定 | 指定時はこの時刻より前で対応付けを学習し、後を評価する。 |
 | `--train-ratio` | 未指定 | `--split-date` 未指定時の時間比率split。splitなしの位置付けは未解決（[KI-07](../research/known_issues.md)）。 |
-| `--write-state-series` | 未指定 | 互換手順では `results/4_adl_detect/state_series.csv`。 |
+| `--write-state-series` | 未指定 | 互換手順では `output/<model>/4_adl_detect/state_series.csv`。 |
 | `--state-series-preprocessing` | `event-driven` | `network-equivalent` も選択可能。評価4の本書はevent-driven互換手順であり、評価6・7の正式workflowはnetwork-equivalentを明示する。 |
 | `--smoothing-window-sec` | `5` | `network-equivalent` の遅延OFF窓。event-drivenでは使わない。 |
 | `--state-series-days` | 未指定 | `network-equivalent` では未指定時にラベル付きデータの全カレンダー期間を使う。 |

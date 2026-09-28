@@ -1,6 +1,6 @@
 # 評価10: SwitchBot実宅ログの時間ホールドアウト評価
 
-> **モデル別保存:** `preparation.json`、state table、network、frequency patterns、train/test segmentsは `output/10_switchbot/<期間>/` に残す。LLM fingerprint/checkpoint/usageと評価結果は `results/<model>/10_switchbot/<期間>/` に保存し、同一入力fingerprintでも異なるモデル間では共有しない。
+> **モデル別保存:** `preparation.json`、state table、network、frequency patterns、train/test segmentsは `output/<model>/10_switchbot/<期間>/` に残す。LLM fingerprint/checkpoint/usageと評価結果は `results/<model>/10_switchbot/<期間>/` に保存し、同一入力fingerprintでも異なるモデル間では共有しない。
 
 ## 目的と評価可能範囲
 
@@ -79,14 +79,14 @@ uv run python scripts/evaluate_10_switchbot.py --snapshot data/switchbot/2026-09
 
 | パス | 内容 |
 |---|---|
-| `output/10_switchbot/<期間>/preparation.json` | 入力hash、期間、split、パラメータ、件数、警告。 |
-| `output/10_switchbot/<期間>/state_table.tsv` | trainだけで決めた代表状態表。 |
-| `output/10_switchbot/<期間>/network/` | train時間帯別のLLM入力ネットワーク。 |
-| `output/10_switchbot/<期間>/frequency_patterns.json` | trainで生成したfrequency系列。 |
-| `output/10_switchbot/<期間>/llm/<fingerprint>/` | 同一入力・split・パラメータ・networkだけで再利用するLLM出力とチェックポイント。 |
-| `output/10_switchbot/<期間>/{train,test}_state_segments.json` | 日・時間帯境界で分けた固定状態系列。 |
-| `results/10_switchbot/<期間>/evaluation10_summary.csv` | 手法別の主要指標とstatus。 |
-| `results/10_switchbot/<期間>/evaluation10_pattern_details.csv` | パターン別のtrain/test出現・日単位再現。 |
-| `results/10_switchbot/<期間>/evaluation10_summary.json` | 再現条件、入力パス、summary、出力一覧。 |
+| `output/<model>/10_switchbot/<期間>/preparation.json` | 入力hash、期間、split、パラメータ、件数、警告。 |
+| `output/<model>/10_switchbot/<期間>/state_table.tsv` | trainだけで決めた代表状態表。 |
+| `output/<model>/10_switchbot/<期間>/network/` | train時間帯別のLLM入力ネットワーク。 |
+| `output/<model>/10_switchbot/<期間>/frequency_patterns.json` | trainで生成したfrequency系列。 |
+| `results/<model>/10_switchbot/<期間>/llm/<fingerprint>/` | 同一入力・split・パラメータ・networkだけで再利用するLLM出力とチェックポイント。 |
+| `output/<model>/10_switchbot/<期間>/{train,test}_state_segments.json` | 日・時間帯境界で分けた固定状態系列。 |
+| `results/<model>/10_switchbot/<期間>/evaluation10_summary.csv` | 手法別の主要指標とstatus。 |
+| `results/<model>/10_switchbot/<期間>/evaluation10_pattern_details.csv` | パターン別のtrain/test出現・日単位再現。 |
+| `results/<model>/10_switchbot/<期間>/evaluation10_summary.json` | 再現条件、入力パス、summary、出力一覧。 |
 
-`data/`, `output/`, `results/`, `picture/` は既存方針どおりGit管理外であり、評価10の状態表も `output/` 配下へ保存する。実宅ログや派生成果物をコミットしない。
+`data/`, `output/<model>/`, `results/<model>/`, `picture/` は既存方針どおりGit管理外であり、評価10の状態表も `output/<model>/` 配下へ保存する。実宅ログや派生成果物をコミットしない。

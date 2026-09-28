@@ -43,20 +43,20 @@
 | `picture/aruba_{K}_{hamming}_{DAYS}days/state_transition_all.json` | 全期間の状態遷移ネットワーク。 |
 | `picture/aruba_{K}_{hamming}_{DAYS}days/state_transition_{mode}.json` | 時間帯別ネットワーク。 |
 | `picture/aruba_{K}_{hamming}_{DAYS}days/*.png` | 状態遷移図・タイムライン。 |
-| `output/aruba_{K}_{hamming}_{DAYS}days/prob_threshold_sequences_{K}_{hamming}_{DAYS}days.json` | 遷移確率ベースライン系列。 |
-| `output/aruba_{K}_{hamming}_{DAYS}days/state_sequence_counts_{K}_{hamming}_{DAYS}days.json` | 頻度ベースライン系列。 |
-| `output/aruba_{K}_{hamming}_{DAYS}days/llm_sequences_modes_{K}_{hamming}_{DAYS}days_*.json` | LLM抽出系列。 |
-| `output/aruba_{K}_{hamming}_{DAYS}days/llm_modes_metrics_{K}_{hamming}_{DAYS}days_run{run}.csv` | run・時間帯ごとのbackend、処理時間、token使用量。 |
-| `output/aruba_{K}_{hamming}_{DAYS}days/llm_modes_metrics_avg_{K}_{hamming}_{DAYS}days.csv` | 時間帯ごとの処理時間・token使用量の平均。 |
-| `output/aruba_{K}_{hamming}_{DAYS}days/evaluation_report_{K}_{hamming}_{DAYS}days_*.txt` | LLM出力とベースラインの比較レポート。 |
-| `output/aruba_{K}_{hamming}_{DAYS}days/llm_eval_runs_{K}_{hamming}_{DAYS}days.xlsx` | 複数run評価の集計。 |
+| `output/<model>/aruba_{K}_{hamming}_{DAYS}days/prob_threshold_sequences_{K}_{hamming}_{DAYS}days.json` | 遷移確率ベースライン系列。 |
+| `output/<model>/aruba_{K}_{hamming}_{DAYS}days/state_sequence_counts_{K}_{hamming}_{DAYS}days.json` | 頻度ベースライン系列。 |
+| `results/<model>/aruba_{K}_{hamming}_{DAYS}days/llm_sequences_modes_{K}_{hamming}_{DAYS}days_*.json` | LLM抽出系列。 |
+| `results/<model>/aruba_{K}_{hamming}_{DAYS}days/llm_modes_metrics_{K}_{hamming}_{DAYS}days_run{run}.csv` | run・時間帯ごとのbackend、処理時間、token使用量。 |
+| `results/<model>/aruba_{K}_{hamming}_{DAYS}days/llm_modes_metrics_avg_{K}_{hamming}_{DAYS}days.csv` | 時間帯ごとの処理時間・token使用量の平均。 |
+| `output/<model>/aruba_{K}_{hamming}_{DAYS}days/evaluation_report_{K}_{hamming}_{DAYS}days_*.txt` | LLM出力とベースラインの比較レポート。 |
+| `results/<model>/aruba_{K}_{hamming}_{DAYS}days/llm_eval_runs_{K}_{hamming}_{DAYS}days.xlsx` | 複数run評価の集計。 |
 
 ## 結果の読み方
 
 | 順序 | ファイル | 読み方 |
 |---|---|---|
-| 1 | `output/aruba_{K}_{hamming}_{DAYS}days/llm_eval_runs_{K}_{hamming}_{DAYS}days.xlsx` | LLMまで実行した場合のsummaryとして、run別と平均のPrecision / Recall / F1を見る。標準偏差と出力パターン数は現在のExcelには含まれない（[KI-03](../research/known_issues.md)）。 |
-| 2 | `state/aruba_{K}_{hamming}_{DAYS}days.txt`, `picture/.../state_transition_*.json`, `output/.../state_sequence_counts_*.json` | detailsとして、状態の意味、遷移の複雑さ、頻出系列の内容を見る。 |
+| 1 | `results/<model>/aruba_{K}_{hamming}_{DAYS}days/llm_eval_runs_{K}_{hamming}_{DAYS}days.xlsx` | LLMまで実行した場合のsummaryとして、run別と平均のPrecision / Recall / F1を見る。標準偏差と出力パターン数は現在のExcelには含まれない（[KI-03](../research/known_issues.md)）。 |
+| 2 | `state/aruba_{K}_{hamming}_{DAYS}days.txt`, `picture/.../state_transition_*.json`, `output/<model>/.../state_sequence_counts_*.json` | detailsとして、状態の意味、遷移の複雑さ、頻出系列の内容を見る。 |
 | 3 | `configs/default.yaml`, `docs/research/paper_parameters.md` | 再現条件として、`K`, ハミング距離、日数、閾値を確認する。 |
 
 ## 実行手順
@@ -77,7 +77,7 @@ uv run python scripts/run_build_network.py
 
 ### 3. 🟨 **条件付き** ベースラインを作成する
 
-`output/aruba_{K}_{hamming}_{DAYS}days/prob_threshold_sequences_*.json` や `state_sequence_counts_*.json` がなければ実行する。
+`output/<model>/aruba_{K}_{hamming}_{DAYS}days/prob_threshold_sequences_*.json` や `state_sequence_counts_*.json` がなければ実行する。
 
 ```bash
 uv run python scripts/run_baselines.py
@@ -135,7 +135,7 @@ uv run python scripts/run_all.py
 ## 注意点
 
 - 同じ `K`, `hamming_threshold`, `DAYS` 条件を再実行すると、同じ出力先の成果物を再利用または上書きする可能性がある。既存結果を残したい場合は出力を退避してから実行する。異なる条件は通常、条件suffixを含む別ディレクトリへ保存される。
-- LLM出力は非決定性を含むため、構造的な違いを見る場合はまず `state/`, `picture/`, `output/*baseline*` を比較する。
+- LLM出力は非決定性を含むため、構造的な違いを見る場合はまず `state/`, `picture/`, `output/<model>/*baseline*` を比較する。
 - LLMまで含めて比較する場合は、評価2と同じく複数runの平均で比較する。
 - `experiment_config.py` は互換レイヤーとして使われているため、削除しない。
 - 無引数実行の `h=1` と現論文採用条件 `h=0` の関係は未解決である（[KI-01](../research/known_issues.md)）。

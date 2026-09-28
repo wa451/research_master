@@ -1,6 +1,6 @@
 # 評価8: 頻度帯別ADL整合性評価
 
-> **モデル別保存:** 評価6detailsまたは154日proposed JSONは現在モデルの `results/<model>/` から読み、結果は `results/<model>/8_vs_llm_own_id_fixed/` または `results/<model>/8_proposed_own_id_fixed/` に保存する。照合用state seriesはモデル非依存のため `output/` に残す。評価8は新しいLLM呼出しを行わない。
+> **モデル別保存:** 評価6detailsまたは154日proposed JSONは現在モデルの `results/<model>/` から読み、結果は `results/<model>/8_vs_llm_own_id_fixed/` または `results/<model>/8_proposed_own_id_fixed/` に保存する。照合用state seriesも同じモデルの `output/<model>/` から読む。評価8は新しいLLM呼出しを行わない。
 
 ## 目的
 
@@ -12,9 +12,9 @@
 
 | 条件 | scope | 入力 | 出力先 |
 |---|---|---|---|
-| 14日・手法比較 | `comparison_14days` | 評価6のproposed / direct-log詳細CSV | `results/8_vs_llm_own_id_fixed/` |
-| 154日・提案手法のみ | `proposed_154days` | 154日提案手法JSON 5 run、抽出時と同じ前処理で生成したstate series、ADL正解データ | `results/8_proposed_own_id_fixed/` |
-| 30日・手法比較（互換） | `comparison_30days` | 過去に生成した30日評価6詳細CSV | 14日と異なる明示先（例: `results/8_vs_llm_30days_own_id_fixed/`） |
+| 14日・手法比較 | `comparison_14days` | 評価6のproposed / direct-log詳細CSV | `results/<model>/8_vs_llm_own_id_fixed/` |
+| 154日・提案手法のみ | `proposed_154days` | 154日提案手法JSON 5 run、抽出時と同じ前処理で生成したstate series、ADL正解データ | `results/<model>/8_proposed_own_id_fixed/` |
+| 30日・手法比較（互換） | `comparison_30days` | 過去に生成した30日評価6詳細CSV | 14日と異なる明示先（例: `results/<model>/8_vs_llm_30days_own_id_fixed/`） |
 
 ### 14日・手法比較
 
@@ -40,7 +40,7 @@ state seriesを特定できなければ停止する。
 
 ### 30日・手法比較（互換scope）
 
-`comparison_30days` は過去の30日詳細CSVを再利用するCLI互換scopeであり、正式分析の標準scopeではない。現行実装は詳細CSVの対象期間が30日条件かを検証せず、`--output-dir` を省略すると14日比較と同じ `results/8_vs_llm_own_id_fixed/` を使う。期間の妥当性を入力summaryとパスで確認し、14日結果を上書きしない別出力先を必ず明示する。この制約は [KI-10](../research/known_issues.md#ki-10) で追跡している。
+`comparison_30days` は過去の30日詳細CSVを再利用するCLI互換scopeであり、正式分析の標準scopeではない。現行実装は詳細CSVの対象期間が30日条件かを検証せず、`--output-dir` を省略すると14日比較と同じ `results/<model>/8_vs_llm_own_id_fixed/` を使う。期間の妥当性を入力summaryとパスで確認し、14日結果を上書きしない別出力先を必ず明示する。この制約は [KI-10](../research/known_issues.md#ki-10) で追跡している。
 
 ### 154日・提案手法のみ
 
@@ -48,8 +48,8 @@ state seriesを特定できなければ停止する。
 
 | 入力 | 既定例 |
 |---|---|
-| 提案手法JSON | `output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json` |
-| state series | `output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv` |
+| 提案手法JSON | `results/<model>/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json` |
+| state series | `output/<model>/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv` |
 | ADL正解データ | `new_labeled_data/aruba.txt` |
 
 `proposed_154days` では、state series全体を無条件には使用しない。state seriesの
@@ -223,7 +223,7 @@ uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py \
   --fixed-frequency-bin-edges 0,1,10,100,1000,10000
 ```
 
-三分位の結果は `results/8_proposed_own_id_fixed/tertile/`、固定回数帯と図は `results/8_proposed_own_id_fixed/fixed/` に保存する。
+三分位の結果は `results/<model>/8_proposed_own_id_fixed/tertile/`、固定回数帯と図は `results/<model>/8_proposed_own_id_fixed/fixed/` に保存する。
 
 ### 154日・提案手法のみ
 

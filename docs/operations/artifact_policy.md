@@ -1,6 +1,6 @@
 # Artifact Policy
 
-この文書は、研究コードで生成されるファイルをGit管理するかどうかの方針です。`output/` はLLM実行前から共有できる入力・前処理・準備済みデータ、`results/<model>/` はLLM生成物、checkpoint、usage、モデル依存評価結果を置く。モデルAの成果物をモデルBが参照しないことを最優先する。
+この文書は、研究コードで生成されるファイルをGit管理するかどうかの方針です。すべての生成物は `output/<model>/` または `results/<model>/` に置く。前者は前処理・baseline・state series・実行ログ、後者はLLM生成物、checkpoint、usage、評価結果である。モデルAの成果物をモデルBが参照しないことを最優先する。
 
 ## 分類
 
@@ -18,6 +18,17 @@
 新しく整理された実験では、以下を使う。
 
 ```text
+output/
+└── <model>/
+    ├── aruba_individual_{K}_{h}_{days}days/  # baseline、state seriesなどの中間成果物
+    ├── 5_adl_evaluation_15_0_154days_fixed/
+    ├── 5_adl_correspondence_baselines_fixed/
+    ├── 6_adl_evaluation_aruba_individual_15_0_14days/
+    ├── 9_hestia/                         # 生成ログ、truth、prepared state/network
+    ├── 10_switchbot/                      # preparation、state table、network、segments
+    ├── cost_estimates/
+    └── logs/evaluation_dashboard/
+
 results/
 └── <model>/
     ├── aruba_individual_{K}_{h}_{days}days/  # 個別センサ既定の提案手法JSON、mode checkpoint、usage
@@ -30,31 +41,21 @@ results/
     ├── 8_proposed_own_id_fixed/
     ├── 9_hestia/
     └── 10_switchbot/
-
-output/
-├── 5_rule_filter/
-├── 5_adl_evaluation_15_0_154days_fixed/
-├── 5_adl_correspondence_baselines_fixed/
-├── 6_adl_evaluation_aruba_individual_15_0_14days/
-├── aruba_15_0_154days/
-├── aruba_individual_15_0_14days/
-├── tmp/
-└── logs/
 ```
 
-上記 `output/llm_direct_*` や旧 `output/aruba_*/llm_*` は移行元としてのみ残すlegacy成果物であり、新規実行は `results/<model>/` に書く。Gemini移行後に元ファイルを消す場合は、`scripts/migrate_gemini_results.py --cleanup-verified` が全移行先のSHA-256一致を確認してから、モデル依存ファイルだけを削除する。`output/cost_estimates/` は複数モデルの実行前見積もりなので例外として `output/` に維持する。
+ルート直下の旧 `output/*` は移行元であり、新規実行では使用しない。既存Gemini成果物を `output/gemini-2.5-pro/` へ移すときは、まず `scripts/migrate_legacy_output_namespace.py --dry-run` で対象を確認し、次に `--cleanup-verified` を実行する。この操作は全コピー先のSHA-256一致を確認してから移行元だけを削除する。旧 `results/*` のLLM依存ファイルについては `scripts/migrate_gemini_results.py --cleanup-verified` を使う。
 
 ## 現行ディレクトリの扱い
 
 - `state/`: 現行コードの代表状態テーブル出力。すぐには移動しない。
 - `picture/`: 現行コードの図とLLM入力JSON出力。すぐには移動しない。
-- `output/`: 入力、前処理、state series、network、Hestia/SwitchBot preparation、モデル非依存baseline、cost estimate。
-- `results/<model>/`: LLM出力、checkpoint、usage、モデル依存の評価結果。`model_metadata.json` でprovider/model IDを検証する。
+- `output/<model>/`: 前処理、state series、network由来中間物、Hestia/SwitchBot preparation、baseline、cost estimate、ダッシュボードログ。
+- `results/<model>/`: LLM出力、checkpoint、usage、評価結果。`model_metadata.json` でprovider/model IDを検証する。
 
 ## 運用ルール
 
-1. 論文・発表で使う評価結果は `results/` に置く。
-2. LLM runごとの試行出力・checkpoint・metricsは `results/<model>/`、モデル非依存の中間生成物とログは `output/` に置く。
+1. 論文・発表で使う評価結果は `results/<model>/` に置く。
+2. 中間生成物・baseline・state series・ログは `output/<model>/`、LLM runごとの試行出力・checkpoint・metricsと評価結果は `results/<model>/` に置く。
 3. データセット本体とAPIキーはGit管理しない。
 4. 既存の追跡済み生成物を外す場合は、先に `docs/operations/experiment_reproduction.md` の再現手順と必要成果物リストを更新する。
 5. 生成物を削除する場合は、論文再現に不要であることを確認してから行う。

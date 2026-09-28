@@ -1,6 +1,6 @@
 # 評価5: ADLラベルを用いたパターン単位評価
 
-> **モデル別保存:** 提案手法JSON・checkpoint・usageは `results/<model>/aruba_{K}_{h}_{days}days/`、本評価の既定出力は `results/<model>/5_pattern_quality_fixed/` に保存する。`<model>` は `.env` の実行モデルから自動決定される。`output/5_adl_evaluation_*` のstate series、baseline、状態定義はモデル非依存入力として移動しない。以下に残る `output/aruba_*/llm_*` と `results/5_*` の表記は既存Gemini成果物の移行元を説明するlegacy pathで、新規実行では同じ下位名を `results/<model>/` 配下で使う。
+> **モデル別保存:** state series・frequency/rule/FP-Growth/transition baseline・cacheは `output/<model>/`、提案手法JSON・checkpoint・usageと本評価結果は `results/<model>/` に保存する。`<model>` は `.env` の実行モデルから自動決定される。ルート直下の旧 `output/*` と `results/*` はGemini移行元であり、新規実行には使わない。
 
 ## 評価の要約
 
@@ -58,26 +58,26 @@ occurrence_containment(p, q)
 | 入力 | 例 | 役割 |
 |---|---|---|
 | ラベル付きCASAS | `new_labeled_data/aruba.txt` | ADL begin/endラベルを含む正解データ。 |
-| 代表状態系列CSV | `output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv` | `start_time,end_time,state_id` 形式の代表状態区間。抽出と同じ前処理・代表状態定義から生成した系列を全手法の照合に共用する。 |
+| 代表状態系列CSV | `output/<model>/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv` | `start_time,end_time,state_id` 形式の代表状態区間。抽出と同じ前処理・代表状態定義から生成した系列を全手法の照合に共用する。 |
 | 代表状態定義または状態遷移ネットワーク | `state/aruba_15_0_154days.txt` または `picture/aruba_15_0_154days/state_transition_all.json` | 状態IDに対応するactive sensorsを解決し、診断用 `low_information_ratio` を算出する。どちらか一方を必ず指定する。 |
-| frequencyパターン | `output/aruba_15_0_154days/state_sequence_counts_15_0_154days.json` | 頻度ベースライン系列。 |
-| rule-filteredパターン | `output/5_rule_filter/*.csv` | ルールフィルタ済み頻度系列。 |
+| frequencyパターン | `output/<model>/aruba_15_0_154days/state_sequence_counts_15_0_154days.json` | 頻度ベースライン系列。 |
+| rule-filteredパターン | `output/<model>/5_rule_filter/*.csv` | ルールフィルタ済み頻度系列。 |
 | FP-Growthパターン | train期間の代表状態系列から実行時生成 | 関連研究ベースラインとして使う頻出n-gram系列。 |
 | transition_probabilityパターン | train期間の代表状態系列から実行時生成 | 代表状態遷移確率が高い経路を抽出するベースライン。 |
-| proposedパターン | `output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json` | 提案手法のLLM系列。`--runs 5` では `_1.json` から `_5.json` までを評価して平均を出す。 |
+| proposedパターン | `results/<model>/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json` | 提案手法のLLM系列。`--runs 5` では `_1.json` から `_5.json` までを評価して平均を出す。 |
 
-上表とStep 1--4は、`K=15`, `hamming=0`, `154days` を各入力パスで明示する正式再現条件である。一方、評価CLIで省略可能なパターン入力を省略すると、`configs/default.yaml` 由来の `K=15`, `hamming=1`, `154days` のパスを使い、`--output-dir` の既定値は `results/5_pattern_quality_fixed/` となる。正式出力先 `results/5_pattern_quality_without_low_information_judgment/` は自動では選ばれない。`hamming=0` とCLI既定由来の `hamming=1` の不一致は [KI-01](../research/known_issues.md#ki-01) で追跡しているため、正式再現では本書の入力パスと出力先を省略しない。
+上表とStep 1--4は、`K=15`, `hamming=0`, `154days` を各入力パスで明示する正式再現条件である。一方、評価CLIで省略可能なパターン入力を省略すると、`configs/default.yaml` 由来の `K=15`, `hamming=1`, `154days` のパスを使い、`--output-dir` の既定値は `results/<model>/5_pattern_quality_fixed/` となる。正式出力先 `results/<model>/5_pattern_quality_without_low_information_judgment/` は自動では選ばれない。`hamming=0` とCLI既定由来の `hamming=1` の不一致は [KI-01](../research/known_issues.md#ki-01) で追跡しているため、正式再現では本書の入力パスと出力先を省略しない。
 
 ### 出力
 
 | 出力 | 内容 |
 |---|---|
-| `results/5_pattern_quality_without_low_information_judgment/evaluation5_summary_by_method.csv` | 手法ごとの主指標、対象数、比較可能pair数、系列長分布。`--runs 2` 以上ではrun平均と標準偏差。 |
-| `results/5_pattern_quality_without_low_information_judgment/evaluation5_summary_by_method_by_run.csv` | runごとの手法別主指標、対象数、比較可能pair数、系列長分布。`--runs 2` 以上、または欠損runが `--skip-missing-runs` により実際にskipされた場合に出力。`--runs 1 --skip-missing-runs` だけでは、欠損がなければ出力しない。 |
-| `results/5_pattern_quality_without_low_information_judgment/evaluation5_pattern_details.csv` | 手法別・run別・パターン別の詳細結果。 |
-| `results/5_pattern_quality_without_low_information_judgment/evaluation5_summary.json` | 入力パス、状態属性、train/test期間、閾値、run情報、skipped methods、手法別集計。state-seriesの生成条件は本節のStep 3と実行コマンドで管理する。直前の修正前結果は `results/5_pattern_quality_low_information_gt_0_5/` に保持する。 |
+| `results/<model>/5_pattern_quality_without_low_information_judgment/evaluation5_summary_by_method.csv` | 手法ごとの主指標、対象数、比較可能pair数、系列長分布。`--runs 2` 以上ではrun平均と標準偏差。 |
+| `results/<model>/5_pattern_quality_without_low_information_judgment/evaluation5_summary_by_method_by_run.csv` | runごとの手法別主指標、対象数、比較可能pair数、系列長分布。`--runs 2` 以上、または欠損runが `--skip-missing-runs` により実際にskipされた場合に出力。`--runs 1 --skip-missing-runs` だけでは、欠損がなければ出力しない。 |
+| `results/<model>/5_pattern_quality_without_low_information_judgment/evaluation5_pattern_details.csv` | 手法別・run別・パターン別の詳細結果。 |
+| `results/<model>/5_pattern_quality_without_low_information_judgment/evaluation5_summary.json` | 入力パス、状態属性、train/test期間、閾値、run情報、skipped methods、手法別集計。state-seriesの生成条件は本節のStep 3と実行コマンドで管理する。直前の修正前結果は `results/<model>/5_pattern_quality_low_information_gt_0_5/` に保持する。 |
 
-FP-Growth系とtransition_probabilityの生成済みパターンはCSVキャッシュとして保存できる。同じ `state_series`、train期間、CLI設定で再実行した場合はこのCSVを読み込み、ベースライン生成時間を削減する。修正版の正式再集計では既存キャッシュを上書きしないよう `output/5_adl_correspondence_baselines_fixed/` を指定する。
+FP-Growth系とtransition_probabilityの生成済みパターンはCSVキャッシュとして保存できる。同じ `state_series`、train期間、CLI設定で再実行した場合はこのCSVを読み込み、ベースライン生成時間を削減する。修正版の正式再集計では既存キャッシュを上書きしないよう `output/<model>/5_adl_correspondence_baselines_fixed/` を指定する。
 
 ## 結果の読み方
 
@@ -108,7 +108,7 @@ uv run python scripts/run_build_network_from_labeled_casas.py \
 
 ### 2. 🟨 **条件付き** 提案手法LLM出力を生成する
 
-`output/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json` がなければ実行する。APIキーを使う重い処理である。
+`results/<model>/aruba_15_0_154days/llm_sequences_modes_15_0_154days_1.json` がなければ実行する。APIキーを使う重い処理である。
 
 ```bash
 uv run python scripts/run_llm_extraction.py \
@@ -129,7 +129,7 @@ uv run python scripts/run_llm_extraction.py \
 
 ### 3. 🟨 **条件付き** 評価5用 `state_series.csv` を作成する
 
-`output/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv` がなければ実行する。抽出時と同じ1秒粒度化、5秒の遅延OFF平滑化、代表状態写像、同一状態圧縮を適用した系列を保存する。event-driven系列を別実装で再構築したCSVは正式評価に使用しない。既存の修正前CSVは上書きしない。
+`output/<model>/5_adl_evaluation_15_0_154days_fixed/state_series_220days.csv` がなければ実行する。抽出時と同じ1秒粒度化、5秒の遅延OFF平滑化、代表状態写像、同一状態圧縮を適用した系列を保存する。event-driven系列を別実装で再構築したCSVは正式評価に使用しない。既存の修正前CSVは上書きしない。
 
 `network-equivalent` は、最初のイベント日の00:00:00から1秒Sample-and-Holdを行い、抽出側と同じ `rolling(window=5).max()` に等価な遅延OFFを適用する。メモリ上に220日分の1秒行列を展開せず、状態変化点だけを処理する。代表状態は先頭154日で作成済みの `state/aruba_15_0_154days.txt` から読み込み、評価期間のデータから再抽出しない。`--state-series-days 220` により、先頭154日と後続66日を含む全期間を出力する。
 
@@ -353,7 +353,7 @@ train期間だけを使い、各パターンにADLカテゴリ集合を割り当
 | `--transition-min-prob` | `0.0` |
 | `--transition-min-len` | `2` |
 | `--transition-max-len` | `4` |
-| `--baseline-cache-dir` | `output/5_adl_correspondence_baselines_fixed` |
+| `--baseline-cache-dir` | `output/<model>/5_adl_correspondence_baselines_fixed` |
 | `--use-baseline-cache` / `--no-use-baseline-cache` | enabled |
 | `--fragmentation-containment-threshold` | `0.7` |
 | `--low-information-threshold` | 非推奨。互換性のため受理するが無視する。 |

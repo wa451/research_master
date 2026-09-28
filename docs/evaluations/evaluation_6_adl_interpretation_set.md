@@ -1,6 +1,6 @@
 # 評価6: LLM解釈ラベルとADL重なりラベルのSet一致評価
 
-> **モデル別保存:** proposed/direct-log JSON、checkpoint、usage、比較結果はそれぞれ `results/<model>/aruba_*`、`results/<model>/llm_direct_*`、`results/<model>/6_adl_match/` に保存する。holdout既定の比較結果は条件名末尾を `_holdout_test` として旧全220日成果物と分ける。`.env` のモデルから自動決定されるため、通常は出力先指定不要である。`output/6_adl_evaluation_*/state_series.csv` は全モデルで共有するモデル非依存入力として残す。以下の旧 `output/.../llm_*` / `results/6_*` はGemini移行元のlegacy表記である。
+> **モデル別保存:** state series・ADL intervalは `output/<model>/`、proposed/direct-log JSON、checkpoint、usage、比較結果は `results/<model>/` に保存する。holdout既定の比較結果は条件名末尾を `_holdout_test` として旧全220日成果物と分ける。`.env` のモデルから自動決定されるため、通常は出力先指定不要である。ルート直下の旧 `output/*` と `results/*` はGemini移行元である。
 
 LLM-onlyの既定は `--llm-only-time-mode split` であり、各runで4時間帯へ分割して最大4回のLLM呼出しを行う。`--llm-only-time-mode legacy` を明示すると、IoT2026時点の「14日全体を1回で入力する」方式を再現できる。この選択肢は、評価期間を決める `--split-mode` とは独立している。
 
@@ -62,10 +62,10 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 |---|---|---|
 | 提案手法LLM JSON | `results/<model>/aruba_individual_15_0_14days/llm_sequences_modes_15_0_14days_1.json` | `time_band_interpretations` を持つ個別センサ既定の提案手法出力。 |
 | LLM単独ベースラインJSON | `results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json` | 同期間の前処理済み代表状態系列を時間帯ごとにLLMへ直接入力した出力。各patternに `time_period` を保存する。 |
-| 14日条件の全220日照合系列 | `output/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv` | 先頭14日で作成した代表状態定義を固定し、抽出側と同じ1秒Sample-and-Hold・遅延OFF・Hamming最近傍写像・連続圧縮（`network-equivalent`）で全220日へ写像する入力。holdout既定ではDay 155–220だけを照合する。 |
+| 14日条件の全220日照合系列 | `output/<model>/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv` | 先頭14日で作成した代表状態定義を固定し、抽出側と同じ1秒Sample-and-Hold・遅延OFF・Hamming最近傍写像・連続圧縮（`network-equivalent`）で全220日へ写像する入力。holdout既定ではDay 155–220だけを照合する。 |
 | ADL正解データ | `new_labeled_data/aruba.txt` | CASAS activity `begin/end` からADL正解区間を内部生成する。 |
 
-この表はargparse既定値ではない。省略時の現行CLIは、提案手法に `output/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json`、LLM単独に `output/llm_direct_15_1_14days/1.json`、state seriesに互換パス `output/6_adl_evaluation_14/state_series.csv` を使う。`--labeled-casas` を省略した場合は `output/adl_label_intervals.csv` を使い、出力先は設定値から `results/6_adl_match/15_1_14days/` へ解決される。さらに `--n-states` と `--hamming-threshold` のargparse既定値は未指定（summaryではnull）である。正式14日評価ではStep 7--8のとおり `--days 14 --n-states 15 --hamming-threshold 0` と各パスを明示する。既定値と正式条件の不一致は [KI-01](../research/known_issues.md#ki-01) および [KI-08](../research/known_issues.md#ki-08) で追跡している。
+この表はargparse既定値ではない。省略時の現行CLIは、提案手法に `results/<model>/aruba_15_1_14days/llm_sequences_modes_15_1_14days_1.json`、LLM単独に `results/<model>/llm_direct_15_1_14days/1.json`、state seriesに互換パス `output/<model>/6_adl_evaluation_14/state_series.csv` を使う。`--labeled-casas` を省略した場合は `output/<model>/adl_label_intervals.csv` を使い、出力先は設定値から `results/<model>/6_adl_match/15_1_14days/` へ解決される。さらに `--n-states` と `--hamming-threshold` のargparse既定値は未指定（summaryではnull）である。正式14日評価ではStep 7--8のとおり `--days 14 --n-states 15 --hamming-threshold 0` と各パスを明示する。既定値と正式条件の不一致は [KI-01](../research/known_issues.md#ki-01) および [KI-08](../research/known_issues.md#ki-08) で追跡している。
 
 ### 出力
 
@@ -130,7 +130,7 @@ uv run python scripts/run_llm_extraction.py \
 
 ### 4. 🟨 **条件付き** 評価6用の全220日状態系列を作る
 
-`output/6_adl_evaluation_aruba_individual_15_0_14days/pattern_occurrences.csv` または `output/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv` がなければ実行する。この系列は、先頭14日で作成した代表状態表を全220日のセンサログへ適用した中間ファイルであり、`output/` に保存する。評価6のholdout採点時にはこのうちDay 155–220だけを使用する。ディレクトリ名の `14days` は抽出・LLM入力条件を表し、状態系列の長さを表さない。
+`output/<model>/6_adl_evaluation_aruba_individual_15_0_14days/pattern_occurrences.csv` または `output/<model>/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv` がなければ実行する。この系列は、先頭14日で作成した代表状態表を全220日のセンサログへ適用した中間ファイルであり、`output/<model>/` に保存する。評価6のholdout採点時にはこのうちDay 155–220だけを使用する。ディレクトリ名の `14days` は抽出・LLM入力条件を表し、状態系列の長さを表さない。
 
 正式な評価6では、抽出側と同じ `network-equivalent` 前処理と同じ遅延OFF平滑化を明示する。`--state-series-days` は指定しないため、固定した14日版state tableをCASAS Arubaの全期間へ適用する。これは生成期間を14日に制限する指定ではない。
 
@@ -433,7 +433,7 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
 | `--no-overlap-label`, `--missing-pred-label`, `--unknown-pred-label` | CLI互換性のため受理するが無視する非推奨引数 |
 | 提案手法JSON | `results/<model>/aruba_individual_15_0_14days/llm_sequences_modes_15_0_14days_1.json` |
 | LLM単独JSON | `results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json` |
-| 状態系列 | `output/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv` |
+| 状態系列 | `output/<model>/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv` |
 | ADL正解データ | `new_labeled_data/aruba.txt` |
 
 評価で許可するLLM出力ADLラベル:
@@ -459,4 +459,4 @@ Other
 - 154日版の提案手法出力と14日版の前処理済み代表状態系列ベースラインを混ぜて比較しない。
 - 既存のLLM出力に `ADL系列ラベル` がない場合は `prediction_status=missing` として0点にし、分母から除外しない。
 - 予測ラベル集合を \(C\) と書く場合、\(C\) は10カテゴリへの軽微な表記正規化後の集合である。語彙外ラベルを含むレコードでは \(C\) を有効な予測集合として採点せず、`unknown` として0点にする。
-- `output/6_adl_evaluation_aruba_individual_15_0_14days/` は個別センサ既定の評価6用中間出力であり、最終結果は `results/<model>/6_adl_match_individual_holdout_test_direct_time_split/` に保存する。部屋統合を選ぶ場合だけ既存互換の `aruba_` 名を使う。
+- `output/<model>/6_adl_evaluation_aruba_individual_15_0_14days/` は個別センサ既定の評価6用中間出力であり、最終結果は `results/<model>/6_adl_match_individual_holdout_test_direct_time_split/` に保存する。部屋統合を選ぶ場合だけ既存互換の `aruba_` 名を使う。

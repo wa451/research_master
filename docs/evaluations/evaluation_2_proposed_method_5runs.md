@@ -35,27 +35,27 @@
 | プロンプト | `prompts/pattern_extraction_prompt.md` | 状態遷移ネットワークから系列パターンを抽出するLLMプロンプト。 |
 | APIキー | `.env` | `GEMINI_API_KEY` を設定する。 |
 | 状態遷移JSON | `picture/aruba_15_1_154days/state_transition_{mode}.json` | LLMへの入力。 |
-| ベースライン | `output/aruba_15_1_154days/prob_threshold_sequences_15_1_154days.json`, `state_sequence_counts_15_1_154days.json` | 評価指標の比較対象。 |
+| ベースライン | `output/<model>/aruba_15_1_154days/prob_threshold_sequences_15_1_154days.json`, `state_sequence_counts_15_1_154days.json` | 評価指標の比較対象。 |
 
 ### 出力
 
 | 出力 | 内容 |
 |---|---|
-| `output/aruba_15_1_154days/llm_sequences_modes_15_1_154days_{run}.json` | 各runのLLM抽出結果。 |
-| `output/aruba_15_1_154days/llm_mode_records_run{run}/state_transition_{mode}.json` | 時間帯ごとの成功結果。再開用チェックポイントでもある。 |
-| `output/aruba_15_1_154days/llm_mode_records_run{run}/state_transition_{mode}_raw.txt` | LLMの生応答。 |
-| `output/aruba_15_1_154days/llm_mode_records_run{run}/state_transition_{mode}_metrics.json` | backend、token使用量、処理時間など。 |
-| `output/aruba_15_1_154days/failed_responses/*.txt` | パースできなかったLLM応答。 |
-| `output/aruba_15_1_154days/llm_modes_metrics_15_1_154days_run{run}.csv` | run・時間帯ごとのbackend、処理時間、token使用量。 |
-| `output/aruba_15_1_154days/llm_modes_metrics_avg_15_1_154days.csv` | 時間帯ごとの処理時間・token使用量の平均。 |
-| `output/aruba_15_1_154days/evaluation_report_15_1_154days_{run}.txt` | 各runの評価レポート。 |
-| `output/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx` | run別Precision / Recall / F1と平均行。標準偏差・出力パターン数は含まない。 |
+| `output/<model>/aruba_15_1_154days/llm_sequences_modes_15_1_154days_{run}.json` | 各runのLLM抽出結果。 |
+| `output/<model>/aruba_15_1_154days/llm_mode_records_run{run}/state_transition_{mode}.json` | 時間帯ごとの成功結果。再開用チェックポイントでもある。 |
+| `output/<model>/aruba_15_1_154days/llm_mode_records_run{run}/state_transition_{mode}_raw.txt` | LLMの生応答。 |
+| `output/<model>/aruba_15_1_154days/llm_mode_records_run{run}/state_transition_{mode}_metrics.json` | backend、token使用量、処理時間など。 |
+| `output/<model>/aruba_15_1_154days/failed_responses/*.txt` | パースできなかったLLM応答。 |
+| `output/<model>/aruba_15_1_154days/llm_modes_metrics_15_1_154days_run{run}.csv` | run・時間帯ごとのbackend、処理時間、token使用量。 |
+| `output/<model>/aruba_15_1_154days/llm_modes_metrics_avg_15_1_154days.csv` | 時間帯ごとの処理時間・token使用量の平均。 |
+| `output/<model>/aruba_15_1_154days/evaluation_report_15_1_154days_{run}.txt` | 各runの評価レポート。 |
+| `output/<model>/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx` | run別Precision / Recall / F1と平均行。標準偏差・出力パターン数は含まない。 |
 
 ## 結果の読み方
 
 | 順序 | ファイル | 読み方 |
 |---|---|---|
-| 1 | `output/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx` | summaryとして、run別と5回平均のPrecision / Recall / F1を見る。標準偏差が必要な場合はrun別行から別途算出する（[KI-03](../research/known_issues.md)）。 |
+| 1 | `output/<model>/aruba_15_1_154days/llm_eval_runs_15_1_154days.xlsx` | summaryとして、run別と5回平均のPrecision / Recall / F1を見る。標準偏差が必要な場合はrun別行から別途算出する（[KI-03](../research/known_issues.md)）。 |
 | 2 | `llm_sequences_modes_15_1_154days_{run}.json`, `evaluation_report_15_1_154days_{run}.txt` | detailsとして、各runの抽出系列、パターン数、Precision / Recall / F1を確認する。 |
 | 3 | `configs/default.yaml`, `docs/research/paper_parameters.md`, `llm_mode_records_run{run}/*_metrics.json`, `llm_modes_metrics_*_run{run}.csv` | 再現条件として、モデル名、temperature、run数、token使用量を確認する。 |
 

@@ -37,7 +37,7 @@ direct-log/LLM-onlyも同じ `map_vector_to_state` を再利用し、完全一�
 ## 5. LLM-based pattern extraction
 
 - 入力: モード別状態遷移JSON、または代表状態時系列、`.env` の `GEMINI_API_KEY`
-- 出力: `output/*/llm_sequences_modes_*.json`, `output/llm_direct_*/*.json`, token metrics CSV
+- 出力: `results/<model>/*/llm_sequences_modes_*.json`, `results/<model>/llm_direct_*/*.json`, token metrics CSV
 - 対応ファイル: `src/behavior_pattern_mining/llm/pattern_extractor.py`, `src/behavior_pattern_mining/llm/direct_log_extractor.py`, `src/behavior_pattern_mining/llm/client.py`
 - 役割: Geminiへ状態遷移ネットワークまたは状態時系列を入力し、生活行動パターンのJSON配列を生成する。
 
@@ -58,35 +58,35 @@ direct-log/LLM-onlyも同じ `map_vector_to_state` を再利用し、完全一�
 ## 7.1 評価4: ADL label evaluation
 
 - 入力: `new_labeled_data/aruba.txt`, `configs/aruba_sensor_map.json`, `--state-series` または `state/*.txt`, LLMパターンJSON
-- 出力: `results/4_adl_detect/pattern_occurrences.csv`, `pattern_adl_mapping.csv`, `merged_predictions.csv`, `filtered_predictions.csv`, `adl_metrics_iou_*.csv`, `boundary_metrics_iou_*.csv`, `adl_interval_hit_metrics.csv`, `adl_interval_hit_details.csv`, `evaluation_summary.json`
+- 出力: `results/<model>/4_adl_detect/pattern_occurrences.csv`, `pattern_adl_mapping.csv`, `merged_predictions.csv`, `filtered_predictions.csv`, `adl_metrics_iou_*.csv`, `boundary_metrics_iou_*.csv`, `adl_interval_hit_metrics.csv`, `adl_interval_hit_details.csv`, `evaluation_summary.json`
 - 対応ファイル: `scripts/evaluate_adl_labels.py`, `src/behavior_pattern_mining/evaluation/adl.py`
 - 役割: LLM抽出系列を代表状態系列上で検索し、ADLラベル区間との重なりからpattern->ADL対応を行う。さらに同一ADLの近接予測マージ、短時間予測除外を適用し、カテゴリ別Precision/Recall/F1、開始/終了境界誤差、ADL区間内hitを評価する。
 
 ## 7.2 評価5: Useful non-redundant pattern / fragmentation evaluation
 
 - 入力: `new_labeled_data/aruba.txt`, 抽出と同じ前処理で生成した `--state-series`, `--state-definition` または `--state-network-json`, frequency/rule/proposed のパターンCSVまたはJSON
-- 出力: `results/5_pattern_quality_without_low_information_judgment/evaluation5_pattern_details.csv`, `evaluation5_summary_by_method.csv`, `evaluation5_summary_by_method_by_run.csv`, `evaluation5_summary.json`
+- 出力: `results/<model>/5_pattern_quality_without_low_information_judgment/evaluation5_pattern_details.csv`, `evaluation5_summary_by_method.csv`, `evaluation5_summary_by_method_by_run.csv`, `evaluation5_summary.json`
 - 対応ファイル: `scripts/evaluate_adl_correspondence.py`, `src/behavior_pattern_mining/evaluation/adl.py`, `src/behavior_pattern_mining/evaluation/adl_correspondence.py`
 - 役割: train期間でpattern->ADL集合を決め、test期間で各出力パターンがADL-groundedか、構造的に無意味か、同じrun・時間帯にある長い系列の断片かを評価する。low-information ratioは診断値としてのみ保存し、UsefulとContextlessには使用しない。Fragmentationは断片数/評価可能パターン数で、比較可能な短系列―長系列対が0件でも0として保存する。比較対象はfrequency、rule-filtered frequency、FP-Growth系baseline、transition_probability baseline、提案手法。
 
 ## 7.3 評価6: LLM ADL interpretation set match
 
-- 入力: `results/<model>/aruba_individual_15_0_14days/llm_sequences_modes_15_0_14days_1.json`, `results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json`, `output/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv`, `new_labeled_data/aruba.txt`
-- 出力: `results/6_adl_match/15_0_14days/evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_llm_usage_comparison.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_time_band_by_method.csv`, `evaluation6_comparison_summary.json`
+- 入力: `results/<model>/aruba_individual_15_0_14days/llm_sequences_modes_15_0_14days_1.json`, `results/<model>/llm_direct_aruba_individual_15_0_14days_time_split/1.json`, `output/<model>/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv`, `new_labeled_data/aruba.txt`
+- 出力: `results/<model>/6_adl_match/15_0_14days/evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_llm_usage_comparison.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_time_band_by_method.csv`, `evaluation6_comparison_summary.json`
 - 対応ファイル: `scripts/evaluate_6_compare_adl_interpretation_set.py`, `src/behavior_pattern_mining/evaluation/adl_interpretation_set.py`, `src/behavior_pattern_mining/evaluation/llm_usage.py`
 - 役割: LLMが一体的に生成したパターン名・ADL集合・根拠のうち、ADL集合とCASAS重複集合を順序なしで比較し、解釈の意味的正当性を定量的に代理評価する。提案手法は `sequence × time_band` 単位へ展開する。状態遷移ネットワーク入力と、同じ14日分の前処理済み代表状態系列を直接LLMへ入力する構成を比較し、記録が揃うrunではトークン数も比較する。
 
 ## 7.4 評価7: K / hamming parameter sensitivity
 
 - 入力: 条件ごとの提案手法JSON、状態系列、ラベル付きCASASデータ
-- 出力: `results/7_param_search/` と `results/7_param_search/top10_5runs/` の条件別・run別CSV/JSON
+- 出力: `results/<model>/7_param_search/` と `results/<model>/7_param_search/top10_5runs/` の条件別・run別CSV/JSON
 - 対応ファイル: `scripts/evaluate_7_parameter_sensitivity_adl_interpretation.py`, `scripts/run_evaluation7_top_condition_repeats.py`, `src/behavior_pattern_mining/evaluation/evaluation7_staged.py`
 - 役割: Kとハミング距離の全条件をrun 1で評価し、上位条件だけを合計5 runまで追加実行して平均・標準偏差を集計する。
 
 ## 7.5 評価8: Frequency-stratified ADL consistency
 
 - 入力: 14日手法比較では評価6の `evaluation6_pattern_set_details_by_method.csv` とstate series、154日提案手法単独では提案手法JSON・抽出時と同じ前処理で生成したstate series・ADL正解データ。
-- 出力: 修正版は `results/8_vs_llm_own_id_fixed/{tertile,fixed}/` と `results/8_proposed_own_id_fixed/{tertile,fixed}/` に保存する。run別帯集計と出現数監査を含む。
+- 出力: 修正版は `results/<model>/8_vs_llm_own_id_fixed/{tertile,fixed}/` と `results/<model>/8_proposed_own_id_fixed/{tertile,fixed}/` に保存する。run別帯集計と出現数監査を含む。
 - 対応ファイル: `scripts/evaluate_8_frequency_stratified_adl_consistency.py`。
 - 役割: pattern ID固有の出現を物理区間キーで一意化し、修正後の `num_occurrences` からmethod・runごとにLow / Middle / Highを再割当てして評価6のset指標を後段集計する。頻度加重の重み総和と一意出現数が一致することも検証する。
 

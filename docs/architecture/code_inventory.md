@@ -40,8 +40,8 @@
 | `tests/` | 回帰テスト |
 | `state/` | 代表状態表 |
 | `picture/` | 状態遷移JSON、遷移図、timeline図 |
-| `output/` | LLM出力、baseline、中間成果物 |
-| `results/` | 後段評価結果 |
+| `output/<model>/` | baseline、中間成果物、state series、実行ログ |
+| `results/<model>/` | LLM出力、checkpoint、usage、後段評価結果 |
 
 ## 文書の正本
 

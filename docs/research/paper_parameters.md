@@ -99,11 +99,11 @@
 | 時間帯network | `picture/aruba_{K}_{h}_{days}days/state_transition_{mode}.json` |
 | 遷移図 | `picture/aruba_{K}_{h}_{days}days/state_transition_{mode}.{png,eps}` |
 | timeline | `picture/aruba_{K}_{h}_{days}days/timeline_{mode}.png` |
-| 遷移確率baseline | `output/aruba_{K}_{h}_{days}days/prob_threshold_sequences_{K}_{h}_{days}days.json` |
-| 頻度baseline | `output/aruba_{K}_{h}_{days}days/state_sequence_counts_{K}_{h}_{days}days.json` |
-| 提案手法 | `output/aruba_{K}_{h}_{days}days/llm_sequences_modes_{K}_{h}_{days}days_{run}.json` |
-| run別比較レポート | `output/aruba_{K}_{h}_{days}days/evaluation_report_{K}_{h}_{days}days_{run}.txt` |
-| batch Excel | `output/aruba_{K}_{h}_{days}days/llm_eval_runs_{K}_{h}_{days}days.xlsx` |
+| 遷移確率baseline | `output/<model>/aruba_{K}_{h}_{days}days/prob_threshold_sequences_{K}_{h}_{days}days.json` |
+| 頻度baseline | `output/<model>/aruba_{K}_{h}_{days}days/state_sequence_counts_{K}_{h}_{days}days.json` |
+| 提案手法 | `results/<model>/aruba_{K}_{h}_{days}days/llm_sequences_modes_{K}_{h}_{days}days_{run}.json` |
+| run別比較レポート | `output/<model>/aruba_{K}_{h}_{days}days/evaluation_report_{K}_{h}_{days}days_{run}.txt` |
+| batch Excel | `results/<model>/aruba_{K}_{h}_{days}days/llm_eval_runs_{K}_{h}_{days}days.xlsx` |
 
 Excelのsheet名、列名、後段評価のCSV/JSONは実装と各評価文書を参照し、過去文書の表記を出力契約として推測しない。
 
