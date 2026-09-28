@@ -119,6 +119,20 @@ def model_results_relative(common: dict | None = None) -> str:
     return root.relative_to(PROJECT_ROOT).as_posix()
 
 
+def eval5_condition_widget_key(
+    field: str,
+    *,
+    model_id: str,
+    dataset: str,
+    n_states: int,
+    hamming_threshold: int,
+    days: int,
+) -> str:
+    """Keep Evaluation 5 path widgets scoped to the selected condition."""
+    suffix = short_suffix(n_states, hamming_threshold, days)
+    return f"eval5_{field}_{model_id}_{dataset}_{suffix}"
+
+
 def model_output_relative(common: dict | None = None) -> str:
     root = (
         Path(common["model_output_root"])
@@ -523,6 +537,16 @@ def render_eval5_settings(common: dict) -> dict:
 
     representation, dataset, default_sensor_map = render_sensor_representation("eval5")
     suffix = short_suffix(int(n_states), int(hamming), int(days))
+
+    def condition_widget_key(field: str) -> str:
+        return eval5_condition_widget_key(
+            field,
+            model_id=common["model_id"],
+            dataset=dataset,
+            n_states=int(n_states),
+            hamming_threshold=int(hamming),
+            days=int(days),
+        )
     default_eval5_intermediate = (
         f"{model_output_relative(common)}/5_adl_evaluation_{suffix}_fixed"
         if dataset == "aruba"
@@ -533,15 +557,19 @@ def render_eval5_settings(common: dict) -> dict:
     state_series = st.text_input(
         "state-series",
         f"{default_eval5_intermediate}/state_series_220days.csv",
-        key=f"eval5_state_series_{representation}",
+        key=condition_widget_key("state_series"),
     )
     state_table = st.text_input(
         "代表状態テーブル",
         rel_default(default_state_table(dataset, int(n_states), int(hamming), int(days))),
-        key=f"eval5_state_table_{representation}",
+        key=condition_widget_key("state_table"),
     )
     sensor_map = st.text_input("センサーマップ", default_sensor_map, key=f"eval5_sensor_map_{representation}")
-    patterns_frequency = st.text_input("patterns-frequency", f"{model_output_relative(common)}/{dataset}_{suffix}/state_sequence_counts_{suffix}.json", key=f"eval5_frequency_{representation}")
+    patterns_frequency = st.text_input(
+        "patterns-frequency",
+        f"{model_output_relative(common)}/{dataset}_{suffix}/state_sequence_counts_{suffix}.json",
+        key=condition_widget_key("frequency"),
+    )
     patterns_rule_light = st.text_input("patterns-rule-light", f"{model_output_relative(common)}/5_rule_filter/frequency_rule_light.csv")
     patterns_rule_medium = st.text_input("patterns-rule-medium", f"{model_output_relative(common)}/5_rule_filter/frequency_rule_medium.csv")
     patterns_rule_strong = st.text_input("patterns-rule-strong", f"{model_output_relative(common)}/5_rule_filter/frequency_rule_strong.csv")
@@ -554,7 +582,7 @@ def render_eval5_settings(common: dict) -> dict:
                 dataset, int(n_states), int(hamming), int(days), results_root=model_root
             )
         ),
-        key=f"eval5_patterns_proposed_{model_key}_{representation}",
+        key=condition_widget_key("patterns_proposed"),
     )
     with st.expander("複数run用テンプレート（任意）"):
         st.caption("使用可能: {dataset}, {n_states}, {hamming_threshold}, {hamming}, {days}, {run}, {suffix}")
@@ -565,7 +593,7 @@ def render_eval5_settings(common: dict) -> dict:
                 f"{model_results_relative(common)}/{dataset}_{{suffix}}/"
                 "llm_sequences_modes_{suffix}_{run}.json"
             ),
-            key=f"eval5_patterns_template_{model_key}_{representation}",
+            key=condition_widget_key("patterns_template"),
         )
         skip_missing_runs = st.checkbox("skip-missing-runs", value=False)
         proposed_base_path = PROJECT_ROOT / patterns_proposed if not Path(patterns_proposed).is_absolute() else Path(patterns_proposed)
