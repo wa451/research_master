@@ -1693,6 +1693,12 @@ def batch_mode_description(mode: str) -> str:
     return "評価本体は実行せず、前段ステップのうち期待出力が不足しているコマンドだけを上から順に実行します。"
 
 
+def batch_progress_text(completed: int, total: int, current_title: str | None = None) -> str:
+    """Return the user-visible whole-batch progress label."""
+    base = f"進捗: {completed}/{total} ステップ完了"
+    return f"{base} / 実行中: {current_title}" if current_title else base
+
+
 def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
     st.markdown("### 一括実行")
     mode = st.radio(
@@ -1722,7 +1728,11 @@ def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
     st.info(f"一括実行ログ: {display_path(log_dir)}")
 
     completed = 0
+    total = len(targets)
+    progress_bar = st.progress(0.0, text=batch_progress_text(completed, total))
+    progress_status = st.empty()
     for index, step in enumerate(targets, start=1):
+        progress_status.info(batch_progress_text(completed, total, step.title))
         st.markdown(f"**{index}. {step.title}**")
         st.caption(
             f"実行LLM: {settings['model_label']} / {model_environment_preview(settings)}"
@@ -1754,6 +1764,7 @@ def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
                 encoding="utf-8",
             )
             append_history(selected_log_root, {**record, "status": "blocked_missing_inputs"})
+            progress_status.error(batch_progress_text(completed, total, step.title))
             st.error(f"停止: 必要な入力が不足しています / log: {display_path(log_path)}")
             st.text(missing_text)
             break
@@ -1766,6 +1777,7 @@ def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
                 encoding="utf-8",
             )
             completed += 1
+            progress_bar.progress(completed / total, text=batch_progress_text(completed, total))
             st.info(f"dry-runとして記録しました: {display_path(log_path)}")
             continue
 
@@ -1784,13 +1796,17 @@ def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
             )
         if result.returncode == 0:
             completed += 1
+            progress_bar.progress(completed / total, text=batch_progress_text(completed, total))
             st.success(f"成功: {result.elapsed_seconds:.1f}s / log: {display_path(result.log_path)}")
             continue
 
+        progress_status.error(batch_progress_text(completed, total, step.title))
         st.error(f"失敗: exit={result.returncode} / {result.elapsed_seconds:.1f}s / log: {display_path(result.log_path)}")
         st.text_area(f"ログ末尾 {step.step_id}", result.output[-8000:], height=260)
         break
     else:
+        progress_bar.progress(1.0, text=batch_progress_text(completed, total))
+        progress_status.success(batch_progress_text(completed, total))
         st.success(f"一括実行が完了しました。実行/記録: {completed}")
 
 
