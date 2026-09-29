@@ -1902,12 +1902,14 @@ def reviewer_table(bundle: Path, name: str) -> pd.DataFrame | None:
     return pd.read_csv(path) if path.exists() else None
 
 
-def render_reviewer_response_results() -> None:
+def render_reviewer_response_results(current_evaluation: str | None) -> None:
     """Render paper-oriented tables and cautious interpretations for Eval 5--10."""
     bundles = reviewer_response_result_dirs()
     if not bundles:
         return
-    st.subheader("査読対応版の統合結果")
+    selected_evaluation = current_evaluation if current_evaluation in {"評価5", "評価6", "評価7", "評価8", "評価9", "評価10"} else None
+    heading = f"{selected_evaluation}の査読対応結果" if selected_evaluation else "査読対応版の統合結果"
+    st.subheader(heading)
     labels = [display_path(path) for path in bundles]
     selected_label = st.selectbox("査読対応版の結果セット", labels, index=len(labels) - 1)
     bundle = bundles[labels.index(selected_label)]
@@ -1915,119 +1917,150 @@ def render_reviewer_response_results() -> None:
     status_rows = [
         {"評価": name, "状態": value["status"], "注記": value["note"]}
         for name, value in summary.get("status", {}).items()
+        if selected_evaluation is None or name == selected_evaluation.replace("評価", "eval")
     ]
     st.dataframe(pd.DataFrame(status_rows), hide_index=True, use_container_width=True)
 
-    st.markdown("### 評価5: パターン品質")
+    def show(evaluation: str) -> bool:
+        return selected_evaluation is None or selected_evaluation == evaluation
+
+    if show("評価5"):
+        st.markdown("### パターン品質")
     eval5 = reviewer_table(bundle, "table_eval5_pattern_quality.csv")
-    if eval5 is not None:
+    if show("評価5") and eval5 is not None:
         st.dataframe(eval5, hide_index=True, use_container_width=True)
         proposed = eval5[eval5["method"] == "proposed"]
         if not proposed.empty:
             row = proposed.iloc[0]
-            st.info(
-                f"提案法は平均 {row['pattern_count']} patterns、test-supported rate は {row['test_supported_rate']} です。"
-                f" fragmentation は {row['fragmentation']}（N/A run: {row['n_a_runs']}）であり、"
-                "比較可能な短系列・長系列pairがないため、断片化抑制の証拠とは解釈しません。"
+            st.markdown(
+                "**考察**\n"
+                f"- 提案法は平均 {row['pattern_count']} patterns、test-supported rate は {row['test_supported_rate']} で、生成系列の大半は後続期間にも出現しました。\n"
+                "- このsupportは系列の再出現であり、ADL解釈の正しさそのものを示す指標ではありません。\n"
+                f"- fragmentation は {row['fragmentation']}（N/A run: {row['n_a_runs']}）です。比較可能な短系列・長系列pairがないため、断片化抑制を実証したとは主張しません。\n"
+                "- redundancyは完全一致する `(time band, normalized sequence)` の重複だけを数えており、部分系列の断片化とは別の概念です。"
             )
 
-    st.markdown("### 評価6: ADL認識とStrict Ablation")
+    if show("評価6"):
+        st.markdown("### ADL認識とStrict Ablation")
     eval6_full = reviewer_table(bundle, "table_eval6_full_pipeline.csv")
     eval6_strict = reviewer_table(bundle, "table_eval6_strict_ablation.csv")
-    full_tab, strict_tab = st.tabs(["Full-pipeline", "Strict Ablation"])
-    with full_tab:
-        if eval6_full is not None:
-            st.dataframe(eval6_full, hide_index=True, use_container_width=True)
-            proposed = eval6_full[eval6_full["method"] == "proposed"]
-            direct = eval6_full[eval6_full["method"] == "direct_log_baseline"]
-            if not proposed.empty and not direct.empty:
-                st.info(
-                    f"Day155–220 holdoutでは Proposed F1={proposed.iloc[0]['f1']}、"
-                    f"Direct LLM F1={direct.iloc[0]['f1']}。これはシステム全体の比較です。"
-                )
-    with strict_tab:
-        if eval6_strict is not None:
-            st.dataframe(eval6_strict, hide_index=True, use_container_width=True)
-            proposed = eval6_strict[eval6_strict["method"] == "proposed"]
-            if not proposed.empty:
-                st.info(
-                    f"共通完了runは {proposed.iloc[0]['common_runs']}、paired Delta F1 は "
-                    f"{proposed.iloc[0]['paired_delta_f1']} です。CIは既存成果物にepisode単位の"
-                    "再標本化単位がないため表示しません。"
-                )
+    if show("評価6"):
+        full_tab, strict_tab = st.tabs(["Full-pipeline", "Strict Ablation"])
+    else:
+        full_tab = strict_tab = None
+    if full_tab is not None:
+        with full_tab:
+            if eval6_full is not None:
+                st.dataframe(eval6_full, hide_index=True, use_container_width=True)
+                proposed = eval6_full[eval6_full["method"] == "proposed"]
+                direct = eval6_full[eval6_full["method"] == "direct_log_baseline"]
+                if not proposed.empty and not direct.empty:
+                    st.markdown(
+                        "**考察**\n"
+                        f"- Day155–220 holdoutでProposed F1={proposed.iloc[0]['f1']}、Direct LLM F1={direct.iloc[0]['f1']} です。\n"
+                        "- Proposedはprecisionが高く、Direct LLMより少ない不適合ADL集合を出す傾向があります。一方で、これはSTN以外のprompt・処理差も含むシステム全体の比較です。\n"
+                        "- STN表現のみの寄与は、隣のStrict Ablationを根拠に判断します。"
+                    )
+        with strict_tab:
+            if eval6_strict is not None:
+                st.dataframe(eval6_strict, hide_index=True, use_container_width=True)
+                proposed = eval6_strict[eval6_strict["method"] == "proposed"]
+                if not proposed.empty:
+                    st.markdown(
+                        "**考察**\n"
+                        f"- 共通完了runは {proposed.iloc[0]['common_runs']}、ProposedのF1={proposed.iloc[0]['f1']}、paired Delta F1={proposed.iloc[0]['paired_delta_f1']} です。\n"
+                        "- Strict条件では入力代表状態系列、prompt、schema、postprocessingを揃えているため、この差はSTN表現の有無に対応します。\n"
+                        "- CIは既存成果物にepisode単位の再標本化単位がないため表示しません。5 run平均だけをブートストラップして有意性を装うことは避けます。"
+                    )
 
-    st.markdown("### 評価7: K / h 感度")
+    if show("評価7"):
+        st.markdown("### K / h 感度")
     eval7 = reviewer_table(bundle, "table_eval7_sensitivity.csv")
-    if eval7 is not None:
+    if show("評価7") and eval7 is not None:
         st.dataframe(eval7, hide_index=True, use_container_width=True)
         best = eval7.iloc[0]
-        st.info(
-            f"validation上の最良条件は K={best['K']}, h={best['h']}、F1={best['f1']} です。"
-            "表はDay15–154 validationのみであり、testを選択に使用していません。"
+        st.markdown(
+            "**考察**\n"
+            f"- validation上の最良条件は K={best['K']}, h={best['h']}、F1={best['f1']} です。\n"
+            "- 上位近傍条件も表で比較できます。最良点だけでなく近傍設定の値を確認し、設定依存性の強さを判断してください。\n"
+            "- この表はDay15–154 validationのみで作成されており、Day155–220 testをK/h選択に使用していません。"
         )
         figure = bundle / "figures" / "eval7_sensitivity_heatmap.png"
         if figure.exists():
             st.image(str(figure), caption="K / h validation F1", use_container_width=True)
 
-    st.markdown("### 評価8: 頻度層別")
+    if show("評価8"):
+        st.markdown("### 頻度層別")
     eval8 = reviewer_table(bundle, "table_eval8_frequency.csv")
-    if eval8 is not None:
+    if show("評価8") and eval8 is not None:
         st.dataframe(eval8, hide_index=True, use_container_width=True)
-        st.info(
-            "ProposedとDirect LLMには既存の共通fixed frequency binを適用しています。"
-            "空binまたはrun数の少ないbinはN/Aや大きなばらつきとして残し、優劣を断定しません。"
+        st.markdown(
+            "**考察**\n"
+            "- ProposedとDirect LLMに同一のfixed frequency binを適用しているため、帯ごとの数値は直接比較できます。\n"
+            "- 中高頻度帯のF1は、繰り返し十分に観測される系列で解釈が安定するかを示します。\n"
+            "- 空bin、N/A、または `runs_with_patterns` が少ない帯は推定が不安定です。帯ごとの優劣を一般化する根拠にはしません。\n"
+            "- これはFull-pipelineの頻度層別結果であり、Strict Ablationの帯別比較ではありません。"
         )
         figure = bundle / "figures" / "eval8_frequency_f1.png"
         if figure.exists():
             st.image(str(figure), caption="Frequency-stratified F1", use_container_width=True)
 
-    st.markdown("### 評価9: Hestia頑健性")
+    if show("評価9"):
+        st.markdown("### Hestia頑健性")
     eval9 = reviewer_table(bundle, "table_eval9_robustness.csv")
-    if eval9 is not None:
+    if show("評価9") and eval9 is not None:
         st.dataframe(eval9, hide_index=True, use_container_width=True)
         overall = eval9[eval9["condition"] == "overall"]
         if not overall.empty:
             row = overall.iloc[0]
-            st.info(
-                f"14日学習・3 seedのoverall sequence F1={row['f1']}、episode coverage={row['episode_coverage']}。"
-                "これは合成環境での結果であり、ADL Jaccardは既存Hestia scorerが出力していないためN/Aです。"
+            st.markdown(
+                "**考察**\n"
+                f"- 14日学習・3 seedのoverall sequence F1={row['f1']}、episode coverage={row['episode_coverage']}、fragmentation={row['fragmentation']} です。\n"
+                "- 条件別の値は、住宅レイアウトと生活変動への感度を示します。Aruba単独の結果を一般化する十分な証拠にはなりません。\n"
+                "- 既存Hestia scorerはsequence指標を出力しており、ADL JaccardはN/Aです。指標の意味をArubaのADL F1と混同しません。\n"
+                "- 低いF1は、合成環境への移植性に限界があるという反証的な結果として報告すべきです。"
             )
         figure = bundle / "figures" / "eval9_hestia_f1.png"
         if figure.exists():
             st.image(str(figure), caption="Hestia condition F1", use_container_width=True)
 
-    st.markdown("### 評価10: 実宅の時間的汎化")
+    if show("評価10"):
+        st.markdown("### 実宅の時間的汎化")
     eval10 = reviewer_table(bundle, "table_eval10_real_home.csv")
-    if eval10 is not None:
+    if show("評価10") and eval10 is not None:
         st.dataframe(eval10, hide_index=True, use_container_width=True)
         overall = eval10[eval10["scope"] == "overall"]
         if not overall.empty:
             row = overall.iloc[0]
-            st.info(
-                f"chronological holdoutで平均抽出数={row['extracted']}、再出現数={row['recurrent']}、FRR={row['frr']}。"
-                "実宅には完全なADL Ground Truthがないため、これはADL精度ではなく将来再出現性の診断です。"
+            st.markdown(
+                "**考察**\n"
+                f"- chronological holdoutで平均抽出数={row['extracted']}、再出現数={row['recurrent']}、FRR={row['frr']} です。\n"
+                "- 抽出パターン数が少ないため、FRRは少数のパターンに左右されます。生活変動だけでなく観測期間の短さも考慮が必要です。\n"
+                "- 同じ時間帯での完全系列一致だけを再出現と数えています。これは将来再現性の厳しい診断です。\n"
+                "- 完全なADL Ground Truthがないため、ADL認識精度や提案法の正確性を示す結果ではありません。"
             )
         figure = bundle / "figures" / "eval10_time_band_frr.png"
         if figure.exists():
             st.image(str(figure), caption="Future recurrence by time band", use_container_width=True)
 
     structural = reviewer_table(bundle, "table_structural_validity.csv")
-    if structural is not None:
+    if show("評価6") and structural is not None:
         st.markdown("### Structural Validity")
         st.dataframe(structural, hide_index=True, use_container_width=True)
         st.warning("既存成果物に互換な制約検証結果がないため、旧称Groundednessを根拠なく表示していません。")
 
-    human = summary.get("human_evaluation", {})
-    st.markdown("### Human Evaluation")
-    st.info(
-        f"blind sample: {human.get('sample_count', 0)} items / status: {human.get('status', 'unknown')}。"
-        "評価者向けアイテムにはmethod名とrun IDを含めません。"
-    )
+    if selected_evaluation is None:
+        human = summary.get("human_evaluation", {})
+        st.markdown("### Human Evaluation")
+        st.info(
+            f"blind sample: {human.get('sample_count', 0)} items / status: {human.get('status', 'unknown')}。"
+            "評価者向けアイテムにはmethod名とrun IDを含めません。"
+        )
 
 
 def render_results(default_dirs: list[Path], current_evaluation: str | None = None) -> None:
     st.subheader("結果表示")
-    render_reviewer_response_results()
+    render_reviewer_response_results(current_evaluation)
     if reviewer_response_result_dirs():
         st.divider()
         st.markdown("### 個別ファイル・過去runの比較")
