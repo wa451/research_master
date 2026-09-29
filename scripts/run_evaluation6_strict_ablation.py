@@ -176,6 +176,31 @@ def _write_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _read_json(path: Path, default: Any) -> Any:
+    if not path.exists():
+        return default
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return default
+
+
+def _valid_completed_band(entry: dict[str, Any]) -> bool:
+    """Reuse only a successful band with a non-empty strict-schema output."""
+    normalized_path = entry.get("normalized_output_path")
+    if entry.get("status") != "success" or not normalized_path:
+        return False
+    records = _read_json(Path(normalized_path), [])
+    return isinstance(records, list) and bool(records) and all(
+        isinstance(record, dict)
+        and set(record) == {"time_band", "pattern_name", "adl_sequence", "rationale", "state_sequence"}
+        and bool(record["adl_sequence"])
+        and bool(record["rationale"])
+        and 2 <= len(record["state_sequence"]) <= 4
+        for record in records
+    )
+
+
 def _generate_method(
     *,
     method: str,
@@ -187,10 +212,20 @@ def _generate_method(
     llm_config: Any,
     run_id: int,
 ) -> None:
-    raw_records: list[dict[str, Any]] = []
-    processed_candidates: list[dict[str, Any]] = []
+    metadata_path = method_dir / f"run_{run_id}_metadata.json"
+    previous_metadata = _read_json(metadata_path, {})
+    previous_bands = {
+        str(entry.get("time_band")): entry
+        for entry in previous_metadata.get("time_bands", [])
+        if isinstance(entry, dict) and entry.get("time_band")
+    }
     time_band_metadata: list[dict[str, Any]] = []
     for time_band, representation_data in inputs.items():
+        previous_entry = previous_bands.get(time_band, {"time_band": time_band})
+        if _valid_completed_band(previous_entry):
+            time_band_metadata.append(previous_entry)
+            continue
+
         prompt = build_strict_prompt(
             prompt_template,
             state_table=state_table_text,
@@ -198,23 +233,55 @@ def _generate_method(
             representation_description=REPRESENTATION_DESCRIPTIONS[method],
             representation_data=representation_data,
         )
-        entry: dict[str, Any] = {"time_band": time_band, "status": "failure"}
+        attempts = list(previous_entry.get("attempts", []))
+        attempt_number = len(attempts) + 1
+        entry: dict[str, Any] = {"time_band": time_band, "status": "failure", "attempts": attempts}
+        raw_response_path: Path | None = None
+        parsed_path: Path | None = None
         try:
             response_text, backend, usage, duration_sec = call_llm(llm_config, prompt)
+            raw_response_path = method_dir / "raw_api" / f"run_{run_id}_{time_band}_attempt_{attempt_number}.txt"
+            raw_response_path.parent.mkdir(parents=True, exist_ok=True)
+            raw_response_path.write_text(response_text, encoding="utf-8")
             parsed = parse_pattern_records(response_text)
+            parsed_path = method_dir / "parsed" / f"run_{run_id}_{time_band}_attempt_{attempt_number}.json"
+            _write_json(parsed_path, parsed)
             canonical = [
                 record for item in parsed
                 if (record := normalize_strict_record(item, time_band)) is not None
             ]
-            raw_records.extend(canonical)
-            processed_candidates.extend(canonical)
+            if not canonical:
+                raise RuntimeError("LLM response contained no valid strict-ablation records")
+            normalized_path = method_dir / "normalized" / f"run_{run_id}_{time_band}.json"
+            _write_json(normalized_path, postprocess_strict_records(canonical))
+            attempt = {
+                "attempt": attempt_number,
+                "status": "success",
+                "raw_response_path": str(raw_response_path),
+                "parsed_output_path": str(parsed_path),
+                "normalized_output_path": str(normalized_path),
+                "backend": backend,
+                "duration_sec": duration_sec,
+                "prompt_tokens": usage.get("prompt_tokens"),
+                "response_tokens": usage.get("response_tokens"),
+                "total_tokens": usage.get("total_tokens"),
+                "parsed_record_count": len(parsed),
+                "normalized_record_count": len(canonical),
+            }
+            entry.update(attempt)
             entry.update({
-                "status": "success", "backend": backend, "duration_sec": duration_sec,
-                "prompt_tokens": usage.get("prompt_tokens"), "response_tokens": usage.get("response_tokens"),
-                "total_tokens": usage.get("total_tokens"), "raw_record_count": len(canonical),
+                "status": "success",
+                "attempts": [*attempts, attempt],
             })
         except Exception as exc:  # Preserve a failed run for paired-run selection.
-            entry["error"] = str(exc)
+            failure = {
+                "attempt": attempt_number,
+                "status": "failure",
+                "error": str(exc),
+                "raw_response_path": str(raw_response_path) if raw_response_path else None,
+                "parsed_output_path": str(parsed_path) if parsed_path else None,
+            }
+            entry.update({"error": str(exc), "attempts": [*attempts, failure]})
         time_band_metadata.append(entry)
 
     status = "complete" if all(row["status"] == "success" for row in time_band_metadata) else "failed"
@@ -226,10 +293,14 @@ def _generate_method(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "time_bands": time_band_metadata,
     }
-    _write_json(method_dir / f"run_{run_id}_metadata.json", metadata)
+    _write_json(metadata_path, metadata)
     if status == "complete":
-        _write_json(method_dir / "raw" / f"run_{run_id}.json", raw_records)
-        _write_json(method_dir / f"run_{run_id}.json", postprocess_strict_records(processed_candidates))
+        normalized_records = [
+            record
+            for entry in time_band_metadata
+            for record in _read_json(Path(entry["normalized_output_path"]), [])
+        ]
+        _write_json(method_dir / f"run_{run_id}.json", postprocess_strict_records(normalized_records))
 
 
 def main() -> None:
@@ -291,8 +362,6 @@ def main() -> None:
     })
     for run_id in range(1, args.runs + 1):
         for method, inputs, directory in (("proposed", stn_inputs, paths.proposed_dir), ("llm_only", direct_inputs, paths.llm_only_dir)):
-            if (directory / f"run_{run_id}_metadata.json").exists():
-                raise FileExistsError(f"strict ablation run already exists and will not be overwritten: {directory / f'run_{run_id}_metadata.json'}")
             _generate_method(method=method, inputs=inputs, prompt_template=prompt_template, state_table_text=state_table_text,
                              method_dir=directory, provenance=provenance, llm_config=llm_config, run_id=run_id)
     print(f"Strict ablation generation saved to: {paths.root}")

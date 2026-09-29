@@ -28,7 +28,7 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 
 **Strict Ablation comparison** は `scripts/run_evaluation6_strict_ablation.py` と `scripts/evaluate_6_strict_ablation.py` を使う別トラックである。Evaluation 7 best-condition manifest を必須とし、Day 1--14の同じ状態表・状態写像・4時間帯を使う。両手法は共通prompt、共通の5キーJSON schema、共通の `(time_band, state_sequence)` 正規化・重複除去を使い、唯一の入力差をSTN JSONと時刻順代表状態列に限定する。STNのedge probabilityは入力情報として残すが、確率閾値による候補制約は課さない。
 
-Strict成果物は `results/<model>/6_strict_ablation/<dataset>_<K>_<h>_<days>days_holdout_test/` に保存する。`manifest.json` と各method/run metadataは prompt・state table・source log のSHA-256、モデル、前処理、期間、schema version、時間帯別API状態・token使用量を保持する。採点時は各methodが全時間帯で完走したrunの積集合だけを使い、`evaluation6_strict_ablation_paired_f1.csv` にrunごとの Proposed minus LLM-only F1を出力する。
+Strict成果物は `results/<model>/6_strict_ablation/<dataset>_<K>_<h>_<days>days_holdout_test/` に保存する。各method配下の `raw_api/` は時間帯・attemptごとの生API応答、`parsed/` は共通parser後の出力、`normalized/` は共通のStrict schemaに正規化した時間帯出力、`run_<N>.json` はrun統合後の正規化出力である。`manifest.json` と各method/run metadataは prompt・state table・source log のSHA-256、モデル、前処理、期間、schema version、時間帯別API状態・token使用量を保持する。再実行時は、非空かつ5キーschemaを満たす成功済み時間帯だけを再利用し、失敗または不完全な時間帯だけを新しいattemptとして生成する。採点時は各methodが全時間帯で完走したrunの積集合だけを使い、`evaluation6_strict_ablation_paired_f1.csv` にrunごとの Proposed minus LLM-only F1を出力する。
 
 ## RQ
 

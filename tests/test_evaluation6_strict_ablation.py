@@ -12,8 +12,10 @@ from src.behavior_pattern_mining.evaluation.strict_ablation import (
     build_strict_prompt,
     completed_run_ids,
     load_strict_condition,
+    normalize_strict_record,
     postprocess_strict_records,
 )
+from src.behavior_pattern_mining.llm.client import parse_pattern_records
 
 
 STRICT_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "run_evaluation6_strict_ablation.py"
@@ -24,6 +26,60 @@ SPEC.loader.exec_module(strict_generator)
 
 
 class Evaluation6StrictAblationTests(unittest.TestCase):
+    def test_strict_schema_survives_parser_and_normalizer(self) -> None:
+        response = json.dumps([{
+            "time_band": "Morning",
+            "pattern_name": "Morning routine",
+            "adl_sequence": ["Wake-up", "Hygiene", "Meal"],
+            "rationale": "The resident moves from the bedroom to the bathroom and kitchen.",
+            "state_sequence": ["State 1", "State 3", "State 5"],
+        }])
+        parsed = parse_pattern_records(response)
+        self.assertEqual(parsed[0]["ADL系列ラベル"], ["Wake-up", "Hygiene", "Meal"])
+        self.assertEqual(parsed[0]["解釈の根拠"], "The resident moves from the bedroom to the bathroom and kitchen.")
+        normalized = normalize_strict_record(parsed[0], "Morning")
+        self.assertIsNotNone(normalized)
+        self.assertEqual(set(normalized["adl_sequence"]), {"Wake-up", "Hygiene", "Meal"})
+        self.assertEqual(normalized["rationale"], "The resident moves from the bedroom to the bathroom and kitchen.")
+        self.assertEqual(normalized["state_sequence"], ["State 1", "State 3", "State 5"])
+
+    def test_legacy_adl_sequence_labels_remain_compatible(self) -> None:
+        parsed = parse_pattern_records(json.dumps([{
+            "pattern_name": "legacy", "adl_sequence_labels": ["Meal"],
+            "reason": "observed", "state_sequence": ["State 1", "State 2"],
+        }]))
+        normalized = normalize_strict_record(parsed[0], "Morning")
+        self.assertIsNotNone(normalized)
+        self.assertEqual(normalized["adl_sequence"], ["Meal"])
+
+    def test_both_methods_use_the_same_strict_schema(self) -> None:
+        response = json.dumps([{
+            "pattern_name": "pattern", "adl_sequence": ["Meal"],
+            "rationale": "observed", "state_sequence": ["State 1", "State 2"],
+        }])
+        for method in ("proposed", "llm_only"):
+            record = normalize_strict_record(parse_pattern_records(response)[0], "Morning")
+            self.assertIsNotNone(record, method)
+            self.assertEqual(
+                set(record),
+                {"time_band", "pattern_name", "adl_sequence", "rationale", "state_sequence"},
+            )
+
+    def test_resume_reuses_only_nonempty_validated_time_band(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            normalized_path = Path(tmpdir) / "normalized.json"
+            normalized_path.write_text(json.dumps([{
+                "time_band": "Morning", "pattern_name": "meal", "adl_sequence": ["Meal"],
+                "rationale": "observed", "state_sequence": ["State 1", "State 2"],
+            }]), encoding="utf-8")
+            complete = {
+                "status": "success",
+                "normalized_output_path": str(normalized_path),
+            }
+            self.assertTrue(strict_generator._valid_completed_band(complete))
+            normalized_path.write_text("[]", encoding="utf-8")
+            self.assertFalse(strict_generator._valid_completed_band(complete))
+
     def test_one_prompt_template_has_no_proposed_only_threshold(self) -> None:
         prompt_path = Path(__file__).resolve().parents[1] / "prompts" / "evaluation6_strict_ablation_prompt.md"
         template = prompt_path.read_text(encoding="utf-8")

@@ -343,11 +343,11 @@ def _normalize_pattern_records(data: Any) -> List[dict]:
         )
         reason = _first_string(
             item,
-            ("解釈の根拠", "reason", "根拠", "explanation", "説明", "description"),
+            ("rationale", "解釈の根拠", "reason", "根拠", "explanation", "説明", "description"),
             default="",
         )
         raw_adl_labels = None
-        for key in ("ADL系列ラベル", "adl_sequence_labels", "adl_labels", "ADLラベル"):
+        for key in ("adl_sequence", "ADL系列ラベル", "adl_sequence_labels", "adl_labels", "ADLラベル"):
             if key in item:
                 raw_adl_labels = item[key]
                 break
