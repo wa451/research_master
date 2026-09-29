@@ -1883,8 +1883,154 @@ def render_csv_result_table(df: pd.DataFrame, *, key_prefix: str) -> pd.DataFram
     return filtered_df
 
 
+def reviewer_response_result_dirs() -> list[Path]:
+    """Find completed read-only reviewer-response result bundles."""
+    root = PROJECT_ROOT / "results" / "gpt-5.6-sol" / "reviewer_response"
+    if not root.exists():
+        return []
+    return sorted(
+        {
+            path.parent
+            for path in root.rglob("reviewer_response_evaluation_summary.json")
+            if path.name == "reviewer_response_evaluation_summary.json"
+        }
+    )
+
+
+def reviewer_table(bundle: Path, name: str) -> pd.DataFrame | None:
+    path = bundle / "tables" / name
+    return pd.read_csv(path) if path.exists() else None
+
+
+def render_reviewer_response_results() -> None:
+    """Render paper-oriented tables and cautious interpretations for Eval 5--10."""
+    bundles = reviewer_response_result_dirs()
+    if not bundles:
+        return
+    st.subheader("査読対応版の統合結果")
+    labels = [display_path(path) for path in bundles]
+    selected_label = st.selectbox("査読対応版の結果セット", labels, index=len(labels) - 1)
+    bundle = bundles[labels.index(selected_label)]
+    summary = json.loads((bundle / "reviewer_response_evaluation_summary.json").read_text(encoding="utf-8"))
+    status_rows = [
+        {"評価": name, "状態": value["status"], "注記": value["note"]}
+        for name, value in summary.get("status", {}).items()
+    ]
+    st.dataframe(pd.DataFrame(status_rows), hide_index=True, use_container_width=True)
+
+    st.markdown("### 評価5: パターン品質")
+    eval5 = reviewer_table(bundle, "table_eval5_pattern_quality.csv")
+    if eval5 is not None:
+        st.dataframe(eval5, hide_index=True, use_container_width=True)
+        proposed = eval5[eval5["method"] == "proposed"]
+        if not proposed.empty:
+            row = proposed.iloc[0]
+            st.info(
+                f"提案法は平均 {row['pattern_count']} patterns、test-supported rate は {row['test_supported_rate']} です。"
+                f" fragmentation は {row['fragmentation']}（N/A run: {row['n_a_runs']}）であり、"
+                "比較可能な短系列・長系列pairがないため、断片化抑制の証拠とは解釈しません。"
+            )
+
+    st.markdown("### 評価6: ADL認識とStrict Ablation")
+    eval6_full = reviewer_table(bundle, "table_eval6_full_pipeline.csv")
+    eval6_strict = reviewer_table(bundle, "table_eval6_strict_ablation.csv")
+    full_tab, strict_tab = st.tabs(["Full-pipeline", "Strict Ablation"])
+    with full_tab:
+        if eval6_full is not None:
+            st.dataframe(eval6_full, hide_index=True, use_container_width=True)
+            proposed = eval6_full[eval6_full["method"] == "proposed"]
+            direct = eval6_full[eval6_full["method"] == "direct_log_baseline"]
+            if not proposed.empty and not direct.empty:
+                st.info(
+                    f"Day155–220 holdoutでは Proposed F1={proposed.iloc[0]['f1']}、"
+                    f"Direct LLM F1={direct.iloc[0]['f1']}。これはシステム全体の比較です。"
+                )
+    with strict_tab:
+        if eval6_strict is not None:
+            st.dataframe(eval6_strict, hide_index=True, use_container_width=True)
+            proposed = eval6_strict[eval6_strict["method"] == "proposed"]
+            if not proposed.empty:
+                st.info(
+                    f"共通完了runは {proposed.iloc[0]['common_runs']}、paired Delta F1 は "
+                    f"{proposed.iloc[0]['paired_delta_f1']} です。CIは既存成果物にepisode単位の"
+                    "再標本化単位がないため表示しません。"
+                )
+
+    st.markdown("### 評価7: K / h 感度")
+    eval7 = reviewer_table(bundle, "table_eval7_sensitivity.csv")
+    if eval7 is not None:
+        st.dataframe(eval7, hide_index=True, use_container_width=True)
+        best = eval7.iloc[0]
+        st.info(
+            f"validation上の最良条件は K={best['K']}, h={best['h']}、F1={best['f1']} です。"
+            "表はDay15–154 validationのみであり、testを選択に使用していません。"
+        )
+        figure = bundle / "figures" / "eval7_sensitivity_heatmap.png"
+        if figure.exists():
+            st.image(str(figure), caption="K / h validation F1", use_container_width=True)
+
+    st.markdown("### 評価8: 頻度層別")
+    eval8 = reviewer_table(bundle, "table_eval8_frequency.csv")
+    if eval8 is not None:
+        st.dataframe(eval8, hide_index=True, use_container_width=True)
+        st.info(
+            "ProposedとDirect LLMには既存の共通fixed frequency binを適用しています。"
+            "空binまたはrun数の少ないbinはN/Aや大きなばらつきとして残し、優劣を断定しません。"
+        )
+        figure = bundle / "figures" / "eval8_frequency_f1.png"
+        if figure.exists():
+            st.image(str(figure), caption="Frequency-stratified F1", use_container_width=True)
+
+    st.markdown("### 評価9: Hestia頑健性")
+    eval9 = reviewer_table(bundle, "table_eval9_robustness.csv")
+    if eval9 is not None:
+        st.dataframe(eval9, hide_index=True, use_container_width=True)
+        overall = eval9[eval9["condition"] == "overall"]
+        if not overall.empty:
+            row = overall.iloc[0]
+            st.info(
+                f"14日学習・3 seedのoverall sequence F1={row['f1']}、episode coverage={row['episode_coverage']}。"
+                "これは合成環境での結果であり、ADL Jaccardは既存Hestia scorerが出力していないためN/Aです。"
+            )
+        figure = bundle / "figures" / "eval9_hestia_f1.png"
+        if figure.exists():
+            st.image(str(figure), caption="Hestia condition F1", use_container_width=True)
+
+    st.markdown("### 評価10: 実宅の時間的汎化")
+    eval10 = reviewer_table(bundle, "table_eval10_real_home.csv")
+    if eval10 is not None:
+        st.dataframe(eval10, hide_index=True, use_container_width=True)
+        overall = eval10[eval10["scope"] == "overall"]
+        if not overall.empty:
+            row = overall.iloc[0]
+            st.info(
+                f"chronological holdoutで平均抽出数={row['extracted']}、再出現数={row['recurrent']}、FRR={row['frr']}。"
+                "実宅には完全なADL Ground Truthがないため、これはADL精度ではなく将来再出現性の診断です。"
+            )
+        figure = bundle / "figures" / "eval10_time_band_frr.png"
+        if figure.exists():
+            st.image(str(figure), caption="Future recurrence by time band", use_container_width=True)
+
+    structural = reviewer_table(bundle, "table_structural_validity.csv")
+    if structural is not None:
+        st.markdown("### Structural Validity")
+        st.dataframe(structural, hide_index=True, use_container_width=True)
+        st.warning("既存成果物に互換な制約検証結果がないため、旧称Groundednessを根拠なく表示していません。")
+
+    human = summary.get("human_evaluation", {})
+    st.markdown("### Human Evaluation")
+    st.info(
+        f"blind sample: {human.get('sample_count', 0)} items / status: {human.get('status', 'unknown')}。"
+        "評価者向けアイテムにはmethod名とrun IDを含めません。"
+    )
+
+
 def render_results(default_dirs: list[Path], current_evaluation: str | None = None) -> None:
     st.subheader("結果表示")
+    render_reviewer_response_results()
+    if reviewer_response_result_dirs():
+        st.divider()
+        st.markdown("### 個別ファイル・過去runの比較")
     all_dirs = discover_result_dirs()
     for directory in default_dirs:
         if directory.exists() and directory not in all_dirs:
