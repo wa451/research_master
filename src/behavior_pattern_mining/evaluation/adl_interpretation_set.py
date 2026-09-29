@@ -254,7 +254,8 @@ def _flat_interpretation_pattern(
     fallback_sequence: tuple[str, ...] | None = None,
 ) -> InterpretationPattern | None:
     sequence = parse_sequence(
-        item.get("遷移のパターン")
+        item.get("state_sequence")
+        or item.get("遷移のパターン")
         or item.get("遷移のシーケンス")
         or item.get("sequence")
         or item.get("states")
@@ -273,7 +274,8 @@ def _flat_interpretation_pattern(
         or resolved_pattern_id
     )
     label_normalization = normalize_prediction_labels(
-        item.get("ADL系列ラベル")
+        item.get("adl_sequence")
+        or item.get("ADL系列ラベル")
         or item.get("adl_sequence_labels")
         or item.get("adl_labels")
         or item.get("ADLラベル")

@@ -18,6 +18,7 @@ from app.command_builder import (  # noqa: E402
     build_evaluation4_steps,
     build_evaluation5_steps,
     build_evaluation6_steps,
+    build_evaluation6_strict_ablation_steps,
     build_evaluation7_steps,
     build_evaluation8_steps,
     build_evaluation9_steps,
@@ -753,6 +754,12 @@ def render_eval5_settings(common: dict) -> dict:
 
 def render_eval6_settings(common: dict) -> dict:
     st.subheader("評価6: ADL解釈ラベルSet一致評価")
+    comparison_track = st.radio(
+        "比較トラック",
+        ["full_pipeline", "strict_ablation"],
+        format_func=lambda value: "Full-pipeline comparison" if value == "full_pipeline" else "Strict Ablation comparison",
+        horizontal=True,
+    )
     st.caption(
         "既定は holdout: 先頭14日で生成し、Day 155–220 を独立テストとして採点します。"
     )
@@ -820,8 +827,12 @@ def render_eval6_settings(common: dict) -> dict:
         proposed_template = st.text_input("patterns-proposed-template", "")
         direct_template = st.text_input("patterns-direct-template", "")
         best_condition_manifest = st.text_input(
-            "evaluation7 best-condition manifest（任意）", "",
-            help="指定時はmanifestのK,hを使用します。不一致の手動K,hはCLIでエラーになります。",
+            "evaluation7 best-condition manifest" + ("（必須）" if comparison_track == "strict_ablation" else "（任意）"),
+            (
+                f"{model_results_relative(common)}/7_param_search_14d_5runs_individual_holdout/evaluation7_best_condition_manifest.json"
+                if comparison_track == "strict_ablation" else ""
+            ),
+            help="Strict Ablationでは唯一の条件源です。手動K/hとの不一致はCLIでエラーになります。",
         )
 
     st.markdown("**評価パラメータ**")
@@ -870,6 +881,7 @@ def render_eval6_settings(common: dict) -> dict:
         "patterns_proposed_template": proposed_template,
         "patterns_direct_template": direct_template,
         "best_condition_manifest": best_condition_manifest,
+        "comparison_track": comparison_track,
         "state_series": state_series,
         "adl_intervals": adl_intervals,
         "intermediate_output_dir": intermediate_dir,
@@ -1994,7 +2006,11 @@ def main() -> None:
             steps = build_evaluation5_steps(settings)
         elif common["evaluation"] == "評価6":
             settings = render_eval6_settings(common)
-            steps = build_evaluation6_steps(settings)
+            steps = (
+                build_evaluation6_strict_ablation_steps(settings)
+                if settings["comparison_track"] == "strict_ablation"
+                else build_evaluation6_steps(settings)
+            )
         elif common["evaluation"] == "評価7":
             settings = render_eval7_settings(common)
             steps = build_evaluation7_steps(settings)

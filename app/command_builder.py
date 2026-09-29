@@ -24,6 +24,10 @@ from src.behavior_pattern_mining.evaluation.evaluation6_manifest import (
     formal_artifact_paths,
     load_evaluation7_best_condition_manifest,
 )
+from src.behavior_pattern_mining.evaluation.strict_ablation import (
+    load_strict_condition,
+    strict_ablation_paths,
+)
 from src.behavior_pattern_mining.data.sensor_representation import artifact_dataset_name
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -683,6 +687,46 @@ def build_evaluation6_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                 final_dir / "evaluation6_by_time_band_by_method.csv",
                 final_dir / "evaluation6_comparison_summary.json",
             ],
+        ),
+    ]
+
+
+def build_evaluation6_strict_ablation_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
+    """Build the manifest-only Strict Ablation commands without altering full Eval6."""
+    manifest_path = as_path(settings.get("best_condition_manifest"))
+    if manifest_path is None:
+        raise ValueError("Strict Ablation requires an Evaluation 7 best-condition manifest")
+    condition = load_strict_condition(manifest_path)
+    paths = strict_ablation_paths(
+        project_root=PROJECT_ROOT,
+        results_root=settings_model_results_root(settings),
+        output_root=settings_model_output_root(settings),
+        dataset=settings["dataset"],
+        condition=condition,
+    )
+    runs = int(settings["runs"])
+    generator = script_cmd(settings["runner"], "scripts/run_evaluation6_strict_ablation.py")
+    add_arg(generator, "--best-condition-manifest", manifest_path)
+    add_arg(generator, "--runs", runs)
+    scorer = script_cmd(settings["runner"], "scripts/evaluate_6_strict_ablation.py")
+    add_arg(scorer, "--best-condition-manifest", manifest_path)
+    add_arg(scorer, "--runs", runs)
+    return [
+        EvaluationStep(
+            "eval6_strict_generate",
+            "Strict Ablation LLM出力を生成",
+            "manifest条件に固定した共通prompt・共通後処理で、STNと時系列のStrict比較用出力を生成します。",
+            generator,
+            [paths.state_table, paths.network_dir / "state_transition_Morning.json"],
+            [paths.proposed_dir / "run_1.json", paths.llm_only_dir / "run_1.json", paths.root / "manifest.json"],
+        ),
+        EvaluationStep(
+            "eval6_strict_evaluate",
+            "Strict Ablationをholdoutで採点",
+            "両手法で完走した共通runだけを Day 155-220 の同一GTで採点します。",
+            scorer,
+            [paths.proposed_dir / "run_1.json", paths.llm_only_dir / "run_1.json", paths.state_series],
+            [paths.root / "evaluation" / "evaluation6_strict_ablation_summary.json"],
         ),
     ]
 

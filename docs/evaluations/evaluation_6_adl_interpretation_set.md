@@ -22,6 +22,14 @@ LLMが各パターンへ付与した `ADL系列ラベル` と、パターン出�
 
 正式holdoutは `--best-condition-manifest results/<model>/7_param_search_14d_5runs_*_holdout/evaluation7_best_condition_manifest.json` を正本にする。manifestから `K,h`、sensor representation、generation日数、validation/test境界を読み、提案JSON、split LLM-only JSON、state series、metrics、出力先を同一条件へ自動解決する。これらを手動で指定した場合は一致時だけ許可し、不一致または判定不能なパスはエラーにする。manifestなしのholdoutは `--n-states` と `--hamming-threshold` を明示しなければ停止する。既存の全220日採点を再現する場合は `--split-mode legacy` を指定する。この場合も生成期間は先頭14日のままで、採点だけが全期間となる。
 
+## 比較トラック
+
+既存の `6_adl_match_*` は **Full-pipeline comparison** として保存し、既存prompt、Proposedの確率20%候補規則、手法別の統合形式を変更しない。過去の成果物と比較可能な結果はこのトラックだけに保存する。
+
+**Strict Ablation comparison** は `scripts/run_evaluation6_strict_ablation.py` と `scripts/evaluate_6_strict_ablation.py` を使う別トラックである。Evaluation 7 best-condition manifest を必須とし、Day 1--14の同じ状態表・状態写像・4時間帯を使う。両手法は共通prompt、共通の5キーJSON schema、共通の `(time_band, state_sequence)` 正規化・重複除去を使い、唯一の入力差をSTN JSONと時刻順代表状態列に限定する。STNのedge probabilityは入力情報として残すが、確率閾値による候補制約は課さない。
+
+Strict成果物は `results/<model>/6_strict_ablation/<dataset>_<K>_<h>_<days>days_holdout_test/` に保存する。`manifest.json` と各method/run metadataは prompt・state table・source log のSHA-256、モデル、前処理、期間、schema version、時間帯別API状態・token使用量を保持する。採点時は各methodが全時間帯で完走したrunの積集合だけを使い、`evaluation6_strict_ablation_paired_f1.csv` にrunごとの Proposed minus LLM-only F1を出力する。
+
 ## RQ
 
 | RQ | 内容 |

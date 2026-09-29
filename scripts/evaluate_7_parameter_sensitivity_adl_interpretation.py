@@ -900,6 +900,11 @@ def write_outputs(args: argparse.Namespace, result: dict[str, Any]) -> None:
             "sensor_representation": args.sensor_representation,
             "dataset": args.dataset,
             "selection_metric": args.selection_metric,
+            "model": {
+                "provider": identity.provider,
+                "model_id": identity.model_id,
+                "result_name": identity.result_name,
+            },
             **split_metadata,
         }
         (args.output_dir / "evaluation7_best_condition_manifest.json").write_text(
