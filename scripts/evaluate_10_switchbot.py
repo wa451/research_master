@@ -15,11 +15,16 @@ if str(ROOT) not in sys.path:
 from experiment_config import current_model_output_root, current_model_results_root  # noqa: E402
 
 from src.behavior_pattern_mining.evaluation.evaluation10_switchbot import (  # noqa: E402
+    FORMAL_OUTPUT_NAMESPACE,
+    FORMAL_RUNS,
     METHODS,
     STAGES,
     evaluate,
     extract,
     prepare,
+)
+from src.behavior_pattern_mining.evaluation.evaluation6_manifest import (  # noqa: E402
+    load_evaluation7_best_condition_manifest,
 )
 
 
@@ -27,26 +32,39 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--snapshot", type=Path, required=True, help="Directory containing events.csv and manifest.json")
     parser.add_argument("--stage", choices=STAGES, default="run")
-    parser.add_argument("--output-dir", type=Path, help="Intermediate output; default: output/<model>/10_switchbot/<snapshot>")
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="Intermediate output; default: output/<model>/10_real_home_temporal_generalization/<snapshot>",
+    )
     parser.add_argument(
         "--results-dir",
         type=Path,
-        help="Evaluation/LLM output; default: results/<model>/10_switchbot/<snapshot>",
+        help="Evaluation/LLM output; default: results/<model>/10_real_home_temporal_generalization/<snapshot>",
+    )
+    parser.add_argument(
+        "--eval7-best-condition-manifest",
+        type=Path,
+        default=current_model_results_root()
+        / "7_param_search_14d_5runs_individual_holdout"
+        / "evaluation7_best_condition_manifest.json",
+        help="Required source of the fixed formal K/h condition",
     )
     parser.add_argument("--split-at", help="Local midnight starting the held-out test period")
     parser.add_argument("--train-ratio", type=float, default=0.7)
-    parser.add_argument("--n-states", type=int, default=15)
-    parser.add_argument("--hamming-threshold", type=int, default=0)
+    parser.add_argument("--n-states", type=int, help="Must equal the Evaluation 7 manifest K")
+    parser.add_argument("--hamming-threshold", type=int, help="Must equal the Evaluation 7 manifest h")
     parser.add_argument("--smoothing-window-sec", type=int, default=5)
     parser.add_argument("--sampling-seconds", type=int, default=1)
     parser.add_argument("--min-sequence-length", type=int, default=2)
     parser.add_argument("--max-sequence-length", type=int, default=4)
     parser.add_argument("--min-train-occurrences", type=int, default=2)
     parser.add_argument("--top-k-per-mode", type=int, default=20)
-    parser.add_argument("--method", choices=METHODS, default="both")
+    parser.add_argument("--method", choices=METHODS, default="llm")
+    parser.add_argument("--runs", type=int, default=FORMAL_RUNS, help="LLM extraction/evaluation runs; formal default: 5")
     parser.add_argument("--llm-patterns", type=Path, help="Optional existing LLM pattern JSON")
-    parser.add_argument("--allow-api", action="store_true", help="Permit paid Gemini calls during extract/run")
-    parser.add_argument("--dry-run", action="store_true", help="Validate arguments and print stages without writing")
+    parser.add_argument("--allow-api", action="store_true", help="Permit paid Bedrock calls during extract/run")
+    parser.add_argument("--dry-run", action="store_true", help="Validate the formal plan and print train-only estimates without writing")
     return parser
 
 
@@ -57,11 +75,29 @@ def _resolve(path: Path) -> Path:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     snapshot = _resolve(args.snapshot)
-    output_dir = _resolve(args.output_dir or current_model_output_root() / "10_switchbot" / snapshot.name)
+    output_dir = _resolve(args.output_dir or current_model_output_root() / FORMAL_OUTPUT_NAMESPACE / snapshot.name)
     results_dir = _resolve(
         args.results_dir
-        or current_model_results_root() / "10_switchbot" / snapshot.name
+        or current_model_results_root() / FORMAL_OUTPUT_NAMESPACE / snapshot.name
     )
+    eval7_manifest = _resolve(args.eval7_best_condition_manifest)
+    try:
+        condition = load_evaluation7_best_condition_manifest(eval7_manifest)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"invalid Evaluation 7 best-condition manifest: {exc}", file=sys.stderr)
+        return 2
+    if args.n_states is not None and args.n_states != condition.n_states:
+        print("--n-states conflicts with the Evaluation 7 best-condition manifest", file=sys.stderr)
+        return 2
+    if args.hamming_threshold is not None and args.hamming_threshold != condition.hamming_threshold:
+        print("--hamming-threshold conflicts with the Evaluation 7 best-condition manifest", file=sys.stderr)
+        return 2
+    if args.runs < 1:
+        print("--runs must be >= 1", file=sys.stderr)
+        return 2
+    if args.runs != FORMAL_RUNS:
+        print(f"formal Evaluation 10 requires --runs {FORMAL_RUNS}", file=sys.stderr)
+        return 2
     stages = (
         ["prepare", *(["extract"] if args.allow_api else []), "evaluate"]
         if args.stage == "run"
@@ -76,8 +112,38 @@ def main(argv: list[str] | None = None) -> int:
     print(f"snapshot: {snapshot}")
     print(f"intermediate output: {output_dir}")
     print(f"results: {results_dir}")
+    print(f"Evaluation 7 condition: {eval7_manifest} (K={condition.n_states}, h={condition.hamming_threshold})")
+    print(f"LLM runs: {args.runs}")
     print(f"stages: {', '.join(stages)}")
     if args.dry_run:
+        try:
+            plan = prepare(
+                snapshot_dir=snapshot,
+                output_dir=output_dir,
+                split_at=args.split_at,
+                train_ratio=args.train_ratio,
+                n_states=condition.n_states,
+                hamming_threshold=condition.hamming_threshold,
+                smoothing_window_sec=args.smoothing_window_sec,
+                sampling_seconds=args.sampling_seconds,
+                min_sequence_length=args.min_sequence_length,
+                max_sequence_length=args.max_sequence_length,
+                min_train_occurrences=args.min_train_occurrences,
+                top_k_per_mode=args.top_k_per_mode,
+                evaluation7_manifest=eval7_manifest,
+                write_artifacts=False,
+            )
+        except (FileNotFoundError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        print(json.dumps({
+            "split": plan["split"],
+            "counts": plan["counts"],
+            "network": plan["network"],
+            "dry_run_estimate": {**plan["dry_run_estimate"], "total_prompt_tokens_for_runs_estimate": plan["dry_run_estimate"]["prompt_tokens_per_run_estimate"] * args.runs},
+            "api_calls": 0,
+            "test_prompted_to_llm": False,
+        }, ensure_ascii=False, indent=2))
         return 0
     try:
         for stage in stages:
@@ -87,20 +153,22 @@ def main(argv: list[str] | None = None) -> int:
                     output_dir=output_dir,
                     split_at=args.split_at,
                     train_ratio=args.train_ratio,
-                    n_states=args.n_states,
-                    hamming_threshold=args.hamming_threshold,
+                    n_states=condition.n_states,
+                    hamming_threshold=condition.hamming_threshold,
                     smoothing_window_sec=args.smoothing_window_sec,
                     sampling_seconds=args.sampling_seconds,
                     min_sequence_length=args.min_sequence_length,
                     max_sequence_length=args.max_sequence_length,
                     min_train_occurrences=args.min_train_occurrences,
                     top_k_per_mode=args.top_k_per_mode,
+                    evaluation7_manifest=eval7_manifest,
                 )
             elif stage == "extract":
                 extract(
                     output_dir=output_dir,
                     allow_api=args.allow_api,
                     llm_results_dir=results_dir,
+                    runs=args.runs,
                 )
             elif stage == "evaluate":
                 evaluate(
@@ -108,8 +176,9 @@ def main(argv: list[str] | None = None) -> int:
                     results_dir=results_dir,
                     method=args.method,
                     llm_patterns=_resolve(args.llm_patterns) if args.llm_patterns else None,
+                    runs=args.runs,
                 )
-    except (FileNotFoundError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
+    except (FileNotFoundError, FileExistsError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
     return 0

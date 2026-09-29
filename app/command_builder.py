@@ -1290,14 +1290,14 @@ def build_evaluation10_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
             ("--stage", stage),
             ("--output-dir", output_dir),
             ("--results-dir", results_dir),
+            ("--eval7-best-condition-manifest", as_path(settings["eval7_best_condition_manifest"])),
+            ("--runs", settings["runs"]),
         ):
             add_arg(value, flag, item)
         if stage == "prepare":
             for flag, item in (
                 ("--split-at", settings.get("split_at")),
                 ("--train-ratio", settings["train_ratio"]),
-                ("--n-states", settings["n_states"]),
-                ("--hamming-threshold", settings["hamming_threshold"]),
                 ("--smoothing-window-sec", settings["smoothing_window_sec"]),
                 ("--sampling-seconds", settings["sampling_seconds"]),
                 ("--min-sequence-length", settings["min_sequence_length"]),
@@ -1355,7 +1355,11 @@ def build_evaluation10_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
             [output_dir / "preparation.json", output_dir / "test_state_segments.json"],
             [
                 results_dir / "evaluation10_summary.csv",
+                results_dir / "evaluation10_summary_by_run.csv",
                 results_dir / "evaluation10_pattern_details.csv",
+                results_dir / "evaluation10_by_time_band.csv",
+                results_dir / "evaluation10_by_pattern_length.csv",
+                results_dir / "evaluation10_manifest.json",
                 results_dir / "evaluation10_summary.json",
             ],
         )

@@ -8,11 +8,16 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import pandas as pd
+
 from app.command_builder import build_evaluation10_steps
 from scripts.evaluate_10_switchbot import main
 from src.behavior_pattern_mining.evaluation.evaluation10_switchbot import (
     DETAIL_COLUMNS,
+    RUN_SUMMARY_COLUMNS,
     SUMMARY_COLUMNS,
+    build_frequency_patterns,
+    choose_split,
     evaluate,
     file_sha256,
     llm_patterns_path,
@@ -21,6 +26,22 @@ from src.behavior_pattern_mining.evaluation.evaluation10_switchbot import (
 
 
 class Evaluation10SwitchBotTests(unittest.TestCase):
+    def make_eval7_manifest(self, root: Path, *, n_states: int = 8, hamming: int = 0) -> Path:
+        path = root / "evaluation7_best_condition_manifest.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "n_states": n_states,
+                    "hamming_threshold": hamming,
+                    "sensor_representation": "individual",
+                    "generation_days": 14,
+                    "split_mode": "holdout",
+                }
+            ),
+            encoding="utf-8",
+        )
+        return path
+
     def make_snapshot(self, root: Path, *, test_variant: bool = False) -> Path:
         snapshot = root / "2026-09-01_2026-09-05"
         snapshot.mkdir(parents=True)
@@ -109,11 +130,13 @@ class Evaluation10SwitchBotTests(unittest.TestCase):
             )
             rows = {row["method"]: row for row in payload["summary"]}
             self.assertEqual(rows["frequency"]["status"], "complete")
-            self.assertGreater(rows["frequency"]["pattern_count"], 0)
-            self.assertGreater(rows["frequency"]["test_supported_pattern_fraction"], 0)
-            self.assertEqual(rows["llm"]["status"], "missing")
+            self.assertGreater(rows["frequency"]["pattern_count_mean"], 0)
+            self.assertGreater(rows["frequency"]["test_supported_pattern_fraction_mean"], 0)
+            self.assertEqual(rows["llm"]["status"], "incomplete")
             with (results / "evaluation10_summary.csv").open(encoding="utf-8") as handle:
                 self.assertEqual(next(csv.reader(handle)), SUMMARY_COLUMNS)
+            with (results / "evaluation10_summary_by_run.csv").open(encoding="utf-8") as handle:
+                self.assertEqual(next(csv.reader(handle)), RUN_SUMMARY_COLUMNS)
             with (results / "evaluation10_pattern_details.csv").open(encoding="utf-8") as handle:
                 self.assertEqual(next(csv.reader(handle)), DETAIL_COLUMNS)
 
@@ -192,6 +215,7 @@ class Evaluation10SwitchBotTests(unittest.TestCase):
             snapshot = self.make_snapshot(root)
             output = root / "output"
             results = root / "results"
+            eval7_manifest = self.make_eval7_manifest(root)
             return_code = main(
                 [
                     "--snapshot",
@@ -202,6 +226,8 @@ class Evaluation10SwitchBotTests(unittest.TestCase):
                     str(results),
                     "--method",
                     "frequency",
+                    "--eval7-best-condition-manifest",
+                    str(eval7_manifest),
                     "--train-ratio",
                     "0.5",
                     "--sampling-seconds",
@@ -215,6 +241,7 @@ class Evaluation10SwitchBotTests(unittest.TestCase):
             self.assertEqual(return_code, 0)
             self.assertTrue((output / "preparation.json").is_file())
             self.assertTrue((results / "evaluation10_summary.json").is_file())
+            self.assertTrue((results / "evaluation10_manifest.json").is_file())
 
     def test_dashboard_commands_keep_api_opt_in(self):
         settings = {
@@ -222,10 +249,9 @@ class Evaluation10SwitchBotTests(unittest.TestCase):
             "snapshot": "data/switchbot/2026-09-01_2026-09-08",
             "output_dir": "output/10_switchbot/2026-09-01_2026-09-08",
             "results_dir": "results/10_switchbot/2026-09-01_2026-09-08",
+            "eval7_best_condition_manifest": "results/gpt-5.6-sol/7_param_search_14d_5runs_individual_holdout/evaluation7_best_condition_manifest.json",
             "split_at": "",
             "train_ratio": 0.7,
-            "n_states": 15,
-            "hamming_threshold": 0,
             "smoothing_window_sec": 5,
             "sampling_seconds": 1,
             "min_sequence_length": 2,
@@ -233,6 +259,7 @@ class Evaluation10SwitchBotTests(unittest.TestCase):
             "min_train_occurrences": 2,
             "top_k_per_mode": 20,
             "method": "both",
+            "runs": 5,
             "allow_api": False,
         }
         steps = build_evaluation10_steps(settings)
@@ -241,6 +268,175 @@ class Evaluation10SwitchBotTests(unittest.TestCase):
         enabled = build_evaluation10_steps({**settings, "allow_api": True})
         self.assertEqual([step.step_id for step in enabled], ["eval10_prepare", "eval10_extract", "eval10_evaluate"])
         self.assertIn("--allow-api", enabled[1].command)
+
+    def test_cli_rejects_k_or_h_conflicting_with_eval7_manifest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            snapshot = self.make_snapshot(root)
+            manifest = self.make_eval7_manifest(root)
+            self.assertEqual(
+                main([
+                    "--snapshot", str(snapshot),
+                    "--eval7-best-condition-manifest", str(manifest),
+                    "--n-states", "9", "--dry-run",
+                ]),
+                2,
+            )
+            self.assertEqual(
+                main([
+                    "--snapshot", str(snapshot),
+                    "--eval7-best-condition-manifest", str(manifest),
+                    "--hamming-threshold", "1", "--dry-run",
+                ]),
+                2,
+            )
+
+    def test_frequency_patterns_keep_time_band_as_candidate_identity(self):
+        patterns = build_frequency_patterns(
+            [
+                {"date": "2026-09-01", "time_band": "Morning", "sequence": ["状態1", "状態2", "状態1"]},
+                {"date": "2026-09-01", "time_band": "Daytime", "sequence": ["状態1", "状態2", "状態1"]},
+            ],
+            min_length=2,
+            max_length=2,
+            min_occurrences=1,
+            top_k_per_mode=20,
+        )
+        same_sequence = [item for item in patterns if item["sequence"] == ["状態1", "状態2"]]
+        self.assertEqual(len(same_sequence), 2)
+        self.assertEqual({item["time_bands"][0] for item in same_sequence}, {"Morning", "Daytime"})
+
+    def test_choose_split_is_chronological_and_at_midnight(self):
+        split = choose_split(
+            pd.Timestamp("2026-09-01"), pd.Timestamp("2026-09-11"), None, 0.7
+        )
+        self.assertEqual(split, pd.Timestamp("2026-09-08T00:00:00"))
+
+    def test_llm_paths_are_run_specific(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            preparation = self.prepare_snapshot(self.make_snapshot(root), root / "output")
+            paths = [llm_patterns_path(root / "output", preparation, root / "results", run) for run in range(1, 6)]
+            self.assertEqual(len(set(paths)), 5)
+            self.assertTrue(all(path.name.endswith(f"_{run}.json") for run, path in enumerate(paths, start=1)))
+
+    def test_llm_run_summary_uses_mean_and_sample_sd(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            snapshot = self.make_snapshot(root)
+            output = root / "output"
+            preparation = self.prepare_snapshot(snapshot, output)
+            results = root / "results"
+            for run in range(1, 6):
+                path = llm_patterns_path(output, preparation, results, run)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps([{
+                    "pattern_id": f"L{run}", "sequence": ["状態1", "状態2"], "time_bands": ["Morning"]
+                }]), encoding="utf-8")
+            payload = evaluate(output_dir=output, results_dir=results, method="llm", runs=5)
+            row = payload["summary"][0]
+            self.assertEqual(row["complete_runs"], 5)
+            self.assertEqual(row["requested_runs"], 5)
+            self.assertIsNotNone(row["test_supported_pattern_fraction_mean"])
+            self.assertIsNotNone(row["test_supported_pattern_fraction_sd"])
+
+    def test_evaluate_does_not_overwrite_existing_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "output"
+            self.prepare_snapshot(self.make_snapshot(root), output)
+            results = root / "results"
+            evaluate(output_dir=output, results_dir=results, method="frequency")
+            with self.assertRaisesRegex(FileExistsError, "refusing to overwrite"):
+                evaluate(output_dir=output, results_dir=results, method="frequency")
+
+    def test_prepare_does_not_overwrite_existing_artifacts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            snapshot = self.make_snapshot(root)
+            output = root / "output"
+            self.prepare_snapshot(snapshot, output)
+            with self.assertRaisesRegex(FileExistsError, "refusing to overwrite"):
+                self.prepare_snapshot(snapshot, output)
+
+    def test_preparation_records_and_locks_evaluation7_condition(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            snapshot = self.make_snapshot(root)
+            condition = self.make_eval7_manifest(root)
+            output = root / "output"
+            preparation = prepare(
+                snapshot_dir=snapshot,
+                output_dir=output,
+                split_at=None,
+                train_ratio=0.5,
+                n_states=8,
+                hamming_threshold=0,
+                smoothing_window_sec=0,
+                sampling_seconds=60,
+                min_sequence_length=2,
+                max_sequence_length=4,
+                min_train_occurrences=2,
+                top_k_per_mode=20,
+                evaluation7_manifest=condition,
+            )
+            self.assertEqual(preparation["evaluation7_condition"]["sha256"], file_sha256(condition))
+            condition.write_text("{}", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Evaluation 7 condition changed"):
+                evaluate(output_dir=output, results_dir=root / "results", method="frequency")
+
+    def test_llm_patterns_are_scored_once_per_declared_time_band(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "output"
+            self.prepare_snapshot(self.make_snapshot(root), output)
+            patterns = root / "patterns.json"
+            patterns.write_text(json.dumps([{
+                "pattern_id": "L001",
+                "sequence": ["状態1", "状態2"],
+                "time_bands": ["Morning", "Daytime"],
+            }]), encoding="utf-8")
+            evaluate(
+                output_dir=output,
+                results_dir=root / "results",
+                method="llm",
+                llm_patterns=patterns,
+            )
+            with (root / "results/evaluation10_pattern_details.csv").open(encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(len(rows), 2)
+            self.assertEqual({row["time_band"] for row in rows}, {"Morning", "Daytime"})
+
+    def test_duplicate_patterns_do_not_double_count_recurrence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "output"
+            self.prepare_snapshot(self.make_snapshot(root), output)
+            patterns = root / "patterns.json"
+            patterns.write_text(json.dumps([
+                {"pattern_id": "L001", "sequence": ["状態1", "状態2"], "time_bands": ["Morning"]},
+                {"pattern_id": "L002", "sequence": ["状態1", "状態2"], "time_bands": ["Morning"]},
+            ]), encoding="utf-8")
+            payload = evaluate(
+                output_dir=output,
+                results_dir=root / "results",
+                method="llm",
+                llm_patterns=patterns,
+            )
+            self.assertEqual(payload["run_summary"][0]["pattern_count"], 1)
+
+    def test_breakdown_files_include_time_band_and_pattern_length(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "output"
+            self.prepare_snapshot(self.make_snapshot(root), output)
+            results = root / "results"
+            evaluate(output_dir=output, results_dir=results, method="frequency")
+            for name in ("evaluation10_by_time_band.csv", "evaluation10_by_pattern_length.csv"):
+                with (results / name).open(encoding="utf-8") as handle:
+                    header = next(csv.reader(handle))
+                self.assertIn("future_recurrence_rate", header)
+                self.assertIn("mean_test_support_count", header)
 
 
 if __name__ == "__main__":

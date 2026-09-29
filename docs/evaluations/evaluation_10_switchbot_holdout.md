@@ -1,92 +1,104 @@
-# 評価10: SwitchBot実宅ログの時間ホールドアウト評価
+# 評価10: SwitchBot実宅ログの将来再現性評価
 
-> **モデル別保存:** `preparation.json`、state table、network、frequency patterns、train/test segmentsは `output/<model>/10_switchbot/<期間>/` に残す。LLM fingerprint/checkpoint/usageと評価結果は `results/<model>/10_switchbot/<期間>/` に保存し、同一入力fingerprintでも異なるモデル間では共有しない。
+評価10は、正解ADLラベルを持たない実宅SwitchBotログに対し、過去期間から得た状態遷移パターンが未来期間に同じ条件で再出現するかを測る評価である。これはADL分類精度、住人識別、行動解釈の正しさを主張する評価ではない。
 
-## 目的と評価可能範囲
-
-自宅で収集したSwitchBotイベントから生活行動候補の状態系列を生成し、時間的に後の未使用期間で同じ系列が再出現するかを評価する。入力に正解ADL区間がないため、本評価はADL解釈の正確さ、行動検出Precision/Recall、住人識別精度を測らない。結果は「学習期間から生成した系列の時間的安定性」の診断値として扱う。
-
-入力は1つの固定スナップショットである。
+旧来の `output/<model>/10_switchbot/` と `results/<model>/10_switchbot/` はパイロット成果物として保持する。正式版は必ず次へ新規保存する。
 
 ```text
-data/switchbot/2026-09-01_2026-09-08/
-├── events.csv
-└── manifest.json
+output/<model>/10_real_home_temporal_generalization/<期間>/
+results/<model>/10_real_home_temporal_generalization/<期間>/
 ```
 
-`events.csv` はヘッダーなしの `date,time,sensor,value` 4列で、値は `ON/OFF`, `OPEN/CLOSE`, `PRESENT/ABSENT`, `1/0`, `TRUE/FALSE` を受理する。期間ディレクトリ名は `YYYY-MM-DD_YYYY-MM-DD` とし、現地時刻の完全なカレンダー日の半開区間を表す。
+既存成果物がある出力先への準備、抽出、評価は停止する。過去の実行を消去・上書きしてはならない。
 
-`manifest.json` はSwitchBot Loggerの研究出力schema version 1を検証する。`format=casas_csv`、列順、headerなし、timezone、`source.system=switchbot_logger`、offset付きの `source.start/end_exclusive`、`conversion_report.output_events` が必要である。期間はディレクトリ名と、出力件数はCSV行数と一致しなければならない。入力ファイルのSHA-256を中間snapshotへ保存し、後段実行時に変更を検出する。
+## 入力と固定条件
 
-## 分割と漏洩防止
+入力snapshotは `data/switchbot/YYYY-MM-DD_YYYY-MM-DD/` の `events.csv` と `manifest.json` である。CSVはヘッダーなしの `date,time,sensor,value` 4列、manifestはSwitchBot Logger schema version 1でなければならない。source期間、出力行数、タイムゾーン、入力SHA-256を検証する。
 
-既定ではスナップショットの完全なカレンダー日数の先頭70%（端数切捨て）をtrain、残りをtestにする。最低1日ずつ確保し、境界は現地時刻の0時に固定する。`--split-at` で境界を明示できる。
+正式版のK/hは次のEvaluation 7 manifestのみから読む。CLIの `--n-states` または `--hamming-threshold` がこの値と異なれば即時に失敗する。
 
-- センサー列、代表状態上位K、ハミング写像先、遷移ネットワーク、頻出系列はtrainだけから作る。
-- testだけに現れるセンサーは、testがtrain表現の次元を変えないよう無視し、警告と件数を保存する。
-- Sample-and-Holdと遅延OFFは時系列順の因果的処理であり、trainの末尾状態をtest開始時へ持ち越す。
-- testの出現状況を見てK、h、最小出現回数、系列数を選び直した結果を未使用test性能として報告しない。
-- 系列と遷移は日・時間帯の境界をまたいで数えない。
+```text
+results/gpt-5.6-sol/7_param_search_14d_5runs_individual_holdout/
+  evaluation7_best_condition_manifest.json
+```
 
-ダッシュボードの既定条件は `K=10`, `h=2`, 1秒サンプリング、遅延OFF 5秒、系列長2〜4、train最小2回、時間帯ごとの頻出上位20件である。評価10の新規条件であり、評価1〜9のCLI既定値を変更しない。
+現在の正式条件は個別センサ表現、`K=10`、`h=2` である。LLM抽出は固定で5 runであり、run数を変更する正式実行は受け付けない。
 
-## パターン生成
+## 時間分割と漏洩防止
 
-`frequency` はtrainの各日・各時間帯で連続2〜4状態を数え、`その他` を含まない系列を最小出現回数で絞って時間帯ごとの上位候補とする。同じ系列が複数時間帯に現れた場合は1件へ統合する。APIなしの既定runで必ず生成される。
+snapshotの完全な現地カレンダー日を時系列順に並べ、先頭70%（端数切捨て）をtrain、残り30%をtestにする。最低1日ずつを確保し、境界は現地時刻の00:00である。`--split-at` はこの境界を明示する場合だけ使用する。
 
-`llm` は既存の提案手法と同じ時間帯別状態遷移JSONとpromptを使う。API呼出しは `--allow-api` を明示した `extract` または `run` だけで行う。入力hash、split、パラメータ、network JSONからfingerprintを作り、チェックポイントをfingerprint別に分離する。APIを許可せず `both` を採点した場合、LLM行は `missing` とし、0点としてfrequencyと混ぜない。保存済みのLLM JSONは `--llm-patterns` で指定できる。
+- sensor列、sample-and-hold、因果的な遅延OFF平滑化、代表状態上位K、hamming写像、状態表、STN、候補系列はtrainイベントだけから構築する。
+- testベクトルはtrain状態表だけに写像する。test専用センサは表現次元や代表状態を変えず、無視件数をmanifestに記録する。
+- sample-and-holdの状態は時系列順に進めるため、train最終状態をtest開始時に持ち越すが、testイベントをtrain側の代表状態・STN・LLM入力に使わない。
+- testを見てK/h、閾値、候補数、プロンプトを選び直してはならない。準備後に入力snapshotまたはEval7 manifestのhashが変われば後段は停止する。
+- 系列・遷移は日境界・時間帯境界をまたがない。
 
-## 指標
+## 生成と採点
 
-| 指標 | 定義 |
-|---|---|
-| `test_supported_pattern_fraction` | 生成パターンのうち、対応時間帯のtestに1回以上完全一致で出現した割合。 |
-| `test_day_recurrence` | 各パターンについて、testの対象日数のうち1回以上出現した日数の割合。summaryはパターン等重み平均。 |
-| `test_occurrences_per_day` | test出現回数を対象日数で割った値。 |
-| `test_to_train_rate_ratio` | 1日あたりtest出現回数 / train出現回数。train側0回では空欄。 |
-| `test_transition_coverage` | testの全隣接遷移位置のうち、その手法の1つ以上のパターンに覆われた位置の割合。重複被覆は1回と数える。 |
+train状態系列から、既存Proposedと同じ時間帯別STN JSONおよび `prompts/pattern_extraction_prompt.md` をGPT-5.6 Solへ渡す。LLM入力はtrain STNのみで、test状態系列やtest統計はプロンプトに渡さない。run 1--5 は同一fingerprint下に別JSON・checkpointとして保存される。
 
-出現は重なりを許して数える。`test_supported_pattern_fraction` は一般的なPrecisionではなく、正解活動がなくても算出できる再出現診断である。
+頻度法はAPI不要の診断用候補である。候補と採点の基本単位は **`(time_band, contiguous state sequence)`** である。同じ状態列が別時間帯に出ても統合しない。LLMが時間帯別の解釈を統合して返した場合も、採点時には時間帯ごとに展開する。
 
-## 実行
+主指標 `test_supported_pattern_fraction`（FRR）は、生成した候補のうち対応時間帯のtestで1回以上完全一致した候補の割合である。補助指標はtest日単位再現率、test 1日当たり出現数、train/test出現率比、test遷移被覆率、および時間帯別・系列長別のpattern detailsである。LLMはrun別値と5 runの平均・標本標準偏差を保存し、欠損runを0として集計しない。
 
-APIなしでfrequency生成と評価を行う。
+Ground Truth ADLは探索・参照・統合しない。将来に同じ状態系列が出たことは、ADL意味が正しいことの証明ではない。
+
+## Dry-run
+
+dry-runは実APIを呼ばず、成果物も作らない。split日数、train/test event数、trainセンサ数、代表状態数、STNノード/エッジ数、prompt token概算、5 run合計概算、API call数0、`test_prompted_to_llm=false` を表示する。
 
 ```bash
 uv run python scripts/evaluate_10_switchbot.py \
-  --snapshot data/switchbot/2026-09-01_2026-09-08
+  --snapshot data/switchbot/2026-08-19_2026-09-19 \
+  --eval7-best-condition-manifest results/gpt-5.6-sol/7_param_search_14d_5runs_individual_holdout/evaluation7_best_condition_manifest.json \
+  --dry-run
 ```
 
-LLM系列も生成して両手法を採点する。
+## 本番の段階実行
+
+APIなしでまずtrain側の状態表とSTNを固定する。
 
 ```bash
 uv run python scripts/evaluate_10_switchbot.py \
-  --snapshot data/switchbot/2026-09-01_2026-09-08 \
-  --allow-api
+  --snapshot data/switchbot/2026-08-19_2026-09-19 \
+  --eval7-best-condition-manifest results/gpt-5.6-sol/7_param_search_14d_5runs_individual_holdout/evaluation7_best_condition_manifest.json \
+  --stage prepare
 ```
 
-段階実行もできる。
+次だけがBedrock APIを呼ぶ。train STNに対する5 runである。
 
 ```bash
-uv run python scripts/evaluate_10_switchbot.py --snapshot data/switchbot/2026-09-01_2026-09-08 --stage prepare
-uv run python scripts/evaluate_10_switchbot.py --snapshot data/switchbot/2026-09-01_2026-09-08 --stage extract --allow-api
-uv run python scripts/evaluate_10_switchbot.py --snapshot data/switchbot/2026-09-01_2026-09-08 --stage evaluate --method both
+uv run python scripts/evaluate_10_switchbot.py \
+  --snapshot data/switchbot/2026-08-19_2026-09-19 \
+  --eval7-best-condition-manifest results/gpt-5.6-sol/7_param_search_14d_5runs_individual_holdout/evaluation7_best_condition_manifest.json \
+  --stage extract --allow-api
 ```
 
-`--dry-run` はパスと実行段階だけを表示し、ファイルを作らない。Streamlitの「評価10」からも同じCLIを段階実行できる。
+最後にAPIなしでtest再現性を集計する。
+
+```bash
+uv run python scripts/evaluate_10_switchbot.py \
+  --snapshot data/switchbot/2026-08-19_2026-09-19 \
+  --eval7-best-condition-manifest results/gpt-5.6-sol/7_param_search_14d_5runs_individual_holdout/evaluation7_best_condition_manifest.json \
+  --stage evaluate --method llm
+```
 
 ## 出力
 
 | パス | 内容 |
 |---|---|
-| `output/<model>/10_switchbot/<期間>/preparation.json` | 入力hash、期間、split、パラメータ、件数、警告。 |
-| `output/<model>/10_switchbot/<期間>/state_table.tsv` | trainだけで決めた代表状態表。 |
-| `output/<model>/10_switchbot/<期間>/network/` | train時間帯別のLLM入力ネットワーク。 |
-| `output/<model>/10_switchbot/<期間>/frequency_patterns.json` | trainで生成したfrequency系列。 |
-| `results/<model>/10_switchbot/<期間>/llm/<fingerprint>/` | 同一入力・split・パラメータ・networkだけで再利用するLLM出力とチェックポイント。 |
-| `output/<model>/10_switchbot/<期間>/{train,test}_state_segments.json` | 日・時間帯境界で分けた固定状態系列。 |
-| `results/<model>/10_switchbot/<期間>/evaluation10_summary.csv` | 手法別の主要指標とstatus。 |
-| `results/<model>/10_switchbot/<期間>/evaluation10_pattern_details.csv` | パターン別のtrain/test出現・日単位再現。 |
-| `results/<model>/10_switchbot/<期間>/evaluation10_summary.json` | 再現条件、入力パス、summary、出力一覧。 |
+| `output/<model>/10_real_home_temporal_generalization/<期間>/preparation.json` | 入力・Eval7 manifest hash、時系列split、固定K/h、センサ表現、件数、STN規模。 |
+| `output/.../state_table.tsv` | trainだけで決まる代表状態表。 |
+| `output/.../network/` | trainだけで構築する時間帯別STN。 |
+| `output/.../{train,test}_state_segments.json` | 同じtrain状態表で写像した日・時間帯別状態系列。 |
+| `results/.../llm/<fingerprint>/..._1.json` -- `..._5.json` | run別のLLMパターンとcheckpoint。 |
+| `results/.../evaluation10_pattern_details.csv` | run・時間帯・系列長ごとの出現と再現。 |
+| `results/.../evaluation10_summary_by_run.csv` | runごとのFRR・補助指標。 |
+| `results/.../evaluation10_summary.csv` | 5 run平均・標本標準偏差。 |
+| `results/.../evaluation10_by_time_band.csv` | run・時間帯ごとの候補数、再出現数、FRR、平均test support。 |
+| `results/.../evaluation10_by_pattern_length.csv` | run・系列長ごとの候補数、再出現数、FRR、平均test support。 |
+| `results/.../evaluation10_manifest.json` | モデル、prompt hash/設定、K/h根拠、split、センサ写像、指標定義。 |
+| `results/.../evaluation10_summary.json` | 再現条件と全出力パス。 |
 
-`data/`, `output/<model>/`, `results/<model>/`, `picture/` は既存方針どおりGit管理外であり、評価10の状態表も `output/<model>/` 配下へ保存する。実宅ログや派生成果物をコミットしない。
+実宅イベント、device識別子、派生成果物はGitへコミットしない。

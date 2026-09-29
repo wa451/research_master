@@ -69,6 +69,6 @@
 ## eval10 SwitchBot実宅ログ
 
 - 文書: [評価10](../docs/evaluations/evaluation_10_switchbot_holdout.md)、AI説明: [eval10](evaluations/eval10_switchbot_holdout.md)、入力連携は [SwitchBot Logger](../docs/integrations/switchbot_logger.md)。
-- 入口/実装: [evaluate_10_switchbot.py](../scripts/evaluate_10_switchbot.py) → [evaluation10_switchbot.py](../src/behavior_pattern_mining/evaluation/evaluation10_switchbot.py)。trainだけで代表状態・候補を作り、固定写像したtestの再出現を採点する。
-- テスト: [test_evaluation10_switchbot.py](../tests/test_evaluation10_switchbot.py)（入力hash、test-onlyセンサー、CSV/JSON契約、CLI・Web配線）。
-- 注意: 正解ADLなし。再出現診断をPrecision/Recallと呼ばない。入力・中間・結果はGit管理外で、LLM APIはopt-in。
+- 入口/実装: [evaluate_10_switchbot.py](../scripts/evaluate_10_switchbot.py) → [evaluation10_switchbot.py](../src/behavior_pattern_mining/evaluation/evaluation10_switchbot.py)。Eval7 manifest固定のK/hで、trainだけから状態表・STN・候補を作り、固定写像した未来testの再出現を採点する。
+- テスト: [test_evaluation10_switchbot.py](../tests/test_evaluation10_switchbot.py)（入力/Eval7 hash、test-onlyセンサー、時間帯候補粒度、5 run集計、上書き防止、CLI・Web配線）。
+- 注意: 正解ADLなし。再出現診断をPrecision/Recallと呼ばない。正式成果物は `10_real_home_temporal_generalization` に分離し、Bedrock APIは明示opt-inのextractだけで呼ぶ。

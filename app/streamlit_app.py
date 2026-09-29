@@ -329,11 +329,11 @@ RESULT_FILE_ORDER["評価9"] = [
 RESULT_GUIDES["評価10"] = [
     {
         "files": "evaluation10_summary.csv",
-        "how_to_read": "methodごとにstatusを確認し、後半で再出現したパターン割合、日単位再現率、遷移被覆率を読みます。llm=missingは0点ではありません。",
+        "how_to_read": "methodごとに5 runのcomplete数、FRR、日単位再現率、遷移被覆率の平均と標本標準偏差を読みます。不足runは0点ではありません。",
     },
     {
-        "files": "evaluation10_pattern_details.csv",
-        "how_to_read": "系列・時間帯ごとに学習/テスト出現数、出現日数、1日あたり出現率とその比を確認します。",
+        "files": "evaluation10_summary_by_run.csv, evaluation10_pattern_details.csv, evaluation10_by_time_band.csv, evaluation10_by_pattern_length.csv",
+        "how_to_read": "run別のFRR、系列・時間帯ごとの出現、時間帯別・系列長別の再現率と平均test supportを確認します。",
     },
     {
         "files": "evaluation10_summary.json",
@@ -342,7 +342,11 @@ RESULT_GUIDES["評価10"] = [
 ]
 RESULT_FILE_ORDER["評価10"] = [
     "evaluation10_summary.csv",
+    "evaluation10_summary_by_run.csv",
+    "evaluation10_by_time_band.csv",
+    "evaluation10_by_pattern_length.csv",
     "evaluation10_pattern_details.csv",
+    "evaluation10_manifest.json",
     "evaluation10_summary.json",
 ]
 
@@ -1479,34 +1483,29 @@ def render_eval9_settings(common: dict) -> dict:
 
 
 def render_eval10_settings(common: dict) -> dict:
-    st.subheader("評価10: SwitchBot実宅ログの時間ホールドアウト評価")
-    st.caption("前半だけで生成し、固定した状態表で後半の再出現を評価します。正解ADL精度ではありません。")
+    st.subheader("評価10: SwitchBot実宅ログの将来再現性評価")
+    st.caption("時系列の前半だけで状態表・STN・LLM入力を固定し、後半で同じ時間帯の完全一致再出現を評価します。正解ADL精度ではありません。")
     snapshot = st.text_input(
         "SwitchBotスナップショット",
-        "data/switchbot/2026-09-01_2026-09-08",
+        "data/switchbot/2026-08-19_2026-09-19",
     )
     snapshot_name = Path(snapshot.rstrip("/")).name or "snapshot"
     output_dir = st.text_input(
-        "中間成果物ディレクトリ", f"{model_output_relative(common)}/10_switchbot/{snapshot_name}"
+        "中間成果物ディレクトリ", f"{model_output_relative(common)}/10_real_home_temporal_generalization/{snapshot_name}"
     )
     results_dir = st.text_input(
-        "評価10の集計先",
-        f"{model_results_relative(common)}/10_switchbot/{snapshot_name}",
+        "評価10の正式集計先",
+        f"{model_results_relative(common)}/10_real_home_temporal_generalization/{snapshot_name}",
         key=f"eval10_results_dir_{common['model_id']}",
     )
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        train_ratio = st.number_input(
-            "学習期間比率", min_value=0.1, max_value=0.9, value=0.7, step=0.1
-        )
-    with col2:
-        n_states = st.number_input(
-            "代表状態数 K", min_value=1, value=DEFAULT_N_STATES, step=1
-        )
-    with col3:
-        hamming = st.number_input(
-            "ハミング距離閾値", min_value=0, value=DEFAULT_HAMMING_THRESHOLD, step=1
-        )
+    eval7_best_condition_manifest = st.text_input(
+        "評価7の最適条件manifest（K/h固定）",
+        f"{model_results_relative(common)}/7_param_search_14d_5runs_individual_holdout/evaluation7_best_condition_manifest.json",
+    )
+    train_ratio = st.number_input(
+        "学習期間比率", min_value=0.1, max_value=0.9, value=0.7, step=0.1
+    )
+    st.info("K=10、h=2 は評価7のmanifestからのみ読込みます。LLM抽出は固定で5 runです。")
     split_at = st.text_input("テスト開始（任意・現地時刻の0時）", "")
     sampling_seconds = st.number_input("サンプリング間隔（秒）", min_value=1, value=1, step=1)
     min_sequence_length = st.number_input("最小系列長", min_value=2, value=2, step=1)
@@ -1515,19 +1514,20 @@ def render_eval10_settings(common: dict) -> dict:
     )
     min_train_occurrences = st.number_input("学習側の最小出現回数", min_value=1, value=2, step=1)
     top_k_per_mode = st.number_input("時間帯ごとの最大頻出系列数", min_value=1, value=20, step=1)
-    method = st.selectbox("採点する手法", ["both", "frequency", "llm"])
+    method = st.selectbox("採点する手法", ["llm", "both", "frequency"])
     allow_api = st.checkbox("LLM抽出のAPI呼出しを許可（費用が発生します）", value=False)
     if allow_api:
-        st.warning("一括実行またはステップ2でGemini APIを呼びます。")
+        st.warning("一括実行またはステップ2でBedrock APIを5 run分呼びます。")
     return {
         **common,
         "snapshot": snapshot,
         "output_dir": output_dir,
         "results_dir": results_dir,
+        "eval7_best_condition_manifest": eval7_best_condition_manifest,
         "split_at": split_at,
         "train_ratio": float(train_ratio),
-        "n_states": int(n_states),
-        "hamming_threshold": int(hamming),
+        "runs": 5,
+        "smoothing_window_sec": SMOOTHING_WINDOW_SEC,
         "sampling_seconds": int(sampling_seconds),
         "min_sequence_length": int(min_sequence_length),
         "max_sequence_length": int(max_sequence_length),
