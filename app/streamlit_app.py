@@ -1082,6 +1082,32 @@ def evaluation8_scope_config(scope_label: str) -> tuple[str, int]:
     return "comparison_14days", 14
 
 
+def evaluation8_comparison_default_paths(
+    common: dict,
+    n_states: int,
+    hamming_threshold: int,
+    days: int,
+) -> tuple[str, str]:
+    """Return canonical Full-pipeline inputs for the formal Evaluation 8 comparison."""
+    if (n_states, hamming_threshold, days) != (
+        DEFAULT_N_STATES,
+        DEFAULT_HAMMING_THRESHOLD,
+        14,
+    ):
+        return "", ""
+    dataset = artifact_dataset_name("aruba", DEFAULT_SENSOR_REPRESENTATION)
+    suffix = short_suffix(n_states, hamming_threshold, days)
+    details = (
+        f"{model_results_relative(common)}/"
+        "6_adl_match_individual_holdout_test_direct_time_split/"
+        "evaluation6_pattern_set_details_by_method.csv"
+    )
+    state_series = (
+        f"{model_output_relative(common)}/6_adl_evaluation_{dataset}_{suffix}/state_series.csv"
+    )
+    return details, state_series
+
+
 def render_eval8_settings(common: dict) -> dict:
     st.subheader("評価8: 頻度帯別ADL整合性評価")
     st.caption("評価6の指標を置き換えず、出現頻度の三分位または固定回数帯で後段分析します。")
@@ -1112,15 +1138,24 @@ def render_eval8_settings(common: dict) -> dict:
 
     st.markdown("**入力・出力**")
     if analysis_scope in {"comparison_14days", "comparison_30days"}:
+        comparison_details_default, comparison_state_series_default = (
+            evaluation8_comparison_default_paths(
+                common,
+                int(n_states),
+                int(hamming),
+                days,
+            )
+        )
         details = st.text_input(
             "evaluation6 details file path",
-            f"{model_results_relative(common)}/6_adl_match/{suffix}/evaluation6_pattern_set_details_by_method.csv",
-            key=f"eval8_details_{common['model_id']}",
+            comparison_details_default,
+            key=f"eval8_details_{common['model_id']}_{suffix}",
         )
         patterns_proposed = ""
         state_series = st.text_input(
             "state-series（評価8でown-ID出現数を再構築）",
-            f"{model_output_relative(common)}/6_adl_evaluation_{suffix}/state_series.csv",
+            comparison_state_series_default,
+            key=f"eval8_state_series_{common['model_id']}_{suffix}",
         )
         labeled_casas = ""
         adl_intervals = ""
@@ -1129,7 +1164,10 @@ def render_eval8_settings(common: dict) -> dict:
             f"{model_results_relative(common)}/8_vs_llm_own_id_fixed",
             key=f"eval8_output_comparison_{common['model_id']}",
         )
-        st.caption("評価6詳細CSVには5 run分のレコードを含めてください。評価8ではrunごとの帯別指標を平均します。")
+        st.caption(
+            "正式な14日比較は、K=10・h=2・個別センサのFull-pipeline評価6成果物を既定にします。"
+            "他の条件では、対応する評価6詳細CSVとstate-seriesを明示指定してください。"
+        )
         patterns_proposed_template = ""
         runs = 5
     else:

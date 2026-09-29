@@ -149,7 +149,7 @@ Streamlit画面は正式条件（14日・全28条件・各5 run）を固定で�
 
 参照ドキュメント: `docs/evaluations/evaluation_8_frequency_stratified_adl_consistency.md`
 
-評価8ではラジオボタンで「154日: 提案手法のみ」（既定）または「14日: 提案手法 vs LLM単独ベースライン」を選択して実行する。代表状態数K（既定10）、ハミング距離閾値（既定2）、runs（既定5）を変更できる。頻度帯方式は選択式ではなく、三分位と固定回数帯を一度のコマンドで両方実行する。各pattern ID自身の出現だけを取得し、同じ物理区間を一意化した後の件数からrunごとに帯を再割当てする。比較scopeでも評価6詳細CSVの旧出現数をそのまま使わず、画面で指定した同条件のstate-series CSVからown-ID出現数を再構築する。入力評価は重複実行せず、同じ評価レコードから2方式を集計し、指定したoutput directoryの `tertile/` と `fixed/` に分けて保存する。固定帯の下限（既定`0,1,10,100,1000,10000`）は変更できる。154日・提案手法のみの`fixed/`には、帯別の平均パターン数分布とPrecision / Recall / F1図も保存できる。修正版の標準出力先は `results/<model>/8_proposed_own_id_fixed/` と `results/<model>/8_vs_llm_own_id_fixed/` で、run別CSV、修正前後件数、重複監査、重み総和検証を保存する。
+評価8ではラジオボタンで「154日: 提案手法のみ」（既定）または「14日: 提案手法 vs LLM単独ベースライン」を選択して実行する。代表状態数K（既定10）、ハミング距離閾値（既定2）、runs（既定5）を変更できる。14日比較をK=10、h=2、14日で選ぶと、個別センサの正式Full-pipeline評価6詳細CSV `results/<model>/6_adl_match_individual_holdout_test_direct_time_split/evaluation6_pattern_set_details_by_method.csv` と対応する `output/<model>/6_adl_evaluation_aruba_individual_10_2_14days/state_series.csv` を既定として入力する。他条件では誤った成果物を選ばないよう入力欄を空にし、対応する評価6詳細CSVとstate-seriesを明示指定する。頻度帯方式は選択式ではなく、三分位と固定回数帯を一度のコマンドで両方実行する。各pattern ID自身の出現だけを取得し、同じ物理区間を一意化した後の件数からrunごとに帯を再割当てする。比較scopeでも評価6詳細CSVの旧出現数をそのまま使わず、画面で指定した同条件のstate-series CSVからown-ID出現数を再構築する。入力評価は重複実行せず、同じ評価レコードから2方式を集計し、指定したoutput directoryの `tertile/` と `fixed/` に分けて保存する。固定帯の下限（既定`0,1,10,100,1000,10000`）は変更できる。154日・提案手法のみの`fixed/`には、帯別の平均パターン数分布とPrecision / Recall / F1図も保存できる。修正版の標準出力先は `results/<model>/8_proposed_own_id_fixed/` と `results/<model>/8_vs_llm_own_id_fixed/` で、run別CSV、修正前後件数、重複監査、重み総和検証を保存する。
 
 ## 評価10のステップ
 

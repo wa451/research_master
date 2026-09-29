@@ -11,8 +11,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from app.command_builder import build_evaluation8_steps
-from app.streamlit_app import evaluation8_scope_config
+from app.command_builder import PROJECT_ROOT, build_evaluation8_steps
+from app.streamlit_app import (
+    evaluation8_comparison_default_paths,
+    evaluation8_scope_config,
+)
 
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "evaluate_8_frequency_stratified_adl_consistency.py"
@@ -67,6 +70,27 @@ class Evaluation8FrequencyStratifiedTests(unittest.TestCase):
             evaluation8_scope_config("14日: 提案手法 vs LLM単独ベースライン"),
             ("comparison_14days", 14),
         )
+
+    def test_dashboard_comparison_defaults_use_formal_individual_holdout_inputs(self) -> None:
+        details, state_series = evaluation8_comparison_default_paths(
+            {
+                "model_results_root": PROJECT_ROOT / "results" / "gpt-5.6-sol",
+                "model_output_root": PROJECT_ROOT / "output" / "gpt-5.6-sol",
+            },
+            10,
+            2,
+            14,
+        )
+        self.assertEqual(
+            details,
+            "results/gpt-5.6-sol/6_adl_match_individual_holdout_test_direct_time_split/"
+            "evaluation6_pattern_set_details_by_method.csv",
+        )
+        self.assertEqual(
+            state_series,
+            "output/gpt-5.6-sol/6_adl_evaluation_aruba_individual_10_2_14days/state_series.csv",
+        )
+        self.assertEqual(evaluation8_comparison_default_paths({}, 15, 2, 14), ("", ""))
 
     def test_dashboard_comparison_command_passes_state_series_and_tracks_new_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
