@@ -9,7 +9,7 @@ output/<model>/10_real_home_temporal_generalization/<期間>/
 results/<model>/10_real_home_temporal_generalization/<期間>/
 ```
 
-既存成果物がある出力先への準備、抽出、評価は停止する。過去の実行を消去・上書きしてはならない。
+既存成果物がある出力先への準備と評価は停止する。抽出では、同じ前処理fingerprint・モデルmetadataに紐付く完了済みrun JSONを上書きせず、未完了runだけを再開する。過去の実行を消去・上書きしてはならない。
 
 ## 入力と固定条件
 

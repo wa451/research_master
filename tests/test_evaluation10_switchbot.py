@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -21,6 +22,7 @@ from src.behavior_pattern_mining.evaluation.evaluation10_switchbot import (
     build_frequency_patterns,
     choose_split,
     evaluate,
+    extract,
     file_sha256,
     llm_patterns_path,
     prepare,
@@ -359,6 +361,48 @@ class Evaluation10SwitchBotTests(unittest.TestCase):
             paths = [llm_patterns_path(root / "output", preparation, root / "results", run) for run in range(1, 6)]
             self.assertEqual(len(set(paths)), 5)
             self.assertTrue(all(path.name.endswith(f"_{run}.json") for run, path in enumerate(paths, start=1)))
+
+    def test_extract_resumes_only_missing_runs_without_overwriting_complete_runs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "output"
+            preparation = self.prepare_snapshot(self.make_snapshot(root), output)
+            results = root / "results"
+            completed = [
+                llm_patterns_path(output, preparation, results, run)
+                for run in (1, 2)
+            ]
+            for run, path in enumerate(completed, start=1):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(f"completed run {run}", encoding="utf-8")
+
+            def write_missing_runs(**kwargs):
+                self.assertEqual(kwargs["run_ids"], [3, 4, 5])
+                for run in kwargs["run_ids"]:
+                    path = llm_patterns_path(output, preparation, results, run)
+                    path.write_text(f"new run {run}", encoding="utf-8")
+
+            with patch(
+                "src.behavior_pattern_mining.evaluation.evaluation10_switchbot.pattern_extractor.main",
+                side_effect=write_missing_runs,
+            ) as extractor:
+                paths = extract(
+                    output_dir=output,
+                    allow_api=True,
+                    llm_results_dir=results,
+                    runs=5,
+                )
+
+            self.assertEqual([path.name for path in paths], [
+                "llm_sequences_modes_8_0_2days_1.json",
+                "llm_sequences_modes_8_0_2days_2.json",
+                "llm_sequences_modes_8_0_2days_3.json",
+                "llm_sequences_modes_8_0_2days_4.json",
+                "llm_sequences_modes_8_0_2days_5.json",
+            ])
+            self.assertEqual(completed[0].read_text(encoding="utf-8"), "completed run 1")
+            self.assertEqual(completed[1].read_text(encoding="utf-8"), "completed run 2")
+            self.assertEqual(extractor.call_count, 1)
 
     def test_llm_run_summary_uses_mean_and_sample_sd(self):
         with tempfile.TemporaryDirectory() as directory:
