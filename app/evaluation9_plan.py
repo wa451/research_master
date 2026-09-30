@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -14,10 +15,12 @@ from src.behavior_pattern_mining.llm.result_paths import MODEL_RESULT_NAMES
 
 import yaml
 from smart_home_sim.experiments.plan import ExperimentPlan, load_plan
-from smart_home_sim.experiments.research import extraction_budget
+from smart_home_sim.experiments.research import extraction_budget, research_provenance
 
 from experiment_config import TIME_MODES
 from src.behavior_pattern_mining.llm.pattern_extractor import MAX_PARSE_RETRIES
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 PRESET_PLAN_FILENAMES = {
     "Pilot": "noise_free_pilot.yaml",
@@ -153,6 +156,27 @@ def experiment_snapshot_matches(
             return manifest.get("train_days") == list(duration_train_days)
         return True
     except (json.JSONDecodeError, OSError):
+        return False
+
+
+def preparation_provenance_matches(experiment: Path) -> bool | None:
+    """Compare existing Eval9 preparation markers with Hestia's current source.
+
+    ``None`` means preparation has not begun. The source fingerprint is computed
+    by Hestia itself so the dashboard does not maintain a parallel definition of
+    which research files must be reproducible.
+    """
+    markers = sorted(experiment.glob("**/prepared.json"))
+    if not markers:
+        return None
+    try:
+        current = research_provenance(PROJECT_ROOT)
+        return all(
+            json.loads(marker.read_text(encoding="utf-8")).get("research")
+            == current
+            for marker in markers
+        )
+    except (json.JSONDecodeError, OSError, ValueError, subprocess.CalledProcessError):
         return False
 
 

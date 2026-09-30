@@ -17,6 +17,7 @@ from app.evaluation9_plan import (
     experiment_snapshot_matches,
     load_preset_plan,
     parse_seed_list,
+    preparation_provenance_matches,
     save_effective_plan,
 )
 from app.hestia_house_diagrams import house_rooms, house_topology_dot
@@ -352,6 +353,27 @@ class Evaluation9Tests(unittest.TestCase):
                 json.dumps(legacy_payload), encoding="utf-8"
             )
             self.assertFalse(experiment_snapshot_matches(full, experiment))
+
+    def test_preparation_provenance_detects_stale_eval9_outputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            experiment = Path(directory)
+            marker = experiment / "runs/compact_base/seed_11/prepared.json"
+            marker.parent.mkdir(parents=True)
+            with patch(
+                "app.evaluation9_plan.research_provenance",
+                return_value={"files": {"src/example.py": "current"}},
+            ):
+                self.assertIsNone(preparation_provenance_matches(experiment))
+                marker.write_text(
+                    json.dumps({"research": {"files": {"src/example.py": "old"}}}),
+                    encoding="utf-8",
+                )
+                self.assertFalse(preparation_provenance_matches(experiment))
+                marker.write_text(
+                    json.dumps({"research": {"files": {"src/example.py": "current"}}}),
+                    encoding="utf-8",
+                )
+                self.assertTrue(preparation_provenance_matches(experiment))
 
     def test_dashboard_builder_prefers_effective_plan_and_keeps_api_opt_in(self):
         effective = Path(

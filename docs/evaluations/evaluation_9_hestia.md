@@ -172,7 +172,7 @@ uv run python scripts/evaluate_9_duration.py --stage evaluate --method both
 
 `--train-days 3,7,14,28`でwindow一覧を明示できるが、14日baselineとraw planの最大train日数（28日）は必須である。API opt-inは既存評価と同じで、許可OFFは0 calls。fresh上限は `6 conditions × 3 seeds × 3 LLM runs × 4 time bands × 4 durations = 864 calls`、parse retry上限は現行3試行で2592回である。transport retryは含まない。raw生成は18回だけで、LLM抽出は異なるnetworkを持つ72 windowごとに行う。
 
-出力は `results/<model>/9_hestia/duration/evaluation9_duration_summary.csv`、`evaluation9_duration_summary_runs.csv`、`evaluation9_duration_summary.json`。summaryはtrain/test日数、condition（`overall`を含む）、method、model、各指標のmean/std/n_seeds、run status、主要指標のpaired `*_delta_vs_14d_*`を持つ。期間感度プロトコルはv2であり、旧7日基準のsummaryとは混在させず再集計する。`adl_macro_f1`、`test_target_episode_coverage`、`f1`のcondition別・overall SVGも生成し、Webの結果比較では同CSVを期間軸の折れ線で表示できる。
+出力は `results/<model>/9_hestia/duration/evaluation9_duration_summary.csv`、`evaluation9_duration_summary_runs.csv`、`evaluation9_duration_summary.json`。summaryはtrain/test日数、condition（`overall`を含む）、method、model、各指標のmean/std/n_seeds、run status、主要指標のpaired `*_delta_vs_14d_*`を持つ。期間感度プロトコルはv2であり、旧7日基準のsummaryとは混在させず再集計する。`adl_macro_f1`、`test_target_episode_coverage`、`f1`のcondition別・overall SVGも生成し、Webの結果比較では同CSVを期間軸の折れ線で表示できる。Webは既存`prepared.json`の研究コード／設定指紋も実行前に照合し、不一致なら既存成果物を上書きせず、新しい出力先への切替または明示バックアップを要求する。
 
 ## 比較と内部処理
 

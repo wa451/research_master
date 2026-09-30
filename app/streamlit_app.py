@@ -49,6 +49,7 @@ from app.evaluation9_plan import (  # noqa: E402
     experiment_snapshot_matches,
     load_preset_plan,
     parse_seed_list,
+    preparation_provenance_matches,
     preset_directory_name,
     save_effective_plan,
 )
@@ -1426,11 +1427,13 @@ def render_eval9_settings(common: dict) -> dict:
     else:
         st.caption("すべて未実行の場合の推定です。既存checkpointがあれば実際の呼び出しは減ります。")
     st.caption("backendのtransport retryによる追加通信は正確に予測できないため、この上限には含みません。")
-    if experiment_snapshot_matches(
+    snapshot_matches = experiment_snapshot_matches(
         effective_plan,
         resolved_experiment,
         duration_train_days=duration_train_days,
-    ) is False:
+    )
+    preparation_matches = preparation_provenance_matches(resolved_experiment)
+    if snapshot_matches is False or preparation_matches is False:
         plan_hash = effective_plan_path.stem.rsplit("_", 1)[-1][:8]
         directory_name = preset_directory_name(preset)
         suggested_experiment = f"{model_output_relative(common)}/9_hestia/{directory_name}_{plan_hash}"
@@ -1442,10 +1445,16 @@ def render_eval9_settings(common: dict) -> dict:
             st.session_state["eval9_experiment"] = suggested_experiment
             st.session_state["eval9_output_dir"] = suggested_output
 
-        st.error(
-            "選択した実行用planが、この実験ディレクトリのexperiment.jsonと一致しません。"
-            "既存のhash検証を回避せず、新しい実験ディレクトリを指定してください。"
-        )
+        if snapshot_matches is False:
+            st.error(
+                "選択した実行用planが、この実験ディレクトリのexperiment.jsonと一致しません。"
+                "既存のhash検証を回避せず、新しい実験ディレクトリを指定してください。"
+            )
+        else:
+            st.error(
+                "既存の前処理成果物は現在の研究コード／設定の指紋と一致しません。"
+                "Hestiaの再現性検証を回避せず、新しい実験ディレクトリを指定してください。"
+            )
         st.info(
             "例: 生成ログ・中間成果物ディレクトリを "
             f"`{suggested_experiment}`、評価9の集計先を "
@@ -1487,7 +1496,7 @@ def render_eval9_settings(common: dict) -> dict:
                     log_root(common),
                     {
                         "evaluation": common["evaluation"],
-                        "action": "archive_outputs_for_plan_change",
+                        "action": "archive_outputs_for_compatibility_change",
                         "experiment": str(resolved_experiment),
                         "output_dir": output_dir,
                         "archive_directory": archive_directory,
