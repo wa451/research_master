@@ -55,6 +55,7 @@ class LlmClientTests(unittest.TestCase):
     def test_default_config_uses_bedrock_gpt_sol(self) -> None:
         config = load_config(Path(__file__).resolve().parents[1] / "configs" / "default.yaml")
         self.assertEqual(get_config_value(config, "llm.provider"), "bedrock")
+        self.assertEqual(get_config_value(config, "llm.max_retries_per_run"), 2)
         self.assertEqual(
             get_config_value(config, "llm.bedrock.model_id"),
             "us.openai.gpt-5.6-sol",

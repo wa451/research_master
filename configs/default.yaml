@@ -44,7 +44,7 @@ llm:
   temperature: 0.2
   runs_default: 1
   batch_runs: 5
-  max_retries_per_run: 3
+  max_retries_per_run: 2
   bedrock:
     region: us-east-2
     model_id: us.openai.gpt-5.6-sol

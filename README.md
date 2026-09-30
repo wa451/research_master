@@ -40,7 +40,7 @@ BEDROCK_MODEL_ID=us.openai.gpt-5.6-sol
 # BEDROCK_MAX_ATTEMPTS=2
 ```
 
-Bedrockの長時間推論は、既定のread timeoutを600秒、connect timeoutを60秒に設定します。`BEDROCK_MAX_ATTEMPTS=2` は初回を含む最大送信回数で、SDK標準retryを1回に制限します。read timeout後はBedrock側で推論が完了している可能性があるため、値を大きくしたり上位の再試行と組み合わせたりすると重複推論・料金増加につながることがあります。
+Bedrockの長時間推論は、既定のread timeoutを600秒、connect timeoutを60秒に設定します。`BEDROCK_MAX_ATTEMPTS=2` は初回を含む最大送信回数で、SDK標準retryを1回に制限します。checkpointを再利用するrun単位の再試行も既定2回のため、同じ未完了リクエストは既定で最大4送信です。read timeout後はBedrock側で推論が完了している可能性があるため、これらの値を大きくすると重複推論・料金増加につながることがあります。
 
 Bedrock実行でもコマンドは共通です。LLM成果物、checkpoint、usage metrics、評価5〜10の結果は、`.env` のprovider/modelから自動的に `results/<model>/` へ保存されます。
 
