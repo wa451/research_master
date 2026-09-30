@@ -38,10 +38,10 @@ from src.behavior_pattern_mining.evaluation.strict_ablation import (
     load_strict_condition,
     normalize_strict_record,
     postprocess_strict_records,
+    selection_manifest_provenance,
     sha256_file,
     strict_ablation_paths,
     strict_prompt_path,
-    validate_manifest_model,
 )
 from src.behavior_pattern_mining.llm import direct_log_extractor
 from src.behavior_pattern_mining.llm.client import (
@@ -144,6 +144,7 @@ def _provenance(
         "ablation_factor": ABLATION_FACTOR,
         "output_schema_version": OUTPUT_SCHEMA_VERSION,
         "model": {"provider": identity.provider, "model_id": identity.model_id, "result_name": identity.result_name},
+        "selection_manifest": selection_manifest_provenance(manifest_path),
         "n_states": condition.n_states,
         "hamming_threshold": condition.hamming_threshold,
         "sensor_representation": condition.sensor_representation,
@@ -308,10 +309,6 @@ def main() -> None:
     condition = load_strict_condition(args.best_condition_manifest)
     _validate_overrides(args, condition)
     identity = current_model_identity()
-    validate_manifest_model(
-        args.best_condition_manifest, provider=identity.provider,
-        model_id=identity.model_id, result_name=identity.result_name,
-    )
     paths = strict_ablation_paths(
         project_root=ROOT_DIR, results_root=current_model_results_root(), output_root=current_model_output_root(),
         dataset=DATASET_NAME, condition=condition,

@@ -14,6 +14,7 @@ from src.behavior_pattern_mining.evaluation.strict_ablation import (
     load_strict_condition,
     normalize_strict_record,
     postprocess_strict_records,
+    selection_manifest_provenance,
 )
 from src.behavior_pattern_mining.llm.client import parse_pattern_records
 
@@ -146,6 +147,25 @@ class Evaluation6StrictAblationTests(unittest.TestCase):
             }), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "Day 1-14"):
                 load_strict_condition(path)
+
+    def test_selection_manifest_provenance_allows_a_distinct_generation_model(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest = (
+                Path(tmpdir)
+                / "results/gpt-5.6-sol/7_param_search_14d_5runs_individual_holdout"
+                / "evaluation7_best_condition_manifest.json"
+            )
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(json.dumps({
+                "K": 10,
+                "h": 2,
+                "model": {"provider": "bedrock", "model_id": "us.openai.gpt-5.6-sol"},
+            }), encoding="utf-8")
+            provenance = selection_manifest_provenance(manifest)
+
+        self.assertEqual(provenance["result_namespace"], "gpt-5.6-sol")
+        self.assertEqual(provenance["model"]["model_id"], "us.openai.gpt-5.6-sol")
+        self.assertTrue(provenance["sha256"])
 
     def test_common_completed_runs_are_the_intersection(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

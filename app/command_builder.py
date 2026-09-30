@@ -696,6 +696,8 @@ def build_evaluation6_strict_ablation_steps(settings: dict[str, Any]) -> list[Ev
     manifest_path = as_path(settings.get("best_condition_manifest"))
     if manifest_path is None:
         raise ValueError("Strict Ablation requires an Evaluation 7 best-condition manifest")
+    if not manifest_path.is_file():
+        raise ValueError(f"Strict Ablation manifest is missing: {manifest_path}")
     condition = load_strict_condition(manifest_path)
     paths = strict_ablation_paths(
         project_root=PROJECT_ROOT,
@@ -705,6 +707,31 @@ def build_evaluation6_strict_ablation_steps(settings: dict[str, Any]) -> list[Ev
         condition=condition,
     )
     runs = int(settings["runs"])
+    labeled = as_path(settings["labeled_casas"])
+    sensor_map = as_path(settings["sensor_map"])
+    smoothing_window_sec = settings.get("smoothing_window_sec", SMOOTHING_WINDOW_SEC)
+
+    build_cmd = script_cmd(settings["runner"], "scripts/run_build_network_from_labeled_casas.py")
+    add_arg(build_cmd, "--labeled-casas", labeled)
+    add_arg(build_cmd, "--sensor-map", sensor_map)
+    add_arg(build_cmd, "--sensor-representation", condition.sensor_representation)
+    add_arg(build_cmd, "--days", condition.generation_days)
+    add_arg(build_cmd, "--n-states", condition.n_states)
+    add_arg(build_cmd, "--hamming-threshold", condition.hamming_threshold)
+    add_arg(build_cmd, "--smoothing-window-sec", smoothing_window_sec)
+
+    state_series_cmd = script_cmd(settings["runner"], "scripts/evaluate_adl_labels.py")
+    add_arg(state_series_cmd, "--labeled-casas", labeled)
+    add_arg(state_series_cmd, "--state-table", paths.state_table)
+    add_arg(state_series_cmd, "--sensor-map", sensor_map)
+    add_arg(state_series_cmd, "--sensor-representation", condition.sensor_representation)
+    add_arg(state_series_cmd, "--output-dir", paths.state_series.parent)
+    add_arg(state_series_cmd, "--write-state-series", paths.state_series)
+    add_arg(state_series_cmd, "--hamming-threshold", condition.hamming_threshold)
+    add_arg(state_series_cmd, "--state-series-preprocessing", "network-equivalent")
+    add_arg(state_series_cmd, "--smoothing-window-sec", smoothing_window_sec)
+    add_flag(state_series_cmd, "--state-series-only", True)
+
     generator = script_cmd(settings["runner"], "scripts/run_evaluation6_strict_ablation.py")
     add_arg(generator, "--best-condition-manifest", manifest_path)
     add_arg(generator, "--runs", runs)
@@ -712,6 +739,22 @@ def build_evaluation6_strict_ablation_steps(settings: dict[str, Any]) -> list[Ev
     add_arg(scorer, "--best-condition-manifest", manifest_path)
     add_arg(scorer, "--runs", runs)
     return [
+        EvaluationStep(
+            "eval6_strict_build_network",
+            "Strict Ablation入力の代表状態・STNを確認・生成",
+            "評価7 manifestで固定したDay 1-14の状態表と状態遷移ネットワークを用意します。",
+            build_cmd,
+            [path for path in [labeled, sensor_map] if path is not None],
+            [paths.state_table, paths.network_dir / "state_transition_all.json"],
+        ),
+        EvaluationStep(
+            "eval6_strict_state_series",
+            "Strict Ablation用 state_series を作成",
+            "Day 1-14の固定状態表を全220日に適用し、Day 155-220採点用の系列を作成します。APIは呼びません。",
+            state_series_cmd,
+            [path for path in [labeled, sensor_map, paths.state_table] if path is not None],
+            [paths.state_series],
+        ),
         EvaluationStep(
             "eval6_strict_generate",
             "Strict Ablation LLM出力を生成",

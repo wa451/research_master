@@ -11,6 +11,7 @@ import unittest
 from app.command_builder import (
     PROJECT_ROOT,
     build_evaluation6_steps,
+    build_evaluation6_strict_ablation_steps,
     build_evaluation7_steps,
     build_evaluation9_steps,
     default_direct_path,
@@ -183,6 +184,48 @@ class DashboardModelSelectionTests(unittest.TestCase):
         self.assertIn(str(paths["patterns_proposed"]), compare.command)
         self.assertIn(str(paths["patterns_direct"]), compare.command)
         self.assertIn(str(paths["state_series"]), compare.command)
+
+    def test_strict_evaluation6_can_use_sol_condition_manifest_for_fable_generation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            manifest_path = root / "results/gpt-5.6-sol/7_param_search_14d_5runs_individual_holdout/evaluation7_best_condition_manifest.json"
+            manifest_path.parent.mkdir(parents=True)
+            manifest_path.write_text(
+                '{"K":10,"h":2,"sensor_representation":"individual",'
+                '"generation_days":14,"split_mode":"holdout",'
+                '"validation_start_day":15,"validation_end_day":154,'
+                '"test_start_day":155,"test_end_day":220}',
+                encoding="utf-8",
+            )
+            fable = dashboard_model("us.anthropic.claude-fable-5")
+            steps = build_evaluation6_strict_ablation_steps(
+                {
+                    "runner": "python",
+                    "dataset": "aruba",
+                    "runs": 5,
+                    "labeled_casas": "new_labeled_data/aruba.txt",
+                    "sensor_map": "configs/aruba_sensor_map_individual.json",
+                    "smoothing_window_sec": 5,
+                    "model_results_root": fable.results_root(PROJECT_ROOT),
+                    "model_output_root": fable.output_root(PROJECT_ROOT),
+                    "best_condition_manifest": manifest_path,
+                }
+            )
+
+        self.assertEqual(
+            [step.step_id for step in steps],
+            [
+                "eval6_strict_build_network",
+                "eval6_strict_state_series",
+                "eval6_strict_generate",
+                "eval6_strict_evaluate",
+            ],
+        )
+        state_series_step = steps[1]
+        self.assertIn("--state-series-only", state_series_step.command)
+        self.assertIn(str(fable.output_root(PROJECT_ROOT)), " ".join(state_series_step.command))
+        for step in steps[2:]:
+            self.assertIn(str(manifest_path), step.command)
 
     def test_builders_use_the_selected_model_root_for_expected_outputs(self) -> None:
         terra_root = dashboard_model("us.openai.gpt-5.6-terra").results_root(PROJECT_ROOT)

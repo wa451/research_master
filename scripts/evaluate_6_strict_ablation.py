@@ -14,7 +14,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from experiment_config import DATASET_NAME, current_model_identity, current_model_output_root, current_model_results_root
+from experiment_config import DATASET_NAME, current_model_output_root, current_model_results_root
 from src.behavior_pattern_mining.evaluation.adl import (
     load_state_series_csv,
     parse_labeled_casas_intervals,
@@ -26,8 +26,8 @@ from src.behavior_pattern_mining.evaluation.strict_ablation import (
     COMPARISON_TYPE,
     completed_run_ids,
     load_strict_condition,
+    selection_manifest_provenance,
     strict_ablation_paths,
-    validate_manifest_model,
 )
 
 
@@ -62,11 +62,6 @@ def _write_rows(path: Path, rows: list[dict]) -> None:
 def main() -> None:
     args = parse_args()
     condition = load_strict_condition(args.best_condition_manifest)
-    identity = current_model_identity()
-    validate_manifest_model(
-        args.best_condition_manifest, provider=identity.provider,
-        model_id=identity.model_id, result_name=identity.result_name,
-    )
     if args.runs < 1:
         raise ValueError("--runs must be >= 1")
     if args.n_states is not None and args.n_states != condition.n_states:
@@ -138,6 +133,7 @@ def main() -> None:
         "comparison_type": COMPARISON_TYPE,
         "ablation_factor": ABLATION_FACTOR,
         "best_condition_manifest": str(args.best_condition_manifest),
+        "selection_manifest": selection_manifest_provenance(args.best_condition_manifest),
         "requested_runs": requested,
         "successful_runs": {"proposed": proposed_successful, "llm_only": llm_only_successful},
         "common_completed_runs": common_runs,

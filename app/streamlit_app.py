@@ -833,17 +833,42 @@ def render_eval6_settings(common: dict) -> dict:
     state_series = st.text_input("state-series", f"{default_intermediate}/state_series.csv", key=f"eval6_state_series_{representation}")
     adl_intervals = st.text_input("adl-intervals（任意。なければlabeled-casasから生成）", f"{model_output_relative(common)}/adl_label_intervals.csv")
 
+    selected_manifest = (
+        PROJECT_ROOT
+        / model_results_relative(common)
+        / "7_param_search_14d_5runs_individual_holdout"
+        / "evaluation7_best_condition_manifest.json"
+    )
+    sol_manifest = (
+        PROJECT_ROOT
+        / "results/gpt-5.6-sol/7_param_search_14d_5runs_individual_holdout"
+        / "evaluation7_best_condition_manifest.json"
+    )
+    strict_manifest_default = selected_manifest
+    if comparison_track == "strict_ablation" and not selected_manifest.is_file() and sol_manifest.is_file():
+        strict_manifest_default = sol_manifest
+
     with st.expander("複数run用テンプレート（任意）"):
         proposed_template = st.text_input("patterns-proposed-template", "")
         direct_template = st.text_input("patterns-direct-template", "")
         best_condition_manifest = st.text_input(
             "evaluation7 best-condition manifest" + ("（必須）" if comparison_track == "strict_ablation" else "（任意）"),
-            (
-                f"{model_results_relative(common)}/7_param_search_14d_5runs_individual_holdout/evaluation7_best_condition_manifest.json"
-                if comparison_track == "strict_ablation" else ""
-            ),
-            help="Strict Ablationでは唯一の条件源です。手動K/hとの不一致はCLIでエラーになります。",
+            rel_default(strict_manifest_default) if comparison_track == "strict_ablation" else "",
+            help="Strict Ablationでは唯一の条件源です。選定元モデルと生成モデルが異なる場合も、manifestのK/hを固定して記録します。",
         )
+
+    if comparison_track == "strict_ablation":
+        manifest_candidate = Path(best_condition_manifest).expanduser()
+        if not manifest_candidate.is_absolute():
+            manifest_candidate = PROJECT_ROOT / manifest_candidate
+        if not manifest_candidate.is_file():
+            st.error(f"Strict Ablation用の評価7 manifestが見つかりません: {display_path(manifest_candidate)}")
+            st.stop()
+        if manifest_candidate.resolve() != selected_manifest.resolve():
+            st.info(
+                "評価7で選定した条件はGPT-5.6 Solのmanifestから読み、"
+                f"今回のStrict出力は{common['model_label']}の名前空間へ保存します。"
+            )
 
     st.markdown("**評価パラメータ**")
     col1, col2 = st.columns(2)

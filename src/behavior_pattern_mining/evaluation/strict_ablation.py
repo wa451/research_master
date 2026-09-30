@@ -65,18 +65,20 @@ def load_strict_condition(manifest_path: Path) -> Evaluation6ManifestCondition:
     return condition
 
 
-def validate_manifest_model(manifest_path: Path, *, provider: str, model_id: str, result_name: str) -> None:
-    """Validate model provenance without accepting a model selector outside the manifest."""
-    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+def selection_manifest_provenance(manifest_path: Path) -> dict[str, Any]:
+    """Record the fixed Evaluation 7 condition source independently of the LLM under test."""
+    payload: Any = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"best-condition manifest must be a JSON object: {manifest_path}")
     model = payload.get("model")
-    if isinstance(model, dict) and model.get("model_id"):
-        if model.get("model_id") != model_id or model.get("provider") != provider:
-            raise ValueError("Evaluation 7 manifest model conflicts with the active model")
-        return
-    # Current Sol formal artifacts predate the additive model member. The namespace
-    # itself is the only accepted compatibility source; no manual model override exists.
-    if manifest_path.parent.parent.name != result_name:
-        raise ValueError("legacy Evaluation 7 manifest namespace conflicts with the active model")
+    return {
+        "path": str(manifest_path),
+        "sha256": sha256_file(manifest_path),
+        "model": model if isinstance(model, dict) else None,
+        # Legacy Evaluation 7 manifests do not embed model metadata. Keep their
+        # result namespace as provenance rather than treating it as the active LLM.
+        "result_namespace": manifest_path.parent.parent.name,
+    }
 
 
 def strict_ablation_paths(
