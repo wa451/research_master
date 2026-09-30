@@ -161,7 +161,7 @@ Streamlit画面は正式条件（14日・全28条件・各5 run）を固定で�
 2. API許可時だけ、train側networkから既存提案手法のLLMパターンを抽出する。
 3. 固定した状態表で後半testを採点し、再出現割合、日単位再現率、遷移被覆率を出力する。
 
-一括実行でもLLM APIはチェックボックスを有効にした場合だけ呼ぶ。入力hashが準備時から変わっている場合、後段CLIは停止する。
+一括実行でもLLM APIはチェックボックスを有効にした場合だけ呼ぶ。正式K/hの根拠は、実行モデルにかかわらず確定済みの`results/gpt-5.6-sol/7_param_search_14d_5runs_individual_holdout/evaluation7_best_condition_manifest.json`である。入力hashまたはこのmanifestのhashが準備時から変わっている場合、後段CLIは停止する。
 
 ## ログとコマンド履歴
 

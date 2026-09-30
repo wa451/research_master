@@ -16,6 +16,7 @@ from experiment_config import current_model_output_root, current_model_results_r
 
 from src.behavior_pattern_mining.evaluation.evaluation10_switchbot import (  # noqa: E402
     FORMAL_OUTPUT_NAMESPACE,
+    FORMAL_EVALUATION7_BEST_CONDITION_MANIFEST,
     FORMAL_RUNS,
     METHODS,
     STAGES,
@@ -45,9 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--eval7-best-condition-manifest",
         type=Path,
-        default=current_model_results_root()
-        / "7_param_search_14d_5runs_individual_holdout"
-        / "evaluation7_best_condition_manifest.json",
+        default=FORMAL_EVALUATION7_BEST_CONDITION_MANIFEST,
         help="Required source of the fixed formal K/h condition",
     )
     parser.add_argument("--split-at", help="Local midnight starting the held-out test period")

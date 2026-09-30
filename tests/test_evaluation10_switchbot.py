@@ -11,9 +11,10 @@ import unittest
 import pandas as pd
 
 from app.command_builder import build_evaluation10_steps
-from scripts.evaluate_10_switchbot import main
+from scripts.evaluate_10_switchbot import build_parser, main
 from src.behavior_pattern_mining.evaluation.evaluation10_switchbot import (
     DETAIL_COLUMNS,
+    FORMAL_EVALUATION7_BEST_CONDITION_MANIFEST,
     RUN_SUMMARY_COLUMNS,
     SUMMARY_COLUMNS,
     build_frequency_patterns,
@@ -26,6 +27,13 @@ from src.behavior_pattern_mining.evaluation.evaluation10_switchbot import (
 
 
 class Evaluation10SwitchBotTests(unittest.TestCase):
+    def test_cli_default_uses_fixed_formal_evaluation7_manifest(self):
+        args = build_parser().parse_args(["--snapshot", "data/switchbot/example"])
+        self.assertEqual(
+            args.eval7_best_condition_manifest,
+            FORMAL_EVALUATION7_BEST_CONDITION_MANIFEST,
+        )
+
     def make_eval7_manifest(self, root: Path, *, n_states: int = 8, hamming: int = 0) -> Path:
         path = root / "evaluation7_best_condition_manifest.json"
         path.write_text(

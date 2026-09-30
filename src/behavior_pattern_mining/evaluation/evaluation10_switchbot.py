@@ -36,6 +36,12 @@ STAGES = ("prepare", "extract", "evaluate", "run")
 METHODS = ("frequency", "llm", "both")
 FORMAL_OUTPUT_NAMESPACE = "10_real_home_temporal_generalization"
 FORMAL_RUNS = 5
+FORMAL_EVALUATION7_BEST_CONDITION_MANIFEST = (
+    Path("results")
+    / "gpt-5.6-sol"
+    / "7_param_search_14d_5runs_individual_holdout"
+    / "evaluation7_best_condition_manifest.json"
+)
 DETAIL_COLUMNS = [
     "method",
     "run",

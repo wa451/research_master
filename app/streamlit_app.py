@@ -87,6 +87,9 @@ from src.behavior_pattern_mining.evaluation.evaluation7_staged import (  # noqa:
     FORMAL_EVALUATION7_RESULTS_DIRNAME,
     FORMAL_EVALUATION7_RUNS,
 )
+from src.behavior_pattern_mining.evaluation.evaluation10_switchbot import (  # noqa: E402
+    FORMAL_EVALUATION7_BEST_CONDITION_MANIFEST,
+)
 from src.behavior_pattern_mining.data.sensor_representation import (  # noqa: E402
     DEFAULT_SENSOR_REPRESENTATION,
     SENSOR_REPRESENTATIONS,
@@ -1556,9 +1559,10 @@ def render_eval10_settings(common: dict) -> dict:
         f"{model_results_relative(common)}/10_real_home_temporal_generalization/{snapshot_name}",
         key=f"eval10_results_dir_{common['model_id']}",
     )
-    eval7_best_condition_manifest = st.text_input(
-        "評価7の最適条件manifest（K/h固定）",
-        f"{model_results_relative(common)}/7_param_search_14d_5runs_individual_holdout/evaluation7_best_condition_manifest.json",
+    eval7_best_condition_manifest = FORMAL_EVALUATION7_BEST_CONDITION_MANIFEST.as_posix()
+    st.caption(
+        "評価7の最適条件manifest（K/h固定）: "
+        f"`{eval7_best_condition_manifest}`"
     )
     train_ratio = st.number_input(
         "学習期間比率", min_value=0.1, max_value=0.9, value=0.7, step=0.1
