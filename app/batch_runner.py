@@ -22,6 +22,9 @@ from app.utils import append_history, redact_text, run_command
 
 BATCH_SCHEMA_VERSION = 1
 ACTIVE_BATCH_STATUSES = frozenset({"queued", "running"})
+TERMINAL_BATCH_STATUSES = frozenset(
+    {"succeeded", "failed", "blocked_missing_inputs"}
+)
 
 
 def timestamp() -> str:
@@ -110,6 +113,19 @@ def discover_batch_statuses(output_root: Path) -> list[tuple[Path, dict[str, Any
         if status is not None and status.get("schema_version") == BATCH_SCHEMA_VERSION:
             statuses.append((path, status))
     return sorted(statuses, key=lambda item: str(item[1].get("created_at", "")), reverse=True)
+
+
+def recent_finished_batches(
+    output_root: Path, *, limit: int = 5
+) -> list[tuple[Path, dict[str, Any]]]:
+    """Return the newest finished batches so the dashboard can show their outcome."""
+    if limit < 1:
+        return []
+    return [
+        (path, status)
+        for path, status in discover_batch_statuses(output_root)
+        if status.get("status") in TERMINAL_BATCH_STATUSES
+    ][:limit]
 
 
 def _update_status(status_path: Path, state: dict[str, Any], **changes: Any) -> None:

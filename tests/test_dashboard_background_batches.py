@@ -13,6 +13,7 @@ from app.batch_runner import (
     discover_batch_statuses,
     launch_batch_worker,
     read_json,
+    recent_finished_batches,
     run_batch_plan,
 )
 
@@ -60,6 +61,7 @@ class DashboardBackgroundBatchTests(unittest.TestCase):
             discovered = discover_batch_statuses(root / "output")
             self.assertEqual(discovered[0][1]["status"], "succeeded")
             self.assertNotIn(status["status"], ACTIVE_BATCH_STATUSES)
+            self.assertEqual(recent_finished_batches(root / "output")[0][0], status_path)
 
     def test_missing_input_blocks_without_running_the_command(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -73,6 +75,10 @@ class DashboardBackgroundBatchTests(unittest.TestCase):
             self.assertEqual(status["completed_steps"], 0)
             self.assertEqual(status["steps"][0]["status"], "blocked_missing_inputs")
             self.assertIn("missing.csv", (plan_path.parent / "01_test_step.log").read_text(encoding="utf-8"))
+            self.assertEqual(
+                recent_finished_batches(root / "output")[0][1]["status"],
+                "blocked_missing_inputs",
+            )
 
 
 if __name__ == "__main__":

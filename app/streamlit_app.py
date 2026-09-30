@@ -37,6 +37,7 @@ from app.batch_runner import (  # noqa: E402
     create_batch_artifacts,
     discover_batch_statuses,
     launch_batch_worker,
+    recent_finished_batches,
 )
 from app.evaluation9_plan import (  # noqa: E402
     DURATION_PRESET,
@@ -1769,7 +1770,8 @@ def render_background_batch_monitor() -> None:
     """Keep task progress visible while the user configures another evaluation."""
     statuses = discover_batch_statuses(PROJECT_ROOT / "output")
     active = [(path, status) for path, status in statuses if status.get("status") in ACTIVE_BATCH_STATUSES]
-    if not active:
+    finished = recent_finished_batches(PROJECT_ROOT / "output")
+    if not active and not finished:
         return
 
     st.markdown("### バックグラウンド一括実行")
@@ -1784,6 +1786,37 @@ def render_background_batch_monitor() -> None:
             f"{status.get('evaluation', '評価')} / {status.get('model_label', 'モデル未設定')} / "
             f"状態: {status.get('status')} / 管理ファイル: {display_path(status_path)}"
         )
+
+    if finished:
+        st.markdown("#### 最近終了した一括実行")
+        st.caption("直近5件を表示します。失敗時は停止したステップとログを確認できます。")
+    for status_path, status in finished:
+        state = str(status.get("status", "unknown"))
+        completed = int(status.get("completed_steps", 0))
+        total = max(int(status.get("total_steps", 0)), 1)
+        summary = (
+            f"{status.get('evaluation', '評価')} / {status.get('model_label', 'モデル未設定')} / "
+            f"{completed}/{total} ステップ / 終了: {status.get('finished_at', '不明')}"
+        )
+        if state == "succeeded":
+            st.success(f"完了: {summary}")
+        else:
+            stopped_step = next(
+                (
+                    step
+                    for step in status.get("steps", [])
+                    if step.get("status") in {"failed", "blocked_missing_inputs"}
+                ),
+                {},
+            )
+            detail = str(stopped_step.get("title", "不明なステップ"))
+            returncode = stopped_step.get("returncode")
+            if returncode is not None:
+                detail += f"（終了コード {returncode}）"
+            st.error(f"失敗: {summary} / 停止: {detail}")
+            if log_path := stopped_step.get("log_path"):
+                st.caption(f"失敗ログ: {display_path(Path(str(log_path)))}")
+        st.caption(f"管理ファイル: {display_path(status_path)}")
 
 
 def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
