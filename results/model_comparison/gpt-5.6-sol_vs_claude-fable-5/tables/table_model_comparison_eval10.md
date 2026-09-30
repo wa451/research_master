@@ -1,0 +1,6 @@
+# table_model_comparison_eval10
+
+| model | method | runs | pattern_count_mean | pattern_count_sd | supported_pattern_count_mean | supported_pattern_count_sd | test_supported_pattern_fraction_mean | test_supported_pattern_fraction_sd | mean_test_day_recurrence_mean | mean_test_day_recurrence_sd | train_occurrences_total_mean | train_occurrences_total_sd | test_occurrences_total_mean | test_occurrences_total_sd | test_transition_coverage_mean | test_transition_coverage_sd | recurrent_pattern_count_mean | recurrent_pattern_count_sd | future_recurrence_rate_mean | future_recurrence_rate_sd | mean_test_support_count_mean | mean_test_support_count_sd |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| claude-fable-5 | llm | 5 | 9.400000 | 0.894427 | 3.600000 | 0.547723 | 0.388889 | 0.088541 | 0.248667 | 0.063316 | 356.400000 | 171.179146 | 182.400000 | 77.021426 | 0.420857 | 0.179472 | None | None | None | None | None | None |
+| gpt-5.6-sol | llm | 5 | 1.000000 | 0.707107 | 0.200000 | 0.447214 | 0.125000 | 0.250000 | 0.050000 | 0.100000 | 11.000000 | 6.284903 | 0.800000 | 1.788854 | 0.000927 | 0.002073 | None | None | None | None | None | None |

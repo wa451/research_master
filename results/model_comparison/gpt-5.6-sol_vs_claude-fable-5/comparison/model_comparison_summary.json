@@ -1,0 +1,41 @@
+{
+  "comparability": "results/model_comparison/gpt-5.6-sol_vs_claude-fable-5/comparison/comparability_audit.csv",
+  "figures": [],
+  "models": {
+    "claude-fable-5": {
+      "identity": {
+        "model_id": "us.anthropic.claude-fable-5",
+        "provider": "bedrock",
+        "result_name": "claude-fable-5"
+      },
+      "result_path": "results/claude-fable-5"
+    },
+    "gpt-5.6-sol": {
+      "identity": {
+        "model_id": "us.openai.gpt-5.6-sol",
+        "provider": "bedrock",
+        "result_name": "gpt-5.6-sol"
+      },
+      "result_path": "results/gpt-5.6-sol"
+    }
+  },
+  "sanity_check": "results/model_comparison/gpt-5.6-sol_vs_claude-fable-5/sanity_check/sanity_check_report.json",
+  "snapshot_manifests": {
+    "claude-fable-5": "results/final_evaluation_snapshot/claude-fable-5/snapshot_manifest.json",
+    "gpt-5.6-sol": "results/final_evaluation_snapshot/gpt-5.6-sol/snapshot_manifest.json"
+  },
+  "tables": [
+    "table_model_comparison_eval10.csv",
+    "table_model_comparison_eval10_by_run.csv",
+    "table_model_comparison_eval10_length.csv",
+    "table_model_comparison_eval10_time_band.csv",
+    "table_model_comparison_eval5.csv",
+    "table_model_comparison_eval6_full.csv",
+    "table_model_comparison_eval6_strict.csv",
+    "table_model_comparison_eval6_strict_by_run.csv",
+    "table_model_comparison_eval7.csv",
+    "table_model_comparison_eval8.csv",
+    "table_model_comparison_eval9.csv",
+    "table_model_comparison_eval9_runs.csv"
+  ]
+}

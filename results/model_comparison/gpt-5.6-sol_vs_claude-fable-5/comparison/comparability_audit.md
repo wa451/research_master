@@ -1,0 +1,9 @@
+# Cross-model comparability
+
+| item | gpt-5.6-sol | claude-fable-5 | comparable |
+|---|---|---|---|
+| model identity | us.openai.gpt-5.6-sol | us.anthropic.claude-fable-5 | Different models by design |
+| Eval6 Full/Strict source representation | individual, K=10 h=2 | individual, K=10 h=2 | Matched condition |
+| Eval7 formal search | 28 conditions x 5 runs present | formal summary absent | No |
+| Eval9 duration | duration summary present | duration summary present | Matched condition rows only |
+| Eval10 K/h provenance | own Eval7 best manifest | artifact metadata required GPT Eval7 manifest | Condition matched; not per-model optimized |

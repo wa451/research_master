@@ -1,0 +1,7 @@
+reviewer_concern,evidence,gpt-5.6-sol,claude-fable-5
+Strict ablation,Eval6 strict paired run CSV and fixed-contract manifest,complete (5 paired runs),complete (5 paired runs)
+Parameter dependency,Eval7 formal condition summary,complete (28 conditions x 5 runs),pending: formal artifact absent
+Generalization / robustness,Eval9 condition/seed summaries,duration experiment available,full and duration experiments available
+Real-home temporal generalization,Eval10 chronological 70/30 summary,complete (5 runs),complete (5 runs)
+Fragmentation,Eval5 and Eval9 fragmentation fields,available,available
+Explanation validation,Human Evaluation artifact,pending,pending

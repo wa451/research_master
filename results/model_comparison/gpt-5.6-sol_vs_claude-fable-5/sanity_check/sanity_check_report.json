@@ -1,0 +1,209 @@
+{
+  "checks": [
+    {
+      "check": "model identity isolation",
+      "evidence": "gpt-5.6-sol: foreign model IDs in metadata=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "artifact presence",
+      "evidence": "gpt-5.6-sol/eval5: 1 summary artifact(s)",
+      "severity": "INFO"
+    },
+    {
+      "check": "artifact presence",
+      "evidence": "gpt-5.6-sol/eval6_full: 1 summary artifact(s)",
+      "severity": "INFO"
+    },
+    {
+      "check": "artifact presence",
+      "evidence": "gpt-5.6-sol/eval6_strict: 1 summary artifact(s)",
+      "severity": "INFO"
+    },
+    {
+      "check": "artifact presence",
+      "evidence": "gpt-5.6-sol/eval7: 1 summary artifact(s)",
+      "severity": "INFO"
+    },
+    {
+      "check": "artifact presence",
+      "evidence": "gpt-5.6-sol/eval8_fixed: 1 summary artifact(s)",
+      "severity": "INFO"
+    },
+    {
+      "check": "artifact presence",
+      "evidence": "gpt-5.6-sol/eval8_tertile: 1 summary artifact(s)",
+      "severity": "INFO"
+    },
+    {
+      "check": "artifact presence",
+      "evidence": "gpt-5.6-sol/eval9: 1 summary artifact(s)",
+      "severity": "INFO"
+    },
+    {
+      "check": "artifact presence",
+      "evidence": "gpt-5.6-sol/eval10: 1 summary artifact(s)",
+      "severity": "INFO"
+    },
+    {
+      "check": "model identity isolation",
+      "evidence": "claude-fable-5: foreign model IDs in metadata=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "artifact presence",
+      "evidence": "claude-fable-5/eval5: 1 summary artifact(s)",
+      "severity": "INFO"
+    },
+    {
+      "check": "artifact presence",
+      "evidence": "claude-fable-5/eval6_full: 1 summary artifact(s)",
+      "severity": "INFO"
+    },
+    {
+      "check": "artifact presence",
+      "evidence": "claude-fable-5/eval6_strict: 1 summary artifact(s)",
+      "severity": "INFO"
+    },
+    {
+      "check": "artifact presence",
+      "evidence": "claude-fable-5/eval7: 0 summary artifact(s)",
+      "severity": "WARNING"
+    },
+    {
+      "check": "artifact presence",
+      "evidence": "claude-fable-5/eval8_fixed: 1 summary artifact(s)",
+      "severity": "INFO"
+    },
+    {
+      "check": "artifact presence",
+      "evidence": "claude-fable-5/eval8_tertile: 1 summary artifact(s)",
+      "severity": "INFO"
+    },
+    {
+      "check": "artifact presence",
+      "evidence": "claude-fable-5/eval9: 2 summary artifact(s)",
+      "severity": "INFO"
+    },
+    {
+      "check": "artifact presence",
+      "evidence": "claude-fable-5/eval10: 1 summary artifact(s)",
+      "severity": "INFO"
+    },
+    {
+      "check": "Eval6 Strict common completed runs",
+      "evidence": "gpt-5.6-sol: common=['1', '2', '3', '4', '5']",
+      "severity": "INFO"
+    },
+    {
+      "check": "Eval6 Strict fixed-contract fields",
+      "evidence": "gpt-5.6-sol: missing=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "Eval6 Strict common completed runs",
+      "evidence": "claude-fable-5: common=['1', '2', '3', '4', '5']",
+      "severity": "INFO"
+    },
+    {
+      "check": "Eval6 Strict fixed-contract fields",
+      "evidence": "claude-fable-5: missing=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "Eval7 holdout isolation",
+      "evidence": "gpt-5.6-sol: role=validation, validation=15--154, test=155--220",
+      "severity": "INFO"
+    },
+    {
+      "check": "Eval7 completeness/leakage",
+      "evidence": "claude-fable-5: formal Evaluation 7 summary absent",
+      "severity": "WARNING"
+    },
+    {
+      "check": "Eval6 Full mean/SD recomputation",
+      "evidence": "gpt-5.6-sol: mismatches=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "Eval6 Strict mean/SD recomputation",
+      "evidence": "gpt-5.6-sol: mismatches=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "Eval10 mean/SD recomputation",
+      "evidence": "gpt-5.6-sol: mismatches=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "Eval6 Full mean/SD recomputation",
+      "evidence": "claude-fable-5: mismatches=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "Eval6 Strict mean/SD recomputation",
+      "evidence": "claude-fable-5: mismatches=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "Eval10 mean/SD recomputation",
+      "evidence": "claude-fable-5: mismatches=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "metric range",
+      "evidence": "eval6_full: invalid=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "metric range",
+      "evidence": "eval6_strict: invalid=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "metric range",
+      "evidence": "eval7: invalid=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "metric range",
+      "evidence": "eval8: invalid=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "metric range",
+      "evidence": "eval9: invalid=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "metric range",
+      "evidence": "eval10_runs: invalid=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "Eval9 fragmentation N/A retention",
+      "evidence": "gpt-5.6-sol: statuses=['evaluated']",
+      "severity": "INFO"
+    },
+    {
+      "check": "Eval9 duplicate condition/seed/run records",
+      "evidence": "gpt-5.6-sol: duplicates=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "Eval9 fragmentation N/A retention",
+      "evidence": "claude-fable-5: statuses=['evaluated']",
+      "severity": "INFO"
+    },
+    {
+      "check": "Eval9 duplicate condition/seed/run records",
+      "evidence": "claude-fable-5: duplicates=[]",
+      "severity": "INFO"
+    },
+    {
+      "check": "figures",
+      "evidence": "No matplotlib-capable local runtime was available; source CSV tables were written, no API call was attempted.",
+      "severity": "WARNING"
+    }
+  ]
+}

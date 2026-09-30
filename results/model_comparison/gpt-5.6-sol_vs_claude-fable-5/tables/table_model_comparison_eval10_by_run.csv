@@ -1,0 +1,11 @@
+model,method,run,status,pattern_count,supported_pattern_count,test_supported_pattern_fraction,mean_test_day_recurrence,train_occurrences_total,test_occurrences_total,test_transition_coverage
+gpt-5.6-sol,llm,1,complete,0,0,,,0,0,0.0
+gpt-5.6-sol,llm,2,complete,1,0,0.0,0.0,13,0,0.0
+gpt-5.6-sol,llm,3,complete,1,0,0.0,0.0,13,0,0.0
+gpt-5.6-sol,llm,4,complete,1,0,0.0,0.0,13,0,0.0
+gpt-5.6-sol,llm,5,complete,2,1,0.5,0.2,16,4,0.004634994206257242
+claude-fable-5,llm,1,complete,10,3,0.3,0.2,376,149,0.34530706836616454
+claude-fable-5,llm,2,complete,9,4,0.4444444444444444,0.3333333333333333,630,320,0.7415990730011588
+claude-fable-5,llm,3,complete,10,4,0.4,0.21000000000000002,350,148,0.3383545770567787
+claude-fable-5,llm,4,complete,8,4,0.5,0.3,193,153,0.3499420625724218
+claude-fable-5,llm,5,complete,10,3,0.3,0.2,233,142,0.3290845886442642
