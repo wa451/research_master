@@ -180,6 +180,21 @@ def preparation_provenance_matches(experiment: Path) -> bool | None:
         return False
 
 
+def current_preparation_provenance_suffix() -> str | None:
+    """Return a stable suffix for the current Hestia research provenance."""
+    try:
+        current = research_provenance(PROJECT_ROOT)
+    except (OSError, ValueError, subprocess.CalledProcessError):
+        return None
+    encoded = json.dumps(
+        current,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()[:8]
+
+
 def _managed_evaluation9_results(path: Path, project_root: Path) -> Path:
     results_root = (project_root / "results").resolve()
     resolved = path.expanduser().resolve()

@@ -1,5 +1,6 @@
 """Evaluation 9 routing, API opt-in and dashboard regression tests."""
 
+import hashlib
 import json
 import tempfile
 import threading
@@ -13,6 +14,7 @@ from app.evaluation9_plan import (
     DURATION_TRAIN_DAYS,
     archive_evaluation9_outputs,
     build_effective_plan,
+    current_preparation_provenance_suffix,
     estimate_scale,
     experiment_snapshot_matches,
     load_preset_plan,
@@ -374,6 +376,22 @@ class Evaluation9Tests(unittest.TestCase):
                     encoding="utf-8",
                 )
                 self.assertTrue(preparation_provenance_matches(experiment))
+
+    def test_current_preparation_provenance_suffix_tracks_research_source(self):
+        provenance = {"files": {"src/example.py": "current"}}
+        with patch(
+            "app.evaluation9_plan.research_provenance",
+            return_value=provenance,
+        ):
+            expected = hashlib.sha256(
+                json.dumps(
+                    provenance,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()[:8]
+            self.assertEqual(current_preparation_provenance_suffix(), expected)
 
     def test_dashboard_builder_prefers_effective_plan_and_keeps_api_opt_in(self):
         effective = Path(

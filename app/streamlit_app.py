@@ -45,6 +45,7 @@ from app.evaluation9_plan import (  # noqa: E402
     PRESET_PLAN_FILENAMES,
     archive_evaluation9_outputs,
     build_effective_plan,
+    current_preparation_provenance_suffix,
     estimate_scale,
     experiment_snapshot_matches,
     load_preset_plan,
@@ -1439,9 +1440,14 @@ def render_eval9_settings(common: dict) -> dict:
     if snapshot_matches is False or preparation_matches is False:
         plan_hash = effective_plan_path.stem.rsplit("_", 1)[-1][:8]
         directory_name = preset_directory_name(preset)
-        suggested_experiment = f"{model_output_relative(common)}/9_hestia/{directory_name}_{plan_hash}"
+        suggested_suffix = plan_hash
+        if preparation_matches is False:
+            provenance_suffix = current_preparation_provenance_suffix()
+            if provenance_suffix is not None:
+                suggested_suffix = f"{plan_hash}_{provenance_suffix}"
+        suggested_experiment = f"{model_output_relative(common)}/9_hestia/{directory_name}_{suggested_suffix}"
         suggested_output = (
-            f"{model_results_relative(common)}/9_hestia/{directory_name}_{plan_hash}"
+            f"{model_results_relative(common)}/9_hestia/{directory_name}_{suggested_suffix}"
         )
 
         def use_suggested_eval9_directories() -> None:
