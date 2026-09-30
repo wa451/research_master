@@ -22,6 +22,7 @@ from app.streamlit_app import (
     DEFAULT_HAMMING_THRESHOLD,
     DEFAULT_N_STATES,
     batch_target_steps,
+    evaluation10_artifact_status,
     evaluation10_directory_defaults,
     evaluation9_directory_defaults,
     eval5_condition_widget_key,
@@ -97,6 +98,21 @@ class DashboardModelSelectionTests(unittest.TestCase):
                 "results/claude-fable-5/10_real_home_temporal_generalization/2026-08-19_2026-09-19",
             ),
         )
+
+    def test_evaluation10_artifact_status_reports_completed_runs_and_checkpoints(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "output"
+            results = root / "results"
+            self.assertEqual(evaluation10_artifact_status(output, results), (False, 0, 0))
+            (output / "preparation.json").parent.mkdir(parents=True)
+            (output / "preparation.json").touch()
+            llm_dir = results / "llm" / "fingerprint"
+            checkpoint = llm_dir / "llm_mode_records_run3" / "state_transition_Morning.json"
+            checkpoint.parent.mkdir(parents=True)
+            checkpoint.touch()
+            (llm_dir / "llm_sequences_modes_10_2_21days_1.json").touch()
+            self.assertEqual(evaluation10_artifact_status(output, results), (True, 1, 1))
 
     def test_fable_is_default_and_all_model_roots_are_distinct(self) -> None:
         self.assertEqual(

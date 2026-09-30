@@ -187,6 +187,13 @@ def evaluation10_directory_defaults(common: dict, snapshot_name: str) -> tuple[s
     )
 
 
+def evaluation10_artifact_status(output_dir: Path, results_dir: Path) -> tuple[bool, int, int]:
+    """Return preparation, complete-run, and per-mode checkpoint availability."""
+    complete_runs = list(results_dir.glob("llm/*/llm_sequences_modes_*.json"))
+    mode_checkpoints = list(results_dir.glob("llm/*/llm_mode_records_run*/*.json"))
+    return (output_dir.joinpath("preparation.json").is_file(), len(complete_runs), len(mode_checkpoints))
+
+
 def log_root(settings: dict) -> Path:
     """Keep dashboard histories and logs with the model that produced them."""
     return Path(settings["model_output_root"]) / "logs" / "evaluation_dashboard"
@@ -1600,6 +1607,28 @@ def render_eval10_settings(common: dict) -> dict:
         st.session_state["eval10_loaded_snapshot"] = eval10_directory_token
         st.session_state["eval10_output_dir"] = output_default
         st.session_state["eval10_results_dir"] = results_default
+
+    def use_current_eval10_directories() -> None:
+        st.session_state["eval10_output_dir"] = output_default
+        st.session_state["eval10_results_dir"] = results_default
+
+    resolved_output_default = PROJECT_ROOT / output_default
+    resolved_results_default = PROJECT_ROOT / results_default
+    has_preparation, complete_runs, mode_checkpoints = evaluation10_artifact_status(
+        resolved_output_default, resolved_results_default
+    )
+    if has_preparation or complete_runs or mode_checkpoints:
+        st.info(
+            "現在のsnapshotの既存成果物を検出: "
+            f"前処理={'あり' if has_preparation else 'なし'}、"
+            f"完了LLM run={complete_runs}/5、"
+            f"時間帯チェックポイント={mode_checkpoints}件。"
+        )
+    st.button(
+        "現在のsnapshotの既存成果物パスへ戻す",
+        key="eval10_use_current_directories",
+        on_click=use_current_eval10_directories,
+    )
     output_dir = st.text_input(
         "中間成果物ディレクトリ", key="eval10_output_dir"
     )
