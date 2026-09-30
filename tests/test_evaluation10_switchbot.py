@@ -11,6 +11,7 @@ import unittest
 import pandas as pd
 
 from app.command_builder import build_evaluation10_steps
+from app.streamlit_app import batch_target_steps
 from scripts.evaluate_10_switchbot import build_parser, main
 from src.behavior_pattern_mining.evaluation.evaluation10_switchbot import (
     DETAIL_COLUMNS,
@@ -276,6 +277,37 @@ class Evaluation10SwitchBotTests(unittest.TestCase):
         enabled = build_evaluation10_steps({**settings, "allow_api": True})
         self.assertEqual([step.step_id for step in enabled], ["eval10_prepare", "eval10_extract", "eval10_evaluate"])
         self.assertIn("--allow-api", enabled[1].command)
+
+    def test_dashboard_batch_skips_completed_preparation_before_resuming_extract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            settings = {
+                "runner": "uv run python",
+                "snapshot": root / "snapshot",
+                "output_dir": root / "output",
+                "results_dir": root / "results",
+                "eval7_best_condition_manifest": root / "evaluation7.json",
+                "split_at": "",
+                "train_ratio": 0.7,
+                "smoothing_window_sec": 5,
+                "sampling_seconds": 1,
+                "min_sequence_length": 2,
+                "max_sequence_length": 4,
+                "min_train_occurrences": 2,
+                "top_k_per_mode": 20,
+                "method": "llm",
+                "runs": 5,
+                "allow_api": True,
+            }
+            steps = build_evaluation10_steps(settings)
+            for path in steps[0].expected_outputs:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+            targets = batch_target_steps(steps, "不足ファイル生成 + 評価本体")
+            self.assertEqual(
+                [step.step_id for step in targets],
+                ["eval10_extract", "eval10_evaluate"],
+            )
 
     def test_cli_rejects_k_or_h_conflicting_with_eval7_manifest(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -1380,7 +1380,6 @@ def build_evaluation10_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
                 output_dir / "frequency_patterns.json",
                 output_dir / "test_state_segments.json",
             ],
-            verify_on_batch=True,
         )
     ]
     if settings.get("allow_api", False):
