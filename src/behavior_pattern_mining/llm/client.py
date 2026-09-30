@@ -47,9 +47,15 @@ BEDROCK_CONVERSE_RETRYABLE_ERROR_CODES = {
 def bedrock_supports_temperature(model_name: str) -> bool:
     """Return whether a Bedrock Converse model accepts ``temperature``."""
     normalized_model_name = model_name.strip().lower()
-    return not normalized_model_name.startswith(
+    if normalized_model_name.startswith(
         ("us.openai.gpt-5.6-", "global.openai.gpt-5.6-")
-    )
+    ):
+        return False
+    return normalized_model_name not in {
+        "anthropic.claude-fable-5",
+        "global.anthropic.claude-fable-5",
+        "us.anthropic.claude-fable-5",
+    }
 
 
 def resolve_llm_runtime_config(
@@ -688,9 +694,9 @@ def call_bedrock(
         client = boto3.client("bedrock-runtime", region_name=region_name)
         messages = build_bedrock_messages(user_message)
         inference_config: dict[str, int | float] = {"maxTokens": max_tokens}
-        # GPT-5.6 cross-Region inference profiles reject ``temperature``.
-        # Leave it to the service default while retaining temperature for models
-        # that support the common Converse inference parameter.
+        # GPT-5.6 profiles and Claude Fable 5 reject arbitrary ``temperature``.
+        # Leave it to the service default for those models while retaining the
+        # common Converse parameter for models that support it.
         if temperature is not None and bedrock_supports_temperature(model_name):
             inference_config["temperature"] = temperature
         for attempt in range(1, BEDROCK_CONVERSE_MAX_ATTEMPTS + 1):

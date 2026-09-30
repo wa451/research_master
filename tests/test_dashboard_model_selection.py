@@ -59,10 +59,10 @@ class DashboardModelSelectionTests(unittest.TestCase):
         self.assertNotEqual(default_key, selected_key)
         self.assertIn("aruba_individual_10_2_154days", selected_key)
 
-    def test_gpt_sol_is_default_and_all_model_roots_are_distinct(self) -> None:
+    def test_fable_is_default_and_all_model_roots_are_distinct(self) -> None:
         self.assertEqual(
             DEFAULT_DASHBOARD_MODEL_ID,
-            "us.openai.gpt-5.6-sol",
+            "us.anthropic.claude-fable-5",
         )
         roots = {model.results_root(PROJECT_ROOT) for model in DASHBOARD_MODELS}
         output_roots = {model.output_root(PROJECT_ROOT) for model in DASHBOARD_MODELS}
@@ -70,11 +70,11 @@ class DashboardModelSelectionTests(unittest.TestCase):
         self.assertEqual(len(output_roots), len(DASHBOARD_MODELS))
         self.assertEqual(
             dashboard_model(DEFAULT_DASHBOARD_MODEL_ID).results_root(PROJECT_ROOT),
-            PROJECT_ROOT / "results/gpt-5.6-sol",
+            PROJECT_ROOT / "results/claude-fable-5",
         )
         self.assertEqual(
             dashboard_model(DEFAULT_DASHBOARD_MODEL_ID).output_root(PROJECT_ROOT),
-            PROJECT_ROOT / "output/gpt-5.6-sol",
+            PROJECT_ROOT / "output/claude-fable-5",
         )
 
     def test_selected_root_is_used_for_default_llm_artifacts(self) -> None:
@@ -243,7 +243,7 @@ class DashboardModelSelectionTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(
             result.output.splitlines(),
-            ["bedrock", "us.openai.gpt-5.6-sol"],
+            ["bedrock", "us.anthropic.claude-fable-5"],
         )
         self.assertEqual(os.environ.get("BEDROCK_MODEL_ID"), before)
 

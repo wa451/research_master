@@ -74,6 +74,28 @@ class LlmClientTests(unittest.TestCase):
 
         self.assertIsNone(config.temperature)
 
+    def test_fable5_runtime_config_marks_temperature_as_not_sent(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "LLM_PROVIDER": "bedrock",
+                "AWS_REGION": "us-east-2",
+                "BEDROCK_MODEL_ID": "us.anthropic.claude-fable-5",
+            },
+            clear=True,
+        ):
+            config = resolve_llm_runtime_config(
+                default_provider="bedrock",
+                gemini_model_name="gemini-test",
+                temperature=0.2,
+                bedrock_region="us-west-2",
+                bedrock_model_id="",
+                bedrock_max_tokens=8192,
+                bedrock_estimated_output_tokens=None,
+            )
+
+        self.assertIsNone(config.temperature)
+
     def test_existing_gemini_settings_remain_supported(self) -> None:
         with patch.dict(
             os.environ,
@@ -172,6 +194,33 @@ class LlmClientTests(unittest.TestCase):
 
         bedrock_client.converse.assert_called_once_with(
             modelId="us.openai.gpt-5.6-sol",
+            messages=[{"role": "user", "content": [{"text": "prompt"}]}],
+            inferenceConfig={"maxTokens": 512},
+        )
+
+    def test_bedrock_fable5_profile_omits_unsupported_temperature(self) -> None:
+        bedrock_client = Mock()
+        bedrock_client.converse.return_value = {
+            "output": {"message": {"content": [{"text": "ok"}]}},
+            "usage": {},
+        }
+        boto3_module = Mock()
+        boto3_module.client.return_value = bedrock_client
+
+        with patch(
+            "src.behavior_pattern_mining.llm.client.importlib.import_module",
+            return_value=boto3_module,
+        ):
+            call_bedrock(
+                model_name="us.anthropic.claude-fable-5",
+                user_message="prompt",
+                temperature=0.2,
+                region_name="us-east-2",
+                max_tokens=512,
+            )
+
+        bedrock_client.converse.assert_called_once_with(
+            modelId="us.anthropic.claude-fable-5",
             messages=[{"role": "user", "content": [{"text": "prompt"}]}],
             inferenceConfig={"maxTokens": 512},
         )

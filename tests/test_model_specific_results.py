@@ -28,6 +28,7 @@ from src.behavior_pattern_mining.llm import pattern_extractor
 
 MODEL_CASES = {
     "gemini-2.5-pro": "gemini-2.5-pro",
+    "us.anthropic.claude-fable-5": "claude-fable-5",
     "us.anthropic.claude-haiku-4-5-20251001-v1:0": "claude-haiku-4.5",
     "us.anthropic.claude-sonnet-4-6": "claude-sonnet-4.6",
     "us.openai.gpt-5.6-luna": "gpt-5.6-luna",

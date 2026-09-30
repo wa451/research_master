@@ -51,13 +51,13 @@ macOSでは、リポジトリ直下の `start_dashboard.command` をダブルク
 | 項目 | 説明 |
 |---|---|
 | 評価・テストを選択 | 評価4〜10に加え、実APIを1回だけ呼ぶ独立した `APIテスト` を選べます。 |
-| 実行LLMモデル | 評価4〜10のLLM生成・評価で使うモデルを選ぶ。既定は **GPT-5.6 Sol**。前処理・baseline・state series・ログは `output/<model>/`、LLM JSON、checkpoint、metrics、評価結果は `results/<model>/` に分離する。 |
+| 実行LLMモデル | 評価4〜10のLLM生成・評価で使うモデルを選ぶ。既定は **Claude Fable 5**（`us.anthropic.claude-fable-5`）。前処理・baseline・state series・ログは `output/<model>/`、LLM JSON、checkpoint、metrics、評価結果は `results/<model>/` に分離する。 |
 | Python実行方法 | READMEの既定に合わせて `uv run python` を既定にしています。`.app` / `start_dashboard.command` 起動時は `uv` の絶対パスを子プロセスにも引き継ぐため、テスト実行でも `uv` を見失いません。 |
 | run名 | ログディレクトリ名に使います。CLI引数には渡しません。 |
 | チャタリング除去時間（秒） | 代表状態・状態遷移ネットワーク作成時の遅延OFF窓幅。既定は `5` 秒で、`0` は無効。評価4〜7と評価10の前段CLIへ渡す。 |
 | dry-run | 実行せず、コマンドとログファイルだけを保存します。 |
 
-モデル選択は、画面が起動する子プロセスにだけ `LLM_PROVIDER` とモデルIDを渡します。リポジトリ直下の `.env` は変更しません。Bedrockモデルでは `.env` または通常のAWS認証チェーンに有効なAWS認証情報とリージョンを、Geminiでは `GEMINI_API_KEY` をあらかじめ設定してください。GPT-5.6 Sol/Terra/LunaのBedrock Converse呼出しは `temperature` を受け付けないため、この項目を送信せずBedrock既定値を使い、成果物メタデータでは `temperature: null` と記録します。画面上の入力JSON・中間出力・ログの既定値は `output/<model>/`、LLM出力と評価結果の既定値は `results/<model>/` へ切り替わります。
+モデル選択は、画面が起動する子プロセスにだけ `LLM_PROVIDER` とモデルIDを渡します。リポジトリ直下の `.env` は変更しません。Bedrockモデルでは `.env` または通常のAWS認証チェーンに有効なAWS認証情報とリージョンを、Geminiでは `GEMINI_API_KEY` をあらかじめ設定してください。GPT-5.6 Sol/Terra/LunaおよびClaude Fable 5のBedrock Converse呼出しは任意の `temperature` を送らず、Bedrock既定値を使い、成果物メタデータでは `temperature: null` と記録します。Claude Fable 5の料金はこのリポジトリの固定価格表に未登録のため、公式価格を確認するまでコスト見積もりは停止します。画面上の入力JSON・中間出力・ログの既定値は `output/<model>/`、LLM出力と評価結果の既定値は `results/<model>/` へ切り替わります。
 
 評価4・5・6・8の代表状態数とハミング距離閾値は、評価7の選定結果に合わせて `K=10`、`hamming=2` を既定値にしています。評価7は感度分析のため、複数条件を指定する探索範囲を維持します。
 

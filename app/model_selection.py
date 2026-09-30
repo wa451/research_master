@@ -54,7 +54,8 @@ class DashboardModel:
 
 # Keep the default first: Streamlit uses this order for the initial selection.
 DASHBOARD_MODELS: tuple[DashboardModel, ...] = (
-    DashboardModel("GPT-5.6 Sol（既定）", "bedrock", "us.openai.gpt-5.6-sol"),
+    DashboardModel("Claude Fable 5（既定）", "bedrock", "us.anthropic.claude-fable-5"),
+    DashboardModel("GPT-5.6 Sol", "bedrock", "us.openai.gpt-5.6-sol"),
     DashboardModel("GPT-5.6 Terra", "bedrock", "us.openai.gpt-5.6-terra"),
     DashboardModel("GPT-5.6 Luna", "bedrock", "us.openai.gpt-5.6-luna"),
     DashboardModel("Claude Sonnet 4.6", "bedrock", "us.anthropic.claude-sonnet-4-6"),
