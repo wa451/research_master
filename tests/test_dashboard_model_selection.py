@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from app.command_builder import (
     PROJECT_ROOT,
@@ -20,6 +21,7 @@ from app.command_builder import (
 from app.streamlit_app import (
     DEFAULT_HAMMING_THRESHOLD,
     DEFAULT_N_STATES,
+    batch_target_steps,
     eval5_condition_widget_key,
 )
 from app.model_selection import (
@@ -226,6 +228,21 @@ class DashboardModelSelectionTests(unittest.TestCase):
         self.assertIn(str(fable.output_root(PROJECT_ROOT)), " ".join(state_series_step.command))
         for step in steps[2:]:
             self.assertIn(str(manifest_path), step.command)
+        generated_paths = steps[2].expected_outputs
+        self.assertEqual(
+            [path.name for path in generated_paths[:5]],
+            [f"run_{run_id}.json" for run_id in range(1, 6)],
+        )
+        self.assertEqual(
+            [path.name for path in generated_paths[5:10]],
+            [f"run_{run_id}.json" for run_id in range(1, 6)],
+        )
+        with patch("app.streamlit_app.missing_expected_outputs", return_value=[]):
+            self.assertEqual(batch_target_steps(steps, "不足ファイル生成のみ"), [])
+            self.assertEqual(
+                [step.step_id for step in batch_target_steps(steps, "不足ファイル生成 + 評価本体")],
+                ["eval6_strict_evaluate"],
+            )
 
     def test_builders_use_the_selected_model_root_for_expected_outputs(self) -> None:
         terra_root = dashboard_model("us.openai.gpt-5.6-terra").results_root(PROJECT_ROOT)

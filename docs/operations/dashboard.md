@@ -117,7 +117,7 @@ macOSでは、リポジトリ直下の `start_dashboard.command` をダブルク
 5. 評価6の手法間比較を実行  
    `scripts/evaluate_6_compare_adl_interpretation_set.py` をholdout（Day 155–220）で実行します。split選択時は両手法を `sequence × time_period` 単位で評価し、LLM-onlyの出現検索もpattern自身の時間帯だけに制限します。主な出力は `evaluation6_method_comparison.csv`, `evaluation6_method_comparison_by_run.csv`, `evaluation6_llm_usage_comparison.csv`, `evaluation6_pattern_set_details_by_method.csv`, `evaluation6_by_*_by_method.csv`, `evaluation6_comparison_summary.json` です。
 
-Evaluation 7のbest-condition manifestを指定した場合、DashboardはK/h・sensor representation・期間境界の手入力がmanifestと一致することを確認し、比較・生成の成果物パスはmanifest条件のcanonical pathへ解決する。不一致のK/hや表現はコマンド実行前に停止する。Strict Ablationでは、選定済みGPT-5.6 Sol manifestをClaude Fable 5など別の生成モデルの条件ソースとして選べる。この場合も生成・state series・Strict結果は選択した生成モデルの名前空間に保存し、manifest出所をmetadataへ残す。Strictトラックの画面はstate table/STN確認、state series作成、LLM生成、holdout採点の順に表示する。
+Evaluation 7のbest-condition manifestを指定した場合、DashboardはK/h・sensor representation・期間境界の手入力がmanifestと一致することを確認し、比較・生成の成果物パスはmanifest条件のcanonical pathへ解決する。不一致のK/hや表現はコマンド実行前に停止する。Strict Ablationでは、選定済みGPT-5.6 Sol manifestをClaude Fable 5など別の生成モデルの条件ソースとして選べる。この場合も生成・state series・Strict結果は選択した生成モデルの名前空間に保存し、manifest出所をmetadataへ残す。Strictトラックの画面はstate table/STN確認、state series作成、LLM生成、holdout採点の順に表示する。「不足ファイル生成のみ」は指定した全runについて両手法の`run_<N>.json`を確認し、不足runを生成する。採点は「不足ファイル生成 + 評価本体」または個別ステップで実行する。
 
 評価6・7画面では旧sentinelラベルの選択欄を表示しない。`no_occurrence`, `no_adl_overlap`, `prediction missing`, `unknown` は評価ロジックで固定された別状態であり、conditional/end-to-end指標とcoverage/rateへ一貫して反映される。旧CLI引数は既存コマンドとの互換性のため受理されるが、アプリが新規生成するコマンドには付与しない。
 

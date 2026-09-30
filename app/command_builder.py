@@ -761,7 +761,17 @@ def build_evaluation6_strict_ablation_steps(settings: dict[str, Any]) -> list[Ev
             "manifest条件に固定した共通prompt・共通後処理で、STNと時系列のStrict比較用出力を生成します。",
             generator,
             [paths.state_table, paths.network_dir / "state_transition_Morning.json"],
-            [paths.proposed_dir / "run_1.json", paths.llm_only_dir / "run_1.json", paths.root / "manifest.json"],
+            [
+                *[
+                    paths.proposed_dir / f"run_{run_id}.json"
+                    for run_id in range(1, runs + 1)
+                ],
+                *[
+                    paths.llm_only_dir / f"run_{run_id}.json"
+                    for run_id in range(1, runs + 1)
+                ],
+                paths.root / "manifest.json",
+            ],
         ),
         EvaluationStep(
             "eval6_strict_evaluate",

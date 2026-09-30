@@ -1699,6 +1699,7 @@ FINAL_EVALUATION_STEP_IDS = {
     "eval4_evaluate",
     "eval5_evaluate",
     "eval6_compare",
+    "eval6_strict_evaluate",
     "eval7_evaluate",
     "eval9_evaluate",
     "eval10_evaluate",
