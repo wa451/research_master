@@ -5,6 +5,7 @@
 | 調べたいこと | 読むファイル |
 |---|---|
 | 実装・テスト・仕様への最短経路 | [CODEBASE_MAP.md](CODEBASE_MAP.md) |
+| 実行済み結果の閲覧・考察・論文執筆の作業を引き継ぐ | [RESULTS_AND_WRITING.md](RESULTS_AND_WRITING.md) |
 | 評価ごとの文書・CLI・実装・テスト | [EVALUATION_ROUTES.md](EVALUATION_ROUTES.md) の該当節のみ |
 | 評価4〜10をAIへ説明・引継ぎする | [evaluations/README.md](evaluations/README.md) |
 | 採用済みの実装上の判断 | [DECISIONS.md](DECISIONS.md) |

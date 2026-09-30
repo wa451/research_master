@@ -1,6 +1,6 @@
 # 作業入口の索引
 
-確認日: 2026-09-09。該当行から必要な参照だけ読む。詳細仕様はリンク先docsに置く。
+初回確認: 2026-09-09。結果閲覧・執筆の入口更新: 2026-10-01。該当行から必要な参照だけ読む。詳細仕様はリンク先docsに置く。
 
 | 作業 | 最初の参照・実装 | 最小テスト |
 |---|---|---|
@@ -14,7 +14,7 @@
 | Web・Streamlit | [dashboard文書](../docs/operations/dashboard.md) → [streamlit_app.py](../app/streamlit_app.py) UI、[command_builder.py](../app/command_builder.py) の `build_evaluationN_steps`、[utils.py](../app/utils.py) 実行支援 | 評価ルートのテスト。UI一般の専用テストは未整備 |
 | 設定・既定値 | [設定の注意](../docs/architecture/code_inventory.md#共通設定の注意) → [default.yaml](../configs/default.yaml) → [config.py](../src/behavior_pattern_mining/config.py) → [experiment_config.py](../experiment_config.py)。全CLIに伝播するとは限らない | [test_core_logic.py](../tests/test_core_logic.py) |
 | 成果物・再現手順 | [artifact_policy](../docs/operations/artifact_policy.md)、[experiment_reproduction](../docs/operations/experiment_reproduction.md)、[paper_parameters](../docs/research/paper_parameters.md) | 対象producer/consumerのテスト |
-| 人向け結果閲覧・論文執筆 | [研究結果の入口](../docs/research/README.md) → [catalog](../docs/research/result_catalog.json)、[read-only viewer](../support/research_browser.py)、[HTML](../assets/research_browser.html)。既存表のFRR列と断片化ペアなしの注意は[読み方](../docs/research/results_guide.md) | [test_research_browser.py](../tests/test_research_browser.py)、`python3 support/research_browser.py --check` |
+| 人向け結果閲覧・論文執筆 | [引継ぎ](RESULTS_AND_WRITING.md) → [人向け入口](../docs/research/README.md)、[catalog](../docs/research/result_catalog.json)、[viewer](../support/research_browser.py)、[HTML](../assets/research_browser.html) | [test_research_browser.py](../tests/test_research_browser.py)、`python3 support/research_browser.py --check` |
 | Hestia・合成データ接続 | 評価9ルート → 必要時 [hestia_dataset_integration](../docs/integrations/hestia_dataset_integration.md)。`Hestia/` は親Git管理外の独立repo、通常探索に含めない | 評価9ルート |
 | SwitchBot実宅ログ | 評価10ルート → [switchbot_logger](../docs/integrations/switchbot_logger.md)。`data/switchbot/` と派生成果物はGit管理外 | 評価10ルート |
 

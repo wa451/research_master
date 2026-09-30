@@ -43,7 +43,7 @@
 - 文書: [評価6](../docs/evaluations/evaluation_6_adl_interpretation_set.md)、AI説明: [eval6](evaluations/eval6_adl_label_sets.md)。
 - 入口/実装: [evaluate_6_compare_adl_interpretation_set.py](../scripts/evaluate_6_compare_adl_interpretation_set.py)（run集計も保持） → [adl_interpretation_set.py](../src/behavior_pattern_mining/evaluation/adl_interpretation_set.py)、[llm_usage.py](../src/behavior_pattern_mining/evaluation/llm_usage.py)。
 - テスト: [test_evaluation6_adl_interpretation_set.py](../tests/test_evaluation6_adl_interpretation_set.py)、[test_evaluation6_default_days.py](../tests/test_evaluation6_default_days.py)。
-- 注意: KI-06の正式workflowは採用済み（`network-equivalent`・holdout）。KI-08/09は未解決。ラベル集合指標はeval7/8も利用し、details CSVはeval8の入力。
+- 注意: KI-06/08は採用済み（`network-equivalent`・holdout・eval7 manifest条件解決）。KI-09はFullの分母が未決で、Strictのpaired集計と混在させない。ラベル集合指標はeval7/8も利用し、details CSVはeval8の入力。結果を読むときは[結果引継ぎ](RESULTS_AND_WRITING.md)。
 
 ## eval7 14日・全28条件・各5 runのK/h感度分析
 

@@ -9,6 +9,8 @@
 
 提案手法と、同じ14日間の前処理済み代表状態系列を直接LLMへ渡す`direct_log_baseline`を比較する。両手法の抽出・LLM入力は先頭14日であり、固定した状態定義を全220日へ写像したstate seriesを共用する。ただし正式holdoutでは出現検索とADL照合をDay 155–220だけに制限する。Day 15–154は評価7のK,h選択専用であり、評価6には混ぜない。
 
+これはFull-pipelineトラックの説明である。Strictは共通prompt/schema等を固定し、両手法完了runの積集合でpaired評価する別トラック。入口は [run_evaluation6_strict_ablation.py](../../scripts/run_evaluation6_strict_ablation.py)、[evaluate_6_strict_ablation.py](../../scripts/evaluate_6_strict_ablation.py)、テストは [test_evaluation6_strict_ablation.py](../../tests/test_evaluation6_strict_ablation.py)。保存済み比較の読み方は [結果引継ぎ](../RESULTS_AND_WRITING.md) を参照。
+
 提案手法は時間帯別状態遷移ネットワーク、LLM-onlyは同じ Morning / Daytime / Night / Midnight ごとの代表状態系列をLLMへ渡す。split方式では、Hamming写像後の連続同一代表状態を各時間帯内だけで圧縮し、両手法とも`sequence × time_period`を評価単位とする。`[start,end)`全体が当該時間帯に収まるexact出現だけを採る（境界横断は除外して監査）。LLM-onlyの旧1入力方式は`--llm-only-time-mode legacy`で再現できる。
 
 ## 集合、状態、分母
@@ -32,11 +34,11 @@
 
 1. ラベル付きCASASから14日条件の状態表・ネットワークを作る。
 2. 現モデルの提案LLM JSONを1回（または5回）生成する。
-3. その状態表を固定した全220日照合state seriesを `output/<model>/6_adl_evaluation_aruba_individual_15_0_14days/state_series.csv` に作る。正式workflowは`network-equivalent`、network構築と同じ5秒の遅延OFF平滑化を明示し、`--state-series-days`は指定しない（KI-06採用済み仕様）。
+3. その状態表を固定した全220日照合state seriesを `output/<model>/` のmanifestに対応する条件別パスへ作る。正式workflowは`network-equivalent`、network構築と同じ5秒の遅延OFF平滑化を明示し、`--state-series-days`は指定しない（KI-06採用済み仕様）。
 4. 同じ14日代表状態系列を4時間帯に分け、direct-log baselineを1回（または5回）生成する。direct-logも提案手法と同じ `map_vector_to_state` のHamming写像を使う（KI-04採用済み仕様）。
 5. 比較CLIへbest-condition manifestとlabeled CASASを渡す。正式holdoutでは成果物パス・K/h・期間値を個別指定しない。
 
-前段の標準コマンドは、networkを`run_build_network_from_labeled_casas.py --days 14 --n-states 15 --hamming-threshold 0 --smoothing-window-sec 5`で作り、提案側を`run_llm_extraction.py --days 14 --n-states 15 --hamming-threshold 0 [--runs 5]`、direct側を`run_direct_log_baseline.py --log-days 14 --state-days 14 --n-states 15 --hamming-threshold 0 --smoothing-window-sec 5 --llm-only-time-mode split --extract-only [--runs 5]`で作る。比較は次の形である。
+前段のnetwork・提案抽出・direct抽出のK/h・センサ表現は、選定manifestと揃える。K=15/h=0を現行結果へ一律適用しない。具体的な前段CLIは正本の実行手順を参照し、manifestの出所モデルとLLM実行モデルを区別する。比較は次の形である。
 
 ```bash
 uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
@@ -46,9 +48,9 @@ uv run python scripts/evaluate_6_compare_adl_interpretation_set.py \
   --min-overlap-ratio-for-true-label 0.10
 ```
 
-5 runには`--runs 5`を追加し、proposedのmetrics templateとdirect metricsを明示する。具体的なtemplateは`results/<model>/aruba_15_0_14days/llm_modes_metrics_15_0_14days_run{run}.csv`、direct metricsは`results/<model>/llm_direct_15_0_14days/llm_direct_metrics_14days.csv`である。
+5 runには`--runs 5`を追加する。metrics templateやdirect metricsを明示する場合も、manifestに対応するセンサ表現・K/h・日数・現在モデルのcanonicalパスを使い、旧15/0固定パスへ戻さない。
 
-新規のstate series・ADL intervalは`output/<model>/`、proposed/direct JSON、checkpoint、usage、比較結果は`results/<model>/`である。ルート直下の旧`output/*`/`results/*`はGemini移行元であり、CLI既定値と正式条件の不一致は **KI-01**、**KI-08**で追跡する。パスとK/h/daysを省略しない。
+新規のstate series・ADL intervalは`output/<model>/`、proposed/direct JSON、checkpoint、usage、比較結果は`results/<model>/`である。ルート直下の旧`output/*`/`results/*`はGemini移行元。KI-08はmanifestによる正式holdout条件解決として採用済みであり、比較CLIへ条件やパスを重複指定しない。manifestなしのholdoutはK/h明示が必要。共通既定値のKI-01と区別する。
 
 ## 出力・run集計・使用量
 
