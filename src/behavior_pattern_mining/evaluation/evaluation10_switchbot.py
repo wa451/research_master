@@ -758,17 +758,20 @@ def extract(
     )
     llm_dir = result_base / "llm" / preparation_fingerprint(output_dir, preparation)
     paths = [llm_patterns_path(output_dir, preparation, result_base, run) for run in range(1, runs + 1)]
-    missing_run_ids = [run for run, path in enumerate(paths, start=1) if not path.is_file()]
-    if missing_run_ids:
-        pattern_extractor.main(
-            days=preparation["split"]["train_days"],
-            input_modes_dir=output_dir / "network",
-            output_dir=llm_dir,
-            runs=runs,
-            run_ids=missing_run_ids,
-            n_states=params["n_states"],
-            hamming_threshold=params["hamming_threshold"],
+    existing = [path for path in paths if path.exists()]
+    if existing:
+        raise FileExistsError(
+            "refusing to overwrite existing LLM run artifacts: "
+            + ", ".join(str(path) for path in existing)
         )
+    pattern_extractor.main(
+        days=preparation["split"]["train_days"],
+        input_modes_dir=output_dir / "network",
+        output_dir=llm_dir,
+        runs=runs,
+        n_states=params["n_states"],
+        hamming_threshold=params["hamming_threshold"],
+    )
     missing = [path for path in paths if not path.is_file()]
     if missing:
         raise RuntimeError("LLM extractor did not produce expected output: " + ", ".join(map(str, missing)))

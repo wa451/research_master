@@ -21,12 +21,14 @@ from src.behavior_pattern_mining.evaluation.evaluation10_switchbot import (  # n
     METHODS,
     STAGES,
     evaluate,
-    extract,
+    llm_patterns_path,
     prepare,
+    verify_preparation,
 )
 from src.behavior_pattern_mining.evaluation.evaluation6_manifest import (  # noqa: E402
     load_evaluation7_best_condition_manifest,
 )
+from src.behavior_pattern_mining.llm import pattern_extractor  # noqa: E402
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -69,6 +71,37 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _resolve(path: Path) -> Path:
     return (path if path.is_absolute() else ROOT / path).resolve()
+
+
+def resume_extract(
+    *, output_dir: Path, results_dir: Path, runs: int
+) -> list[Path]:
+    """Generate only missing run files, preserving completed LLM artifacts."""
+    preparation = verify_preparation(output_dir)
+    params = preparation["parameters"]
+    paths = [
+        llm_patterns_path(output_dir, preparation, results_dir, run)
+        for run in range(1, runs + 1)
+    ]
+    missing_run_ids = [run for run, path in enumerate(paths, start=1) if not path.is_file()]
+    if not missing_run_ids:
+        return paths
+    pattern_extractor.main(
+        days=preparation["split"]["train_days"],
+        input_modes_dir=output_dir / "network",
+        output_dir=paths[0].parent,
+        runs=runs,
+        run_ids=missing_run_ids,
+        n_states=params["n_states"],
+        hamming_threshold=params["hamming_threshold"],
+    )
+    missing = [path for path in paths if not path.is_file()]
+    if missing:
+        raise RuntimeError(
+            "LLM extractor did not produce expected output: "
+            + ", ".join(map(str, missing))
+        )
+    return paths
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -163,10 +196,9 @@ def main(argv: list[str] | None = None) -> int:
                     evaluation7_manifest=eval7_manifest,
                 )
             elif stage == "extract":
-                extract(
+                resume_extract(
                     output_dir=output_dir,
-                    allow_api=args.allow_api,
-                    llm_results_dir=results_dir,
+                    results_dir=results_dir,
                     runs=args.runs,
                 )
             elif stage == "evaluate":

@@ -13,7 +13,7 @@ import pandas as pd
 
 from app.command_builder import build_evaluation10_steps
 from app.streamlit_app import batch_target_steps
-from scripts.evaluate_10_switchbot import build_parser, main
+from scripts.evaluate_10_switchbot import build_parser, main, resume_extract
 from src.behavior_pattern_mining.evaluation.evaluation10_switchbot import (
     DETAIL_COLUMNS,
     FORMAL_EVALUATION7_BEST_CONDITION_MANIFEST,
@@ -22,7 +22,6 @@ from src.behavior_pattern_mining.evaluation.evaluation10_switchbot import (
     build_frequency_patterns,
     choose_split,
     evaluate,
-    extract,
     file_sha256,
     llm_patterns_path,
     prepare,
@@ -362,7 +361,7 @@ class Evaluation10SwitchBotTests(unittest.TestCase):
             self.assertEqual(len(set(paths)), 5)
             self.assertTrue(all(path.name.endswith(f"_{run}.json") for run, path in enumerate(paths, start=1)))
 
-    def test_extract_resumes_only_missing_runs_without_overwriting_complete_runs(self):
+    def test_cli_resume_extract_only_generates_missing_runs_without_overwriting_complete_runs(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             output = root / "output"
@@ -383,13 +382,12 @@ class Evaluation10SwitchBotTests(unittest.TestCase):
                     path.write_text(f"new run {run}", encoding="utf-8")
 
             with patch(
-                "src.behavior_pattern_mining.evaluation.evaluation10_switchbot.pattern_extractor.main",
+                "scripts.evaluate_10_switchbot.pattern_extractor.main",
                 side_effect=write_missing_runs,
             ) as extractor:
-                paths = extract(
+                paths = resume_extract(
                     output_dir=output,
-                    allow_api=True,
-                    llm_results_dir=results,
+                    results_dir=results,
                     runs=5,
                 )
 
