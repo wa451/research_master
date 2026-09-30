@@ -11,6 +11,7 @@
 | 再現に必要な固定成果物 | 論文で使う代表状態表、採用したLLM出力、最終評価表、掲載図 | 必要最小限だけ管理する |
 | 評価結果 | `results/<model>/5_pattern_quality_without_low_information_judgment/`, `results/<model>/6_adl_match/`, `results/<model>/7_param_search/`, `results/<model>/8_vs_llm_own_id_fixed/` | 論文で使う値だけ残す。監査時は修正前ディレクトリも比較用に保持する |
 | 一時生成物 | LLM runごとの試行ファイル、再生成できる図、ログ、途中CSV | 原則管理しない |
+| ダッシュボード実行管理 | `output/<model>/logs/evaluation_dashboard/**/{batch_plan,batch_status}.json` | 実行時のコマンド固定と進捗表示だけに使う一時ログ。Git管理しない。 |
 | 設定・プロンプト | `configs/*.yaml`, `prompts/*.md` | 管理する |
 
 ## 出力先

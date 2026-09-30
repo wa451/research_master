@@ -32,6 +32,12 @@ from app.command_builder import (  # noqa: E402
     proposed_run_path,
     short_suffix,
 )
+from app.batch_runner import (  # noqa: E402
+    ACTIVE_BATCH_STATUSES,
+    create_batch_artifacts,
+    discover_batch_statuses,
+    launch_batch_worker,
+)
 from app.evaluation9_plan import (  # noqa: E402
     DURATION_PRESET,
     DURATION_TRAIN_DAYS,
@@ -1699,6 +1705,45 @@ def batch_progress_text(completed: int, total: int, current_title: str | None = 
     return f"{base} / 実行中: {current_title}" if current_title else base
 
 
+def batch_declared_output_paths(steps: list[EvaluationStep]) -> set[str]:
+    return {str(path.resolve()) for step in steps for path in step.expected_outputs}
+
+
+def conflicting_active_batch_outputs(steps: list[EvaluationStep]) -> list[Path]:
+    requested = batch_declared_output_paths(steps)
+    if not requested:
+        return []
+    active_outputs = {
+        str(path)
+        for _, status in discover_batch_statuses(PROJECT_ROOT / "output")
+        if status.get("status") in ACTIVE_BATCH_STATUSES
+        for path in status.get("declared_output_paths", [])
+    }
+    return [Path(path) for path in sorted(requested & active_outputs)]
+
+
+@st.fragment(run_every=2)
+def render_background_batch_monitor() -> None:
+    """Keep task progress visible while the user configures another evaluation."""
+    statuses = discover_batch_statuses(PROJECT_ROOT / "output")
+    active = [(path, status) for path, status in statuses if status.get("status") in ACTIVE_BATCH_STATUSES]
+    if not active:
+        return
+
+    st.markdown("### バックグラウンド一括実行")
+    st.caption("約2秒ごとに更新します。評価を切り替えても、開始済みの一括実行は継続します。")
+    for status_path, status in active:
+        completed = int(status.get("completed_steps", 0))
+        total = max(int(status.get("total_steps", 0)), 1)
+        current_title = status.get("current_step_title")
+        label = batch_progress_text(completed, total, str(current_title) if current_title else None)
+        st.progress(completed / total, text=label)
+        st.caption(
+            f"{status.get('evaluation', '評価')} / {status.get('model_label', 'モデル未設定')} / "
+            f"状態: {status.get('status')} / 管理ファイル: {display_path(status_path)}"
+        )
+
+
 def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
     st.markdown("### 一括実行")
     mode = st.radio(
@@ -1723,91 +1768,44 @@ def render_batch_runner(steps: list[EvaluationStep], settings: dict) -> None:
     if not st.button(label, key=f"run_all_{settings['evaluation']}_{mode}"):
         return
 
+    conflicts = conflicting_active_batch_outputs(targets)
+    if conflicts:
+        st.error("同じ出力先を使う一括実行がすでに動作中です。完了後に開始してください。")
+        st.code("\n".join(display_path(path) for path in conflicts), language="text")
+        return
+
     selected_log_root = log_root(settings)
     log_dir = ensure_log_dir(selected_log_root, settings["evaluation"], f"{settings['run_name']}_batch")
-    st.info(f"一括実行ログ: {display_path(log_dir)}")
-
-    completed = 0
-    total = len(targets)
-    progress_bar = st.progress(0.0, text=batch_progress_text(completed, total))
-    progress_status = st.empty()
-    for index, step in enumerate(targets, start=1):
-        progress_status.info(batch_progress_text(completed, total, step.title))
-        st.markdown(f"**{index}. {step.title}**")
-        st.caption(
-            f"実行LLM: {settings['model_label']} / {model_environment_preview(settings)}"
-        )
-        st.code(command_preview(step.command), language="bash")
-        log_path = log_dir / f"{index:02d}_{step.step_id}.log"
-
-        record = {
-            "evaluation": settings["evaluation"],
+    plan_path = log_dir / "batch_plan.json"
+    planned_steps = [
+        {
+            "index": index,
             "step_id": step.step_id,
             "title": step.title,
-            "dry_run": settings["dry_run"],
-            "batch": True,
-            "batch_mode": mode,
             "command": step.command,
-            "command_preview": command_preview(step.command),
-            "model_id": settings["model_id"],
-            "model_label": settings["model_label"],
-            "model_environment": settings["model_environment"],
-            "log_path": display_path(log_path),
+            "required_inputs": [str(path) for path in step.required_inputs],
+            "log_path": str(log_dir / f"{index:02d}_{step.step_id}.log"),
         }
-
-        missing_inputs = [path for path in step.required_inputs if not path.exists()]
-        if missing_inputs and not settings["dry_run"]:
-            missing_text = "\n".join(f"- {display_path(path)}" for path in missing_inputs)
-            log_path.write_text(
-                f"# 実行環境: {model_environment_preview(settings)}\n"
-                f"$ {command_preview(step.command)}\n\nSTOPPED: missing required inputs.\n{missing_text}\n",
-                encoding="utf-8",
-            )
-            append_history(selected_log_root, {**record, "status": "blocked_missing_inputs"})
-            progress_status.error(batch_progress_text(completed, total, step.title))
-            st.error(f"停止: 必要な入力が不足しています / log: {display_path(log_path)}")
-            st.text(missing_text)
-            break
-
-        append_history(selected_log_root, record)
-        if settings["dry_run"]:
-            log_path.write_text(
-                f"# 実行環境: {model_environment_preview(settings)}\n"
-                f"$ {command_preview(step.command)}\n",
-                encoding="utf-8",
-            )
-            completed += 1
-            progress_bar.progress(completed / total, text=batch_progress_text(completed, total))
-            st.info(f"dry-runとして記録しました: {display_path(log_path)}")
-            continue
-
-        output_box = st.empty()
-
-        def update_output(text: str, *, step_index: int = index, step_id: str = step.step_id) -> None:
-            output_box.text_area(f"実行ログ {step_index}: {step_id}", text, height=260)
-
-        with st.spinner(f"実行中: {step.title}"):
-            result = run_command(
-                step.command,
-                cwd=PROJECT_ROOT,
-                log_path=log_path,
-                on_output=update_output,
-                environment_overrides=settings["model_environment"],
-            )
-        if result.returncode == 0:
-            completed += 1
-            progress_bar.progress(completed / total, text=batch_progress_text(completed, total))
-            st.success(f"成功: {result.elapsed_seconds:.1f}s / log: {display_path(result.log_path)}")
-            continue
-
-        progress_status.error(batch_progress_text(completed, total, step.title))
-        st.error(f"失敗: exit={result.returncode} / {result.elapsed_seconds:.1f}s / log: {display_path(result.log_path)}")
-        st.text_area(f"ログ末尾 {step.step_id}", result.output[-8000:], height=260)
-        break
-    else:
-        progress_bar.progress(1.0, text=batch_progress_text(completed, total))
-        progress_status.success(batch_progress_text(completed, total))
-        st.success(f"一括実行が完了しました。実行/記録: {completed}")
+        for index, step in enumerate(targets, start=1)
+    ]
+    plan = {
+        "evaluation": settings["evaluation"],
+        "model_id": settings["model_id"],
+        "model_label": settings["model_label"],
+        "batch_mode": mode,
+        "dry_run": settings["dry_run"],
+        "project_root": str(PROJECT_ROOT),
+        "log_root": str(selected_log_root),
+        "model_environment": settings["model_environment"],
+        "declared_output_paths": sorted(batch_declared_output_paths(targets)),
+        "steps": planned_steps,
+    }
+    status_path = create_batch_artifacts(plan_path, plan)
+    worker = launch_batch_worker(plan_path, log_dir / "batch_worker.log")
+    st.success(
+        f"バックグラウンドで開始しました（PID: {worker.pid}）。評価を切り替えても継続します。"
+    )
+    st.info(f"一括実行ログ: {display_path(log_dir)} / 状態: {display_path(status_path)}")
 
 
 def infer_evaluation_for_results(selected_dir: Path, files: list[Path], current_evaluation: str | None) -> str | None:
@@ -2228,6 +2226,7 @@ def main() -> None:
     )
 
     with run_tab:
+        render_background_batch_monitor()
         if common["evaluation"] == "APIテスト":
             settings = render_api_smoke_test_settings(common)
             steps = []
