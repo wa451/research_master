@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import tempfile
+import time
 import unittest
 
 from app.batch_runner import (
@@ -14,12 +15,19 @@ from app.batch_runner import (
     launch_batch_worker,
     read_json,
     recent_finished_batches,
+    request_batch_cancellation,
     run_batch_plan,
 )
 
 
 class DashboardBackgroundBatchTests(unittest.TestCase):
-    def make_plan(self, root: Path, *, required_inputs: list[Path] | None = None) -> tuple[Path, Path]:
+    def make_plan(
+        self,
+        root: Path,
+        *,
+        required_inputs: list[Path] | None = None,
+        command: list[str] | None = None,
+    ) -> tuple[Path, Path]:
         log_dir = root / "output" / "test-model" / "logs" / "evaluation_dashboard" / "評価4" / "batch"
         plan_path = log_dir / "batch_plan.json"
         plan = {
@@ -37,7 +45,7 @@ class DashboardBackgroundBatchTests(unittest.TestCase):
                     "index": 1,
                     "step_id": "test_step",
                     "title": "Test step",
-                    "command": [sys.executable, "-c", "print('background batch')"],
+                    "command": command or [sys.executable, "-c", "print('background batch')"],
                     "required_inputs": [str(path) for path in (required_inputs or [])],
                     "log_path": str(log_dir / "01_test_step.log"),
                 }
@@ -79,6 +87,34 @@ class DashboardBackgroundBatchTests(unittest.TestCase):
                 recent_finished_batches(root / "output")[0][1]["status"],
                 "blocked_missing_inputs",
             )
+
+    def test_cancellation_stops_worker_and_its_command_group(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            plan_path, status_path = self.make_plan(
+                root,
+                command=[sys.executable, "-c", "import time; time.sleep(30)"],
+            )
+            worker = launch_batch_worker(plan_path, plan_path.parent / "batch_worker.log")
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                status = read_json(status_path)
+                if status and status.get("status") == "running":
+                    break
+                time.sleep(0.05)
+            else:
+                self.fail("background worker did not start")
+
+            cancelled, message = request_batch_cancellation(status_path)
+
+            self.assertTrue(cancelled, message)
+            self.assertEqual(worker.wait(timeout=5), 1)
+            status = read_json(status_path)
+            assert status is not None
+            self.assertEqual(status["status"], "cancelled")
+            self.assertEqual(status["steps"][0]["status"], "cancelled")
+            self.assertNotIn(status["status"], ACTIVE_BATCH_STATUSES)
+            self.assertEqual(recent_finished_batches(root / "output")[0][1]["status"], "cancelled")
 
 
 if __name__ == "__main__":

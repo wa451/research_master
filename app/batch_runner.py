@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 from typing import Any, Mapping
@@ -23,8 +24,12 @@ from app.utils import append_history, redact_text, run_command
 BATCH_SCHEMA_VERSION = 1
 ACTIVE_BATCH_STATUSES = frozenset({"queued", "running"})
 TERMINAL_BATCH_STATUSES = frozenset(
-    {"succeeded", "failed", "blocked_missing_inputs"}
+    {"succeeded", "failed", "blocked_missing_inputs", "cancelled"}
 )
+
+
+class BatchCancelled(Exception):
+    """Raised in the worker when the dashboard requests cancellation."""
 
 
 def timestamp() -> str:
@@ -45,6 +50,15 @@ def read_json(path: Path) -> dict[str, Any] | None:
     except (OSError, json.JSONDecodeError):
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def cancellation_request_path(status_path: Path) -> Path:
+    """Return the separate control file used to stop a queued or running batch."""
+    return status_path.with_name("batch_cancellation_request.json")
+
+
+def _cancellation_requested(status_path: Path) -> bool:
+    return cancellation_request_path(status_path).is_file()
 
 
 def initial_status(plan: Mapping[str, Any]) -> dict[str, Any]:
@@ -138,6 +152,69 @@ def _step_status(status: dict[str, Any], index: int) -> dict[str, Any]:
     return status["steps"][index - 1]
 
 
+def _mark_cancelled(status_path: Path, status: dict[str, Any]) -> None:
+    """Persist a terminal cancellation state without treating it as a failure."""
+    current_index = status.get("current_step_index")
+    if isinstance(current_index, int) and 1 <= current_index <= len(status.get("steps", [])):
+        step_status = _step_status(status, current_index)
+        if step_status.get("status") == "running":
+            step_status.update({"status": "cancelled", "finished_at": timestamp()})
+    _update_status(
+        status_path,
+        status,
+        status="cancelled",
+        current_step_index=None,
+        current_step_id=None,
+        current_step_title=None,
+        current_log_path=None,
+        finished_at=timestamp(),
+    )
+
+
+def request_batch_cancellation(status_path: Path) -> tuple[bool, str]:
+    """Ask a batch worker and all of its command children to stop.
+
+    Workers are created in their own process session.  Killing that session's
+    process group stops the worker and the currently running evaluation command
+    together, rather than leaving an orphaned CLI process behind.
+    """
+    status = read_json(status_path)
+    if status is None:
+        return False, "状態ファイルを読み取れませんでした。"
+    if status.get("status") not in ACTIVE_BATCH_STATUSES:
+        return False, "この一括実行はすでに終了しています。"
+
+    requested_at = timestamp()
+    write_json(cancellation_request_path(status_path), {"requested_at": requested_at})
+    worker_pid = status.get("worker_pid")
+    try:
+        pid = int(worker_pid) if worker_pid is not None else None
+    except (TypeError, ValueError):
+        pid = None
+
+    try:
+        if pid is not None and pid > 0:
+            # start_new_session=True makes the worker its own group leader. If
+            # that invariant is unavailable, signal only that PID rather than
+            # risking an unrelated process group.
+            if os.getpgid(pid) == pid:
+                os.killpg(pid, signal.SIGTERM)
+            else:
+                os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        # The worker may have just completed; the request marker still prevents
+        # a queued worker from beginning any command.
+        pass
+    except PermissionError:
+        return False, "中断する権限がありません。ダッシュボードを起動したユーザーで再試行してください。"
+    except OSError as exc:
+        return False, f"中断シグナルを送れませんでした: {exc}"
+
+    status["cancellation_requested_at"] = requested_at
+    _mark_cancelled(status_path, status)
+    return True, "中断を要求しました。実行中の子プロセスも停止します。"
+
+
 def run_batch_plan(plan_path: Path) -> dict[str, Any]:
     """Run resolved steps serially in a detached worker and update status after each step."""
     plan = read_json(plan_path)
@@ -145,20 +222,32 @@ def run_batch_plan(plan_path: Path) -> dict[str, Any]:
         raise ValueError(f"Invalid batch plan: {plan_path}")
     status_path = Path(plan["status_path"])
     status = read_json(status_path) or initial_status(plan)
-    _update_status(
-        status_path,
-        status,
-        status="running",
-        started_at=timestamp(),
-        worker_pid=os.getpid(),
-    )
+    if _cancellation_requested(status_path):
+        _mark_cancelled(status_path, status)
+        return status
+
+    previous_sigterm_handler = signal.getsignal(signal.SIGTERM)
+
+    def handle_sigterm(_signum: int, _frame: Any) -> None:
+        raise BatchCancelled()
+
+    signal.signal(signal.SIGTERM, handle_sigterm)
 
     log_root = Path(plan["log_root"])
     project_root = Path(plan["project_root"])
     environment = {str(key): str(value) for key, value in dict(plan.get("model_environment", {})).items()}
     completed = 0
     try:
+        _update_status(
+            status_path,
+            status,
+            status="running",
+            started_at=timestamp(),
+            worker_pid=os.getpid(),
+        )
         for raw_step in plan["steps"]:
+            if _cancellation_requested(status_path):
+                raise BatchCancelled()
             index = int(raw_step["index"])
             step_status = _step_status(status, index)
             log_path = Path(raw_step["log_path"])
@@ -228,6 +317,9 @@ def run_batch_plan(plan_path: Path) -> dict[str, Any]:
                 elapsed_seconds = result.elapsed_seconds
                 returncode = result.returncode
 
+            if _cancellation_requested(status_path):
+                raise BatchCancelled()
+
             step_status.update(
                 {
                     "status": result_status,
@@ -253,6 +345,8 @@ def run_batch_plan(plan_path: Path) -> dict[str, Any]:
             current_log_path=None,
             finished_at=timestamp(),
         )
+    except BatchCancelled:
+        _mark_cancelled(status_path, status)
     except Exception as exc:  # pragma: no cover - defensive worker boundary
         _update_status(
             status_path,
@@ -261,6 +355,8 @@ def run_batch_plan(plan_path: Path) -> dict[str, Any]:
             error=redact_text(f"{type(exc).__name__}: {exc}"),
             finished_at=timestamp(),
         )
+    finally:
+        signal.signal(signal.SIGTERM, previous_sigterm_handler)
     return status
 
 

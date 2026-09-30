@@ -38,6 +38,7 @@ from app.batch_runner import (  # noqa: E402
     discover_batch_statuses,
     launch_batch_worker,
     recent_finished_batches,
+    request_batch_cancellation,
 )
 from app.evaluation9_plan import (  # noqa: E402
     DURATION_PRESET,
@@ -1866,17 +1867,32 @@ def render_background_batch_monitor() -> None:
         return
 
     st.markdown("### バックグラウンド一括実行")
-    st.caption("約2秒ごとに更新します。評価を切り替えても、開始済みの一括実行は継続します。")
+    st.caption("約2秒ごとに更新します。評価を切り替えても、開始済みの一括実行は継続します。中断は実行中の評価コマンドも停止します。")
     for status_path, status in active:
         completed = int(status.get("completed_steps", 0))
         total = max(int(status.get("total_steps", 0)), 1)
         current_title = status.get("current_step_title")
         label = batch_progress_text(completed, total, str(current_title) if current_title else None)
-        st.progress(completed / total, text=label)
-        st.caption(
-            f"{status.get('evaluation', '評価')} / {status.get('model_label', 'モデル未設定')} / "
-            f"状態: {status.get('status')} / 管理ファイル: {display_path(status_path)}"
-        )
+        progress_column, cancel_column = st.columns([5, 1])
+        with progress_column:
+            st.progress(completed / total, text=label)
+            st.caption(
+                f"{status.get('evaluation', '評価')} / {status.get('model_label', 'モデル未設定')} / "
+                f"状態: {status.get('status')} / 管理ファイル: {display_path(status_path)}"
+            )
+        with cancel_column:
+            if st.button(
+                "中断",
+                key=f"cancel_background_batch_{status_path}",
+                type="secondary",
+                help="この一括実行と、現在実行中の評価コマンドを停止します。",
+                use_container_width=True,
+            ):
+                cancelled, message = request_batch_cancellation(status_path)
+                if cancelled:
+                    st.success(message)
+                else:
+                    st.warning(message)
 
     if finished:
         st.markdown("#### 最近終了した一括実行")
@@ -1891,6 +1907,8 @@ def render_background_batch_monitor() -> None:
         )
         if state == "succeeded":
             st.success(f"完了: {summary}")
+        elif state == "cancelled":
+            st.warning(f"中断: {summary}")
         else:
             stopped_step = next(
                 (
