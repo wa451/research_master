@@ -268,6 +268,77 @@ class LlmClientTests(unittest.TestCase):
         self.assertEqual(bedrock_client.converse.call_count, 2)
         self.assertEqual(sleep_calls, [1])
 
+    def test_fable_retries_data_retention_routing_rejection(self) -> None:
+        retention_error = type("ValidationException", (Exception,), {})(
+            "The model returned the following errors: data retention mode "
+            "'default' is not available for this model"
+        )
+        retention_error.response = {
+            "Error": {
+                "Code": "ValidationException",
+                "Message": str(retention_error),
+            }
+        }
+        bedrock_client = Mock()
+        bedrock_client.converse.side_effect = [
+            retention_error,
+            {
+                "output": {"message": {"content": [{"text": "ok"}]}},
+                "usage": {},
+            },
+        ]
+        boto3_module = Mock()
+        boto3_module.client.return_value = bedrock_client
+        sleep_calls: list[float] = []
+        original_sleep = llm_client.time.sleep
+
+        llm_client.time.sleep = sleep_calls.append
+        try:
+            with patch(
+                "src.behavior_pattern_mining.llm.client.importlib.import_module",
+                return_value=boto3_module,
+            ):
+                text, _, _, _ = call_bedrock(
+                    model_name="us.anthropic.claude-fable-5",
+                    user_message="prompt",
+                    temperature=None,
+                    region_name="us-east-2",
+                    max_tokens=512,
+                )
+        finally:
+            llm_client.time.sleep = original_sleep
+
+        self.assertEqual(text, "ok")
+        self.assertEqual(bedrock_client.converse.call_count, 2)
+        self.assertEqual(sleep_calls, [1])
+
+    def test_non_fable_data_retention_rejection_is_not_retried(self) -> None:
+        retention_error = type("ValidationException", (Exception,), {})(
+            "data retention mode 'default' is not available for this model"
+        )
+        retention_error.response = {
+            "Error": {"Code": "ValidationException", "Message": str(retention_error)}
+        }
+        bedrock_client = Mock()
+        bedrock_client.converse.side_effect = retention_error
+        boto3_module = Mock()
+        boto3_module.client.return_value = bedrock_client
+
+        with patch(
+            "src.behavior_pattern_mining.llm.client.importlib.import_module",
+            return_value=boto3_module,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "data retention mode"):
+                call_bedrock(
+                    model_name="us.anthropic.claude-sonnet-4-6",
+                    user_message="prompt",
+                    temperature=0.2,
+                    region_name="us-east-2",
+                    max_tokens=512,
+                )
+
+        self.assertEqual(bedrock_client.converse.call_count, 1)
+
     def test_bedrock_missing_credentials_has_actionable_error(self) -> None:
         no_credentials_error = type("NoCredentialsError", (Exception,), {})
         bedrock_client = Mock()

@@ -37,6 +37,7 @@ class BedrockInputTokenCount:
 
 
 BEDROCK_CONVERSE_MAX_ATTEMPTS = 3
+FABLE_DATA_RETENTION_MAX_ATTEMPTS = 6
 BEDROCK_CONVERSE_RETRYABLE_ERROR_CODES = {
     "InternalServerException",
     "ServiceUnavailableException",
@@ -559,6 +560,27 @@ def _bedrock_error_code(exc: Exception) -> str:
     return str(error.get("Code") or type(exc).__name__)
 
 
+def is_fable_data_retention_routing_error(exc: Exception, model_name: str) -> bool:
+    """Return whether a Fable profile was rejected before inference for retention mode.
+
+    Cross-Region profiles can briefly route to a destination where a newly
+    enabled account retention setting has not propagated yet. The request is
+    rejected before inference, so retrying does not create a duplicate output.
+    """
+    normalized_model_name = model_name.strip().lower()
+    if normalized_model_name not in {
+        "anthropic.claude-fable-5",
+        "global.anthropic.claude-fable-5",
+        "us.anthropic.claude-fable-5",
+    }:
+        return False
+    return (
+        _bedrock_error_code(exc) == "ValidationException"
+        and "data retention mode" in str(exc).lower()
+        and "not available for this model" in str(exc).lower()
+    )
+
+
 def build_bedrock_messages(user_message: str) -> List[dict]:
     """Build the single source of truth for Converse and CountTokens messages."""
     return [
@@ -699,7 +721,7 @@ def call_bedrock(
         # common Converse parameter for models that support it.
         if temperature is not None and bedrock_supports_temperature(model_name):
             inference_config["temperature"] = temperature
-        for attempt in range(1, BEDROCK_CONVERSE_MAX_ATTEMPTS + 1):
+        for attempt in range(1, FABLE_DATA_RETENTION_MAX_ATTEMPTS + 1):
             start_time = time.monotonic()
             try:
                 response = client.converse(
@@ -710,9 +732,21 @@ def call_bedrock(
                 duration_sec = time.monotonic() - start_time
                 break
             except Exception as exc:
+                retention_routing_error = is_fable_data_retention_routing_error(
+                    exc, model_name
+                )
+                max_attempts = (
+                    FABLE_DATA_RETENTION_MAX_ATTEMPTS
+                    if retention_routing_error
+                    else BEDROCK_CONVERSE_MAX_ATTEMPTS
+                )
                 if (
-                    _bedrock_error_code(exc) in BEDROCK_CONVERSE_RETRYABLE_ERROR_CODES
-                    and attempt < BEDROCK_CONVERSE_MAX_ATTEMPTS
+                    (
+                        _bedrock_error_code(exc)
+                        in BEDROCK_CONVERSE_RETRYABLE_ERROR_CODES
+                        or retention_routing_error
+                    )
+                    and attempt < max_attempts
                 ):
                     time.sleep(2 ** (attempt - 1))
                     continue
