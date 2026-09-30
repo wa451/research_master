@@ -26,6 +26,7 @@ from app.streamlit_app import (
     evaluation10_directory_defaults,
     evaluation9_directory_defaults,
     eval5_condition_widget_key,
+    load_cross_model_csv,
 )
 from app.model_selection import (
     DASHBOARD_MODELS,
@@ -81,10 +82,25 @@ class DashboardModelSelectionTests(unittest.TestCase):
         self.assertEqual(
             evaluation9_directory_defaults(common, "期間感度評価"),
             (
-                "output/claude-fable-5/9_hestia/duration_54f94fee_e4a41f40",
-                "results/claude-fable-5/9_hestia/duration_54f94fee_e4a41f40",
+                "output/claude-fable-5/9_hestia/duration_54f94fee_6ae9208d",
+                "results/claude-fable-5/9_hestia/duration_54f94fee_6ae9208d",
             ),
         )
+
+    def test_cross_model_csv_loader_discovers_each_model_namespace(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for namespace, value in (("gpt-5.6-sol", 0.4), ("claude-fable-5", 0.7)):
+                path = root / "results" / namespace / "summary.csv"
+                path.parent.mkdir(parents=True)
+                path.write_text(f"score\n{value}\n", encoding="utf-8")
+
+            with patch("app.streamlit_app.PROJECT_ROOT", root):
+                frame, missing = load_cross_model_csv(("summary.csv",))
+
+        self.assertEqual(missing, [])
+        self.assertEqual(list(frame["モデル"]), ["GPT-5.6 Sol", "Claude Fable 5"])
+        self.assertEqual(list(frame["score"]), [0.4, 0.7])
 
     def test_evaluation10_defaults_keep_current_snapshot_namespace(self) -> None:
         common = {

@@ -108,10 +108,15 @@ FABLE5_MODEL_ID = "us.anthropic.claude-fable-5"
 # dashboard session. Keep their plan/provenance suffixes so Hestia can resume.
 FABLE5_EVALUATION9_ARTIFACT_DIRECTORIES = {
     "本実験": "full_4d35fa98_e4a41f40",
-    "期間感度評価": "duration_54f94fee_e4a41f40",
+    "期間感度評価": "duration_54f94fee_6ae9208d",
 }
 EVALUATION9_DIRECTORY_DEFAULT_VERSION = "2026-09-30-fable5-artifacts"
 EVALUATION10_DIRECTORY_DEFAULT_VERSION = "2026-09-30-current-snapshot"
+
+MODEL_COMPARISON_MODELS = (
+    ("GPT-5.6 Sol", "gpt-5.6-sol"),
+    ("Claude Fable 5", "claude-fable-5"),
+)
 
 
 def render_sensor_representation(scope: str) -> tuple[str, str, str]:
@@ -2079,6 +2084,264 @@ def render_csv_result_table(df: pd.DataFrame, *, key_prefix: str) -> pd.DataFram
     return filtered_df
 
 
+def load_cross_model_csv(
+    relative_candidates: tuple[str, ...],
+) -> tuple[pd.DataFrame, list[str]]:
+    """Load the first compatible result CSV for each dashboard comparison model."""
+    frames: list[pd.DataFrame] = []
+    missing: list[str] = []
+    for label, namespace in MODEL_COMPARISON_MODELS:
+        path = next(
+            (
+                PROJECT_ROOT / "results" / namespace / relative
+                for relative in relative_candidates
+                if (PROJECT_ROOT / "results" / namespace / relative).is_file()
+            ),
+            None,
+        )
+        if path is None:
+            missing.append(label)
+            continue
+        frame = pd.read_csv(path).copy()
+        frame.insert(0, "モデル", label)
+        frames.append(frame)
+    return (
+        pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(),
+        missing,
+    )
+
+
+def model_metric_delta(
+    frame: pd.DataFrame,
+    metric: str,
+    *,
+    method: str | None = None,
+) -> float | None:
+    """Return Claude minus GPT for one metric when one comparable row exists each."""
+    if metric not in frame.columns:
+        return None
+    selected = frame
+    if method is not None:
+        if "method" not in selected.columns:
+            return None
+        selected = selected[selected["method"] == method]
+    values = selected.groupby("モデル", dropna=False)[metric].mean()
+    try:
+        return float(values["Claude Fable 5"] - values["GPT-5.6 Sol"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def format_model_delta(value: float | None) -> str:
+    """Format a model delta without inventing a value for absent artifacts."""
+    return f"{value:+.3f}" if value is not None else "N/A"
+
+
+def render_cross_model_comparison(current_evaluation: str | None) -> None:
+    """Render model-specific summaries without mixing incomparable evaluations."""
+    supported = {"評価5", "評価6", "評価7", "評価8", "評価9", "評価10"}
+    if current_evaluation not in supported:
+        return
+
+    st.subheader("GPT-5.6 Sol と Claude Fable 5 の比較")
+    st.caption(
+        "同じ評価内の同一指標だけを比較します。評価間で分母・期間・正解の有無が異なるため、"
+        "数値を横断して総合順位にはしません。平均±標準偏差は各CSVに記録されたrun集計です。"
+    )
+
+    if current_evaluation == "評価5":
+        frame, missing = load_cross_model_csv(
+            ("5_pattern_quality_individual_fixed/evaluation5_summary_by_method.csv",)
+        )
+        frame = frame[frame["method"] == "proposed"] if not frame.empty else frame
+        columns = [
+            "モデル",
+            "num_runs",
+            "output_record_count",
+            "useful_non_redundant_pattern_rate",
+            "useful_non_redundant_pattern_rate_std",
+            "contextless_useless_rate",
+            "contextless_useless_rate_std",
+            "fragmentation_rate",
+            "fragmentation_rate_std",
+        ]
+        if not frame.empty:
+            st.dataframe(frame[[column for column in columns if column in frame]], hide_index=True, use_container_width=True)
+            useful_delta = model_metric_delta(frame, "useful_non_redundant_pattern_rate")
+            contextless_delta = model_metric_delta(frame, "contextless_useless_rate")
+            st.markdown(
+                "**考察**\n"
+                f"- Claude−GPT の有用・非冗長率差は {format_model_delta(useful_delta)}、"
+                f"文脈なし無用率差は {format_model_delta(contextless_delta)} です。"
+                "Claudeは平均出力数が多い一方、率で見ると両モデルの有用性は近く、文脈なし系列はClaudeの方が少ない結果です。\n"
+                "- 両モデルの断片化率0は比較可能な親子系列が得られなかった場合も含むため、断片化抑制の優劣を結論づける根拠にはしません。"
+            )
+        else:
+            st.info("評価5の両モデル結果がまだ揃っていません。")
+
+    elif current_evaluation == "評価6":
+        frame, missing = load_cross_model_csv(
+            ("6_adl_match_individual_holdout_test_direct_time_split/evaluation6_method_comparison.csv",)
+        )
+        columns = [
+            "モデル",
+            "method",
+            "num_runs",
+            "avg_num_patterns",
+            "end_to_end_mean_multilabel_f1",
+            "end_to_end_std_multilabel_f1",
+            "end_to_end_mean_jaccard",
+            "end_to_end_std_jaccard",
+        ]
+        if not frame.empty:
+            st.markdown("**Full-pipeline（Day 155–220 holdout）**")
+            st.dataframe(frame[[column for column in columns if column in frame]], hide_index=True, use_container_width=True)
+            proposed_delta = model_metric_delta(frame, "end_to_end_mean_multilabel_f1", method="proposed")
+            direct_delta = model_metric_delta(frame, "end_to_end_mean_multilabel_f1", method="direct_log_baseline")
+            st.markdown(
+                "**考察**\n"
+                f"- end-to-end F1のClaude−GPT差は、提案法 {format_model_delta(proposed_delta)}、"
+                f"Direct LLM {format_model_delta(direct_delta)} です。"
+                "両モデルで提案法が同一モデルのDirect LLMを上回るかを併読し、モデル差とSTNを含む提案法の差を混同しません。\n"
+                "- この比較はFull-pipelineです。STN表現だけの寄与はStrict Ablationを別途確認してください。"
+            )
+
+        strict, strict_missing = load_cross_model_csv(
+            (
+                "6_strict_ablation/aruba_individual_10_2_14days_holdout_test/"
+                "evaluation/evaluation6_strict_ablation_summary.csv",
+            )
+        )
+        if not strict.empty:
+            strict_columns = [
+                "モデル",
+                "method",
+                "common_runs",
+                "mean_multilabel_f1",
+                "std_multilabel_f1",
+            ]
+            st.markdown("**Strict Ablation**")
+            st.dataframe(strict[[column for column in strict_columns if column in strict]], hide_index=True, use_container_width=True)
+            strict_delta = model_metric_delta(strict, "mean_multilabel_f1", method="proposed_strict")
+            st.caption(
+                f"提案法StrictのClaude−GPT F1差は {format_model_delta(strict_delta)} です。"
+                " 同一モデル内の proposed_strict と llm_only_strict の差を、STN表現の検証として解釈します。"
+            )
+        missing.extend(strict_missing)
+
+    elif current_evaluation == "評価7":
+        st.info(
+            "GPT-5.6 Solの正式な28条件・各5 runの結果はありますが、Claude Fable 5側には同条件の"
+            "集計がありません。条件選択の結果をモデル比較へ混ぜず、Claude側の評価7完了後に表示します。"
+        )
+        missing = ["Claude Fable 5"]
+
+    elif current_evaluation == "評価8":
+        frame, missing = load_cross_model_csv(
+            ("8_vs_llm_own_id_fixed/fixed/evaluation8_occurrence_weighted_summary.csv",)
+        )
+        columns = [
+            "モデル",
+            "method",
+            "num_runs",
+            "num_patterns",
+            "total_occurrences",
+            "weighted_jaccard",
+            "std_weighted_jaccard",
+            "weighted_multilabel_f1",
+            "std_weighted_multilabel_f1",
+        ]
+        if not frame.empty:
+            st.markdown("**14日比較・出現数重み付き集計**")
+            st.dataframe(frame[[column for column in columns if column in frame]], hide_index=True, use_container_width=True)
+            proposed_delta = model_metric_delta(frame, "weighted_multilabel_f1", method="proposed")
+            direct_delta = model_metric_delta(frame, "weighted_multilabel_f1", method="direct_log_baseline")
+            st.markdown(
+                "**考察**\n"
+                f"- 重み付きF1のClaude−GPT差は、提案法 {format_model_delta(proposed_delta)}、"
+                f"Direct LLM {format_model_delta(direct_delta)} です。"
+                "各pattern ID自身の出現だけを重み付けしているため、頻出系列のラベル整合性を強く反映します。\n"
+                "- 頻出系列への重み付けは希少だが重要な行動の性能を表すものではありません。頻度帯別CSVも併せて確認してください。"
+            )
+        else:
+            st.info("評価8の両モデル結果がまだ揃っていません。")
+
+    elif current_evaluation == "評価9":
+        frame, missing = load_cross_model_csv(
+            (
+                "9_hestia/duration/evaluation9_duration_summary.csv",
+                "9_hestia/duration_54f94fee_6ae9208d/evaluation9_duration_summary.csv",
+            )
+        )
+        if not frame.empty:
+            frame = frame[
+                (frame["train_days"] == 14)
+                & (frame["condition"] == "overall")
+                & (frame["method"] == "llm")
+            ]
+            columns = [
+                "モデル",
+                "complete_runs",
+                "missing_runs",
+                "invalid_runs",
+                "f1_mean",
+                "f1_std",
+                "adl_macro_f1_mean",
+                "adl_macro_f1_std",
+                "test_target_episode_coverage_mean",
+                "test_visible_catalog_recall_mean",
+            ]
+            st.markdown("**期間感度・14日学習・overall（3 seed × 3 LLM run）**")
+            st.dataframe(frame[[column for column in columns if column in frame]], hide_index=True, use_container_width=True)
+            f1_delta = model_metric_delta(frame, "f1_mean")
+            coverage_delta = model_metric_delta(frame, "test_target_episode_coverage_mean")
+            st.markdown(
+                "**考察**\n"
+                f"- Claude−GPT差はsequence F1で {format_model_delta(f1_delta)}、"
+                f"test target episode coverageで {format_model_delta(coverage_delta)} です。"
+                "いずれも完全状態列一致を含む厳しい合成ログ診断であり、ArubaのADL F1や実宅の再出現率と同じ尺度ではありません。\n"
+                "- Claudeのみ本実験も完了しています。GPT側に同一の本実験集計がないため、本実験結果はモデル間の数値比較には用いません。"
+            )
+        else:
+            st.info("評価9の両モデルの期間感度結果がまだ揃っていません。")
+
+    else:  # 評価10
+        frame, missing = load_cross_model_csv(
+            ("10_real_home_temporal_generalization/2026-08-19_2026-09-19/evaluation10_summary.csv",)
+        )
+        columns = [
+            "モデル",
+            "complete_runs",
+            "requested_runs",
+            "pattern_count_mean",
+            "pattern_count_sd",
+            "supported_pattern_count_mean",
+            "supported_pattern_count_sd",
+            "test_supported_pattern_fraction_mean",
+            "test_supported_pattern_fraction_sd",
+            "mean_test_day_recurrence_mean",
+            "mean_test_day_recurrence_sd",
+            "test_transition_coverage_mean",
+            "test_transition_coverage_sd",
+        ]
+        if not frame.empty:
+            st.dataframe(frame[[column for column in columns if column in frame]], hide_index=True, use_container_width=True)
+            recurrence_delta = model_metric_delta(frame, "test_supported_pattern_fraction_mean")
+            coverage_delta = model_metric_delta(frame, "test_transition_coverage_mean")
+            st.markdown(
+                "**考察**\n"
+                f"- Claude−GPT差は、将来期間に再出現した抽出パターン割合で {format_model_delta(recurrence_delta)}、"
+                f"test遷移被覆率で {format_model_delta(coverage_delta)} です。Claudeは抽出パターン数も多く、"
+                "再出現数の比較は出力量の差にも影響されます。\n"
+                "- 実宅ログにADL正解はないため、これは時間的再出現の診断であり、ADL認識精度やモデルの正確性を示す結果ではありません。"
+            )
+        else:
+            st.info("評価10の両モデル結果がまだ揃っていません。")
+
+    if missing:
+        st.caption("未検出の比較成果物: " + "、".join(sorted(set(missing))))
+
+
 def reviewer_response_result_dirs() -> list[Path]:
     """Find completed read-only reviewer-response result bundles."""
     root = PROJECT_ROOT / "results" / "gpt-5.6-sol" / "reviewer_response"
@@ -2256,6 +2519,9 @@ def render_reviewer_response_results(current_evaluation: str | None) -> None:
 
 def render_results(default_dirs: list[Path], current_evaluation: str | None = None) -> None:
     st.subheader("結果表示")
+    render_cross_model_comparison(current_evaluation)
+    if current_evaluation in {"評価5", "評価6", "評価7", "評価8", "評価9", "評価10"}:
+        st.divider()
     render_reviewer_response_results(current_evaluation)
     if reviewer_response_result_dirs():
         st.divider()
