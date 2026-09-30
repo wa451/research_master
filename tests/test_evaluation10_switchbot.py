@@ -13,7 +13,12 @@ import pandas as pd
 
 from app.command_builder import build_evaluation10_steps
 from app.streamlit_app import batch_target_steps
-from scripts.evaluate_10_switchbot import build_parser, main, resume_extract
+from scripts.evaluate_10_switchbot import (
+    build_parser,
+    clear_existing_evaluation_results,
+    main,
+    resume_extract,
+)
 from src.behavior_pattern_mining.evaluation.evaluation10_switchbot import (
     DETAIL_COLUMNS,
     FORMAL_EVALUATION7_BEST_CONDITION_MANIFEST,
@@ -278,6 +283,9 @@ class Evaluation10SwitchBotTests(unittest.TestCase):
         enabled = build_evaluation10_steps({**settings, "allow_api": True})
         self.assertEqual([step.step_id for step in enabled], ["eval10_prepare", "eval10_extract", "eval10_evaluate"])
         self.assertIn("--allow-api", enabled[1].command)
+        overwrite_enabled = build_evaluation10_steps({**settings, "overwrite_results": True})
+        self.assertIn("--overwrite-results", overwrite_enabled[-1].command)
+        self.assertNotIn("--overwrite-results", overwrite_enabled[0].command)
 
     def test_dashboard_batch_skips_completed_preparation_before_resuming_extract(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -471,6 +479,29 @@ class Evaluation10SwitchBotTests(unittest.TestCase):
             evaluate(output_dir=output, results_dir=results, method="frequency")
             with self.assertRaisesRegex(FileExistsError, "refusing to overwrite"):
                 evaluate(output_dir=output, results_dir=results, method="frequency")
+
+    def test_evaluate_overwrites_only_when_explicitly_requested(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "output"
+            self.prepare_snapshot(self.make_snapshot(root), output)
+            results = root / "results"
+            evaluate(output_dir=output, results_dir=results, method="frequency")
+            (results / "evaluation10_summary.csv").write_text("stale\n", encoding="utf-8")
+            llm_run = results / "llm" / "fingerprint" / "llm_sequences_modes_10_2_21days_1.json"
+            llm_run.parent.mkdir(parents=True)
+            llm_run.write_text("[]\n", encoding="utf-8")
+
+            removed = clear_existing_evaluation_results(results)
+            payload = evaluate(output_dir=output, results_dir=results, method="frequency")
+
+            self.assertIn(results / "evaluation10_summary.csv", removed)
+            self.assertEqual(payload["summary"][0]["method"], "frequency")
+            self.assertIn(
+                "method",
+                (results / "evaluation10_summary.csv").read_text(encoding="utf-8").splitlines()[0],
+            )
+            self.assertTrue(llm_run.is_file())
 
     def test_prepare_does_not_overwrite_existing_artifacts(self):
         with tempfile.TemporaryDirectory() as directory:

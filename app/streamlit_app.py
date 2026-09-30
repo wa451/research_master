@@ -1655,6 +1655,19 @@ def render_eval10_settings(common: dict) -> dict:
     min_train_occurrences = st.number_input("学習側の最小出現回数", min_value=1, value=2, step=1)
     top_k_per_mode = st.number_input("時間帯ごとの最大頻出系列数", min_value=1, value=20, step=1)
     method = st.selectbox("採点する手法", ["llm", "both", "frequency"])
+    overwrite_results = st.checkbox(
+        "既存の評価10集計CSV/JSONを上書きする",
+        value=False,
+        help=(
+            "ステップ3の集計結果だけを置き換えます。前処理・LLM run JSON・"
+            "時間帯checkpointは変更せず、Bedrock APIも呼びません。"
+        ),
+    )
+    if overwrite_results:
+        st.warning(
+            "既存の評価10集計CSV/JSONをこの設定・既存LLM runで置き換えます。"
+            "前の集計値が必要なら先に別場所へ保存してください。"
+        )
     allow_api = st.checkbox("LLM抽出のAPI呼出しを許可（費用が発生します）", value=False)
     if allow_api:
         st.warning("一括実行またはステップ2でBedrock APIを5 run分呼びます。")
@@ -1674,6 +1687,7 @@ def render_eval10_settings(common: dict) -> dict:
         "min_train_occurrences": int(min_train_occurrences),
         "top_k_per_mode": int(top_k_per_mode),
         "method": method,
+        "overwrite_results": overwrite_results,
         "allow_api": allow_api,
     }
 

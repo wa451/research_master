@@ -1365,6 +1365,8 @@ def build_evaluation10_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
             value.append("--allow-api")
         if stage == "evaluate":
             add_arg(value, "--method", settings["method"])
+            if settings.get("overwrite_results", False):
+                value.append("--overwrite-results")
         return value
 
     steps = [

@@ -45,6 +45,15 @@ RETRYABLE_TRANSPORT_ERROR_MARKERS = (
     "endpointconnectionerror",
     "connectionclosederror",
 )
+EVALUATION_RESULT_FILENAMES = (
+    "evaluation10_summary.csv",
+    "evaluation10_summary_by_run.csv",
+    "evaluation10_pattern_details.csv",
+    "evaluation10_by_time_band.csv",
+    "evaluation10_by_pattern_length.csv",
+    "evaluation10_manifest.json",
+    "evaluation10_summary.json",
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -80,6 +89,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--method", choices=METHODS, default="llm")
     parser.add_argument("--runs", type=int, default=FORMAL_RUNS, help="LLM extraction/evaluation runs; formal default: 5")
     parser.add_argument("--llm-patterns", type=Path, help="Optional existing LLM pattern JSON")
+    parser.add_argument(
+        "--overwrite-results",
+        action="store_true",
+        help="Permit replacing existing evaluation10 CSV/JSON summaries during the evaluate stage only",
+    )
     parser.add_argument("--allow-api", action="store_true", help="Permit paid Bedrock calls during extract/run")
     parser.add_argument("--dry-run", action="store_true", help="Validate the formal plan and print train-only estimates without writing")
     return parser
@@ -96,6 +110,24 @@ def _missing_run_ids(paths: list[Path]) -> list[int]:
 def _is_retryable_transport_error(exc: RuntimeError) -> bool:
     message = str(exc).lower()
     return any(marker in message for marker in RETRYABLE_TRANSPORT_ERROR_MARKERS)
+
+
+def clear_existing_evaluation_results(results_dir: Path) -> list[Path]:
+    """Remove only replaceable Evaluation 10 aggregate files after opt-in.
+
+    LLM run JSONs and their mode checkpoints live under ``llm/`` and are never
+    considered here, so an evaluate-only rerun cannot repeat Bedrock inference.
+    """
+    removed: list[Path] = []
+    for filename in EVALUATION_RESULT_FILENAMES:
+        path = results_dir / filename
+        if not path.exists():
+            continue
+        if not path.is_file():
+            raise ValueError(f"refusing to replace non-file Evaluation 10 result: {path}")
+        path.unlink()
+        removed.append(path)
+    return removed
 
 
 def resume_extract(
@@ -248,6 +280,13 @@ def main(argv: list[str] | None = None) -> int:
                     runs=args.runs,
                 )
             elif stage == "evaluate":
+                if args.overwrite_results:
+                    removed = clear_existing_evaluation_results(results_dir)
+                    if removed:
+                        print(
+                            "Replacing existing Evaluation 10 aggregate files: "
+                            + ", ".join(str(path) for path in removed)
+                        )
                 evaluate(
                     output_dir=output_dir,
                     results_dir=results_dir,
