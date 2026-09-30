@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from itertools import groupby
+import os
 from pathlib import Path
+import subprocess
 
 from src.behavior_pattern_mining.evaluation.evaluation9_hestia import (
     PROJECT_ROOT,
+    execute,
     resolve_path,
 )
 
@@ -110,3 +115,72 @@ def build_duration_commands(
                 command.append("--allow-api")
             commands.append(command)
     return commands
+
+
+def execute_duration_commands(
+    commands: list[list[str]],
+    hestia_root: Path,
+    *,
+    duration_workers: int = 4,
+) -> None:
+    """Run independent duration windows concurrently without crossing stages.
+
+    Generation and final aggregation remain serial.  For each intervening stage,
+    every train-duration window uses a distinct directory, so its command can run
+    alongside the other duration windows.  The next stage starts only after all
+    commands in the preceding stage have completed.
+    """
+    if duration_workers < 1:
+        raise ValueError("--duration-workers must be at least 1")
+    if duration_workers == 1:
+        execute(commands, hestia_root)
+        return
+
+    root = resolve_path(hestia_root)
+    if not (root / "src/smart_home_sim/experiments/cli.py").is_file():
+        raise ValueError(f"Hestia experiment CLI is missing: {root}")
+    environment = os.environ.copy()
+    environment.pop("VIRTUAL_ENV", None)
+
+    def command_stage(command: list[str]) -> str:
+        try:
+            return command[7]
+        except IndexError as exc:
+            raise ValueError(f"invalid Hestia experiment command: {command!r}") from exc
+
+    for stage, grouped_commands in groupby(commands, key=command_stage):
+        stage_commands = list(grouped_commands)
+        workers = min(duration_workers, len(stage_commands))
+        if workers == 1:
+            subprocess.run(
+                stage_commands[0], cwd=PROJECT_ROOT, env=environment, check=True
+            )
+            continue
+
+        print(
+            f"Running {stage} for {len(stage_commands)} train durations "
+            f"with {workers} workers.",
+            flush=True,
+        )
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = [
+                executor.submit(
+                    subprocess.run,
+                    command,
+                    cwd=PROJECT_ROOT,
+                    env=environment,
+                    check=True,
+                )
+                for command in stage_commands
+            ]
+            # Await every already-started window before failing, then do not
+            # advance to the next stage. This keeps later dependencies intact.
+            first_error: BaseException | None = None
+            for future in futures:
+                try:
+                    future.result()
+                except BaseException as exc:  # Preserve CalledProcessError details.
+                    if first_error is None:
+                        first_error = exc
+            if first_error is not None:
+                raise first_error

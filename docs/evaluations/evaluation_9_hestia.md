@@ -168,6 +168,8 @@ uv run python scripts/evaluate_9_duration.py --stage extract --allow-api
 uv run python scripts/evaluate_9_duration.py --stage evaluate --method both
 ```
 
+`--duration-workers`（既定4）で、期間windowを同時に処理する数を指定できる。`generate` と `evaluate` は1回ずつ直列で実行し、`prepare`、`baseline`、`budget`／`extract` は同じ工程内の期間だけを並列にする。各工程は全期間の完了を待つため、window内の前処理→対照→抽出→集計という依存関係と既存の出力形式は変わらない。API利用時は同時リクエスト数も増えるので、利用枠に応じて値を下げる。`--duration-workers 1`は従来の直列実行である。
+
 `--train-days 3,7,14,28`でwindow一覧を明示できるが、14日baselineとraw planの最大train日数（28日）は必須である。API opt-inは既存評価と同じで、許可OFFは0 calls。fresh上限は `6 conditions × 3 seeds × 3 LLM runs × 4 time bands × 4 durations = 864 calls`、parse retry上限は現行3試行で2592回である。transport retryは含まない。raw生成は18回だけで、LLM抽出は異なるnetworkを持つ72 windowごとに行う。
 
 出力は `results/<model>/9_hestia/duration/evaluation9_duration_summary.csv`、`evaluation9_duration_summary_runs.csv`、`evaluation9_duration_summary.json`。summaryはtrain/test日数、condition（`overall`を含む）、method、model、各指標のmean/std/n_seeds、run status、主要指標のpaired `*_delta_vs_14d_*`を持つ。期間感度プロトコルはv2であり、旧7日基準のsummaryとは混在させず再集計する。`adl_macro_f1`、`test_target_episode_coverage`、`f1`のcondition別・overall SVGも生成し、Webの結果比較では同CSVを期間軸の折れ線で表示できる。

@@ -2,6 +2,8 @@
 
 import json
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -22,6 +24,7 @@ from scripts.evaluate_9_hestia import main
 from scripts.evaluate_9_duration import main as duration_main
 from src.behavior_pattern_mining.evaluation.evaluation9_duration import (
     build_duration_commands,
+    execute_duration_commands,
 )
 from src.behavior_pattern_mining.evaluation.evaluation9_hestia import (
     PROJECT_ROOT,
@@ -202,6 +205,7 @@ class Evaluation9Tests(unittest.TestCase):
                 "runner": "python",
                 "duration": True,
                 "duration_train_days": list(DURATION_TRAIN_DAYS),
+                "duration_workers": 2,
                 "plan": "Hestia/examples/experiments/noise_free_duration.yaml",
                 "experiment": "output/9_hestia/duration",
                 "output_dir": "results/9_hestia/duration",
@@ -211,6 +215,8 @@ class Evaluation9Tests(unittest.TestCase):
             all("scripts/evaluate_9_duration.py" in step.command for step in steps)
         )
         self.assertIn("--train-days", steps[0].command)
+        self.assertIn("--duration-workers", steps[0].command)
+        self.assertIn("2", steps[0].command)
         self.assertNotIn("--allow-api", steps[3].command)
         self.assertIn(
             "evaluation9_duration_summary.csv", str(steps[-1].expected_outputs[0])
@@ -228,9 +234,43 @@ class Evaluation9Tests(unittest.TestCase):
         self.assertEqual(len(enabled), 4)
         self.assertTrue(all(command[-1] == "--allow-api" for command in enabled))
 
-        with patch("scripts.evaluate_9_duration.execute") as execute:
+        with patch("scripts.evaluate_9_duration.execute_duration_commands") as execute:
             self.assertEqual(duration_main(["--dry-run"]), 0)
             execute.assert_not_called()
+
+    def test_duration_windows_run_concurrently_with_stage_barriers(self):
+        commands = build_duration_commands(
+            stage="run",
+            hestia_root=Path("Hestia"),
+            plan=Path("Hestia/examples/experiments/noise_free_duration.yaml"),
+            experiment=Path("output/9_hestia/duration"),
+            output_dir=Path("results/9_hestia/duration"),
+            train_days=list(DURATION_TRAIN_DAYS),
+        )
+        active = 0
+        maximum_active = 0
+        stages_seen: list[str] = []
+        lock = threading.Lock()
+
+        def fake_run(command, **_kwargs):
+            nonlocal active, maximum_active
+            with lock:
+                active += 1
+                maximum_active = max(maximum_active, active)
+                stages_seen.append(command[7])
+            time.sleep(0.02)
+            with lock:
+                active -= 1
+
+        with patch(
+            "src.behavior_pattern_mining.evaluation.evaluation9_duration.subprocess.run",
+            side_effect=fake_run,
+        ):
+            execute_duration_commands(commands, Path("Hestia"), duration_workers=4)
+
+        self.assertEqual(maximum_active, 4)
+        self.assertEqual(stages_seen[0], "duration-generate")
+        self.assertEqual(stages_seen[-1], "duration-evaluate")
 
     def test_dashboard_overrides_change_only_requested_plan_fields(self):
         _, pilot = load_preset_plan(PROJECT_ROOT / "Hestia", "Pilot")

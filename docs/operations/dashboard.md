@@ -214,7 +214,7 @@ uv run python scripts/evaluate_8_frequency_stratified_adl_consistency.py --help
 
 設定画面の **3住宅のつながり** では、compact / corridor / branched の部屋と接続を横並びで確認できる。線のラベルはHestiaが生成するドアセンサーIDと移動時間を表す。base / large variability は住宅構造を変えず、行動の揺らぎだけを変える。
 
-評価9の **実験プリセット** はPilot、本実験・小規模確認、本実験、期間感度評価を選べる。既存planを直接読み、seed一覧とLLM run数だけをGUIで上書きする。本実験は6条件・train 14日/test 7日で、Aruba正式評価と同じ14日間の履歴から系列を生成する。小規模確認は`noise_free.yaml`の6条件・14日/7日・その他全設定を維持し、seed=[11]、LLM 1反復、専用の`full_smoke`出力を既定とするため、fresh推定は24 API callsである。期間感度は同一35日rawログから3/7/14/28日trainと共通7日testを派生し、14日をbaselineとしてpaired差分を出す。raw生成18 run、LLM対象72 window、fresh推定864 callsである。確定した全項目は`output/<model>/logs/evaluation_dashboard/evaluation9_plans/`へ内容hash付きeffective planとして保存され、生成ステップはsource planではなくこのファイルを使う。画面にはHestia生成run数と、4時間帯・期間数を掛けたfresh API呼び出し推定、parse retry込み上限を表示する。API許可は従来どおり既定OFFである。
+評価9の **実験プリセット** はPilot、本実験・小規模確認、本実験、期間感度評価を選べる。既存planを直接読み、seed一覧とLLM run数だけをGUIで上書きする。本実験は6条件・train 14日/test 7日で、Aruba正式評価と同じ14日間の履歴から系列を生成する。小規模確認は`noise_free.yaml`の6条件・14日/7日・その他全設定を維持し、seed=[11]、LLM 1反復、専用の`full_smoke`出力を既定とするため、fresh推定は24 API callsである。期間感度は同一35日rawログから3/7/14/28日trainと共通7日testを派生し、14日をbaselineとしてpaired差分を出す。raw生成18 run、LLM対象72 window、fresh推定864 callsである。期間感度を選ぶと **期間ごとの並列数**（既定4）が表示され、raw生成と最終集計は直列、prepare・頻度対照・LLM抽出は期間ごとに並列で実行する。API利用時は同時リクエスト数も増えるため、利用枠に応じて並列数を下げられる。確定した全項目は`output/<model>/logs/evaluation_dashboard/evaluation9_plans/`へ内容hash付きeffective planとして保存され、生成ステップはsource planではなくこのファイルを使う。画面にはHestia生成run数と、4時間帯・期間数を掛けたfresh API呼び出し推定、parse retry込み上限を表示する。API許可は従来どおり既定OFFである。
 
 既存`experiment.json`とeffective planが一致しない場合は実行前に停止する。新しいhash付き出力先へ切り替えるか、明示確認後に既存の生成・集計ディレクトリを`output/<model>/logs/evaluation_dashboard/evaluation9_backups/`へ退避して同じパスを再利用できる。後者もhash検証は回避せず、元パスを空にしてから再生成する。
 

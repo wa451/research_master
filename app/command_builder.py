@@ -1199,6 +1199,7 @@ def build_evaluation9_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
     allow_api = bool(settings.get("allow_api", False))
     duration = bool(settings.get("duration", False))
     duration_days = settings.get("duration_train_days", [3, 7, 14, 28])
+    duration_workers = int(settings.get("duration_workers", 4))
     stages = [
         (
             "generate",
@@ -1262,6 +1263,7 @@ def build_evaluation9_steps(settings: dict[str, Any]) -> list[EvaluationStep]:
         add_flag(command, "--allow-api", stage == "extract" and allow_api)
         if duration:
             add_arg(command, "--train-days", ",".join(str(day) for day in duration_days))
+            add_arg(command, "--duration-workers", duration_workers)
         steps.append(
             EvaluationStep(
                 f"eval9_{stage}",

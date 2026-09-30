@@ -23,9 +23,9 @@ from src.behavior_pattern_mining.evaluation.evaluation9_duration import (
     DEFAULT_TRAIN_DAYS,
     STAGES,
     build_duration_commands,
+    execute_duration_commands,
     parse_train_days,
 )
-from src.behavior_pattern_mining.evaluation.evaluation9_hestia import execute
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -51,6 +51,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--method", choices=("frequency", "llm", "both"), default="both"
     )
     parser.add_argument("--allow-api", action="store_true")
+    parser.add_argument(
+        "--duration-workers",
+        type=int,
+        default=4,
+        help="Maximum concurrent train-duration windows (default: 4).",
+    )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args(argv)
 
@@ -75,7 +81,11 @@ def main(argv: list[str] | None = None) -> int:
         for command in commands:
             print(shlex.join(command), flush=True)
         if not args.dry_run:
-            execute(commands, args.hestia_root)
+            execute_duration_commands(
+                commands,
+                args.hestia_root,
+                duration_workers=args.duration_workers,
+            )
     except subprocess.CalledProcessError as exc:
         return exc.returncode
     except (OSError, ValueError) as exc:

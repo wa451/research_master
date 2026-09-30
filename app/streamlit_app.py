@@ -1317,6 +1317,22 @@ def render_eval9_settings(common: dict) -> dict:
             "train期間: 3 / 7 / 14 / 28日、比較基準: 14日、test期間: 7日固定。"
             "同一condition・seedの35日rawログを共有し、Day 29〜35を共通testにします。"
         )
+        duration_workers = st.number_input(
+            "期間ごとの並列数",
+            min_value=1,
+            max_value=len(DURATION_TRAIN_DAYS),
+            value=len(DURATION_TRAIN_DAYS),
+            step=1,
+            help=(
+                "prepare・頻度対照・LLM抽出を期間ごとに並列実行します。"
+                "API利用時は同時リクエスト数も増えるため、利用枠に応じて下げてください。"
+            ),
+        )
+        st.caption(
+            "rawログ生成と最終集計は1回ずつ実行し、各工程は全期間の完了後に次へ進みます。"
+        )
+    else:
+        duration_workers = 1
 
     llm_runs = st.number_input(
         "LLM run数",
@@ -1485,6 +1501,7 @@ def render_eval9_settings(common: dict) -> dict:
         "allow_api": allow_api,
         "duration": duration,
         "duration_train_days": list(DURATION_TRAIN_DAYS) if duration else [],
+        "duration_workers": int(duration_workers),
     }
 
 
