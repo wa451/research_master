@@ -6,9 +6,12 @@
 
 研究を初めて読む人は、まず[研究の概要](overview.md)から始めてください。専門用語、研究の流れ、読む順番を説明しています。
 
+実行済みの結果から考察・論文執筆を進める方は、[結果閲覧の入口](research/README.md)を開いてください。読み取り専用の表ビュー、評価別案内、考察メモ、章立てと残作業をまとめています。
+
 | 目的 | 読む文書 |
 |---|---|
 | 研究の狙いと全体像を知る | [研究の概要](overview.md)、[パイプライン](architecture/pipeline.md) |
+| 実行済み結果を読む・考察や論文を書く | [結果閲覧の入口](research/README.md)、[評価結果の読み方](research/results_guide.md)、[考察メモ](research/discussion_notes.md)、[執筆作業表](research/manuscript_plan.md) |
 | 特定の評価の目的・指標・手順を知る | [評価一覧](../README.md#評価文書)から対象の評価1〜10 |
 | 実験を再現・実行する | [再現手順](operations/experiment_reproduction.md)、対象評価の文書 |
 | 論文で使う条件と注意点を確認する | [論文採用パラメータ](research/paper_parameters.md)、[既知の不一致](research/known_issues.md) |

@@ -1,0 +1,35 @@
+{
+  "checked_on": "2026-10-01",
+  "comparison_root": "results/model_comparison/gpt-5.6-sol_vs_claude-fable-5",
+  "resources": [
+    "results/gpt-5.6-sol/7_param_search_14d_5runs_individual_holdout/evaluation7_best_condition_manifest.json",
+    "results/final_evaluation_snapshot/gpt-5.6-sol/snapshot_manifest.json",
+    "results/final_evaluation_snapshot/gpt-5.6-sol/checksum_manifest.json",
+    "results/final_evaluation_snapshot/claude-fable-5/snapshot_manifest.json",
+    "results/final_evaluation_snapshot/claude-fable-5/checksum_manifest.json"
+  ],
+  "items": [
+    {"id":"guide","group":"writing","title":"結果の読み方","path":"docs/research/results_guide.md","note":"評価ごとの問い、結果の出所、指標の読み方。"},
+    {"id":"discussion","group":"writing","title":"考察メモ","path":"docs/research/discussion_notes.md","note":"観測事実・解釈の仮説・追加確認を分けた執筆メモ。"},
+    {"id":"manuscript","group":"writing","title":"論文執筆の作業表","path":"docs/research/manuscript_plan.md","note":"掲載結果の決定、章立て、図表、残作業。"},
+    {"id":"project","group":"writing","title":"研究の全体像","path":"docs/overview.md","note":"研究の目的、用語、処理の流れ。"},
+    {"id":"eval5","group":"results","title":"評価5 パターン品質","table":"eval5","spec":"docs/evaluations/evaluation_5_adl_correspondence.md","note":"Useful率と有用系列の絶対数を併記。fragmentation=0には比較ペアなしが含まれ、査読対応版のN/A方針と区別する。","columns":["model","method","num_runs","num_evaluable_patterns","num_useful_non_redundant","useful_non_redundant_pattern_rate","useful_non_redundant_pattern_rate_std","num_comparable_fragment_pairs","fragmentation_rate","contextless_useless_rate"]},
+    {"id":"eval6_full","group":"results","title":"評価6 Full 全工程比較","table":"eval6_full","spec":"docs/evaluations/evaluation_6_adl_interpretation_set.md","note":"individual・K=10/h=2、Day 155–220 test。FullとStrictは別の比較。conditional/end-to-endの分母も確認する。","columns":["model","method","num_runs","evaluation_role","mean_multilabel_precision","mean_multilabel_recall","mean_multilabel_f1","std_multilabel_f1","mean_occurrence_coverage"]},
+    {"id":"eval6_strict","group":"results","title":"評価6 Strict 入力表現比較","table":"eval6_strict","spec":"docs/evaluations/evaluation_6_adl_interpretation_set.md","note":"共通prompt/schema等を固定。両手法が完了したrunの積集合で比較する。","columns":["model","method","num_runs","avg_num_patterns","mean_multilabel_precision","mean_multilabel_recall","mean_multilabel_f1","std_multilabel_f1","mean_jaccard"]},
+    {"id":"delta","group":"results","title":"評価6 Strict paired ΔF1","table":"eval6_strict_delta_f1","note":"Proposed minus LLM-only。同一モデル内の5 paired run。正の平均だけでは統計的有意差を示さない。","columns":["model","paired_runs","mean_paired_delta_f1","sd_paired_delta_f1"]},
+    {"id":"strict_runs","group":"results","title":"評価6 Strict run別","table":"eval6_strict_by_run","note":"平均差が特定runに偏るかを確認する。"},
+    {"id":"eval7","group":"results","title":"評価7 K/h感度・条件選定","table":"eval7","spec":"docs/evaluations/evaluation_7_parameter_sensitivity_adl_interpretation.md","note":"Solの28条件×5 run、Day 15–154 validation。Fableの正式集計は未確認。validation F1を独立test性能として扱わない。","columns":["model","rank","condition_id","sensor_representation","num_runs","evaluation_role","mean_multilabel_f1","std_multilabel_f1","mean_occurrence_coverage"]},
+    {"id":"eval8","group":"results","title":"評価8 頻度層別ADL整合性","table":"eval8","spec":"docs/evaluations/evaluation_8_frequency_stratified_adl_consistency.md","note":"mode=fixedで共通binを比較。tertileは分位別の補足。帯の件数・空欄・conditional/end-to-endを確認する。","columns":["model","mode","method","frequency_band","num_runs","num_runs_with_patterns","num_patterns","occurrence_coverage","mean_multilabel_f1","std_multilabel_f1","weighted_multilabel_f1"]},
+    {"id":"eval9","group":"results","title":"評価9 Hestia 条件×期間","table":"eval9","spec":"docs/evaluations/evaluation_9_hestia.md","note":"experiment・train/test日数・conditionを揃える。fullの空欄日数をdurationと混ぜない。seedとLLM runの単位も確認する。","columns":["model","experiment","train_days","test_days","condition","completed_rows","seeds","f1_mean","f1_sd","test_target_episode_coverage_mean","fragmentation_rate_mean"]},
+    {"id":"hestia_runs","group":"results","title":"評価9 Hestia seed/run別","table":"eval9_runs","note":"欠損・失敗・seedごとの偏り、正解数と抽出数を確認する。","columns":["model","experiment","train_days","test_days","condition","seed","run_id","status","num_gold_patterns","num_extracted_patterns","f1","test_target_episode_coverage"]},
+    {"id":"eval10","group":"results","title":"評価10 実宅の将来再現性","table":"eval10","spec":"docs/evaluations/evaluation_10_switchbot_holdout.md","note":"主指標FRRはtest_supported_pattern_fraction_mean。mean_test_day_recurrence_meanは補助指標。正解ADLがなく、分類精度は示さない。","columns":["model","method","runs","pattern_count_mean","pattern_count_sd","supported_pattern_count_mean","test_supported_pattern_fraction_mean","test_supported_pattern_fraction_sd","mean_test_day_recurrence_mean","mean_test_day_recurrence_sd"]},
+    {"id":"home_runs","group":"results","title":"評価10 実宅 run別","table":"eval10_by_run","note":"抽出が少ないrun・空のrunと再出現の差を確認する。"},
+    {"id":"home_time","group":"results","title":"評価10 時間帯別","table":"eval10_time_band","note":"時間帯別の抽出数と将来再現性。","columns":["model","group","runs","pattern_count_mean","test_supported_pattern_fraction_mean","mean_test_day_recurrence_mean"]},
+    {"id":"home_length","group":"results","title":"評価10 系列長別","table":"eval10_length","note":"系列長別の抽出数と将来再現性。","columns":["model","group","runs","pattern_count_mean","test_supported_pattern_fraction_mean","mean_test_day_recurrence_mean"]},
+    {"id":"comparison","group":"audit","title":"既存のモデル比較報告","path":"results/model_comparison/gpt-5.6-sol_vs_claude-fable-5/comparison/model_comparison_summary.md","note":"保存済みの比較報告。図表へ転記するときは専用表の列名と定義を確認する。"},
+    {"id":"comparability","group":"audit","title":"モデル間の比較条件","path":"results/model_comparison/gpt-5.6-sol_vs_claude-fable-5/comparison/comparability_audit.md","note":"FableのK/hはSolの選定manifest由来。各モデルで最適化した比較とは区別する。"},
+    {"id":"sanity","group":"audit","title":"既存の検査報告","path":"results/model_comparison/gpt-5.6-sol_vs_claude-fable-5/sanity_check/sanity_check_report.md","note":"既存検査の記録。今回の閲覧では再集計・checksumの再検証を行わない。"},
+    {"id":"reviewer","group":"audit","title":"査読の論点と対応状況","path":"results/model_comparison/gpt-5.6-sol_vs_claude-fable-5/comparison/reviewer_mapping.md","note":"人手評価・Fableの条件感度は残作業。"},
+    {"id":"rerun3","group":"audit","title":"Sol 査読対応版rerun3","path":"results/gpt-5.6-sol/reviewer_response/20260929_final_rerun3/reviewer_response_evaluation_summary.md","note":"62サンプルの人手評価は採点待ち。元集計とは断片化などの方針が異なる。"}
+  ]
+}

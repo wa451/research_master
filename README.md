@@ -4,6 +4,18 @@
 
 初めて内容を読む方は、用語と研究の流れを説明した[研究の概要](docs/overview.md)から始めてください。人向け文書とAI向け内部索引の区分は[文書案内](docs/README.md)にあります。処理の全体像は [docs/architecture/pipeline.md](docs/architecture/pipeline.md)、実装の責務は [docs/architecture/code_inventory.md](docs/architecture/code_inventory.md)、再現手順は [docs/operations/experiment_reproduction.md](docs/operations/experiment_reproduction.md) を参照してください。研究判断が未確定の挙動は [docs/research/known_issues.md](docs/research/known_issues.md) に分離しています。
 
+## 結果閲覧・考察・論文執筆
+
+実行済み結果を読む方は[結果閲覧の入口](docs/research/README.md)から始めてください。[評価ごとの読み方](docs/research/results_guide.md)、[数値に基づく考察メモ](docs/research/discussion_notes.md)、[論文の章立てと残作業](docs/research/manuscript_plan.md)をまとめています。
+
+表をモデル・手法・実験条件で絞り込むには、[start_research_browser.command](start_research_browser.command)をダブルクリックするか、次を実行します。標準Pythonだけで起動し、既存の評価結果を読み取ります。
+
+```bash
+python3 support/research_browser.py --open
+```
+
+表示列の選択、行の検索・並べ替え、元のCSVのダウンロードができます。LLM APIや評価処理は実行せず、結果を保存・上書きしません。実験を実行する際は従来のStreamlitダッシュボードを利用してください。
+
 ## セットアップ
 
 Python 3.9以上と `uv` を使用します。

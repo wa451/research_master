@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>研究結果・執筆ビュー</title>
+<style>
+:root{color-scheme:light;--ink:#21343b;--muted:#60747b;--accent:#14685c;--line:#dce4e3;--paper:#fff;--bg:#f4f6f5}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:14px;line-height:1.8}a{color:var(--accent);text-underline-offset:3px}button,input,select{font:inherit;color:inherit}button,a,input,select,summary{outline-offset:4px}button{cursor:pointer}button:disabled{cursor:default}header{padding:26px 32px;border-bottom:1px solid var(--line);background:var(--paper)}header .eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--accent)}header h1{margin:4px 0;font-size:25px;letter-spacing:.02em}header p{margin:0;color:var(--muted)}.layout{display:grid;grid-template-columns:270px minmax(0,1fr);min-height:calc(100vh - 150px)}aside{padding:24px 18px;border-right:1px solid var(--line);background:#edf2f0}aside input{width:100%;padding:9px 11px;border:1px solid #cbd8d3;border-radius:6px;background:white}nav h2{font-size:11px;letter-spacing:.08em;margin:26px 10px 8px;color:var(--muted)}nav a{display:block;padding:8px 10px;text-decoration:none;border-radius:6px;font-size:13px;margin:2px 0;color:var(--ink)}nav a:hover{background:#dfeae5}nav a[aria-current=page]{background:var(--accent);color:#fff}nav small{display:block;font-size:11px;opacity:.7}main{padding:32px;min-width:0;max-width:1800px}main h2{font-size:24px;line-height:1.5;margin:0 0 12px}.lead{color:var(--muted);max-width:1000px}.note{border-left:3px solid #b28c3a;background:#faf6e9;padding:12px 18px;margin:16px 0}.meta{font-size:12px;color:var(--muted);margin:14px 0;overflow-wrap:anywhere}.toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:24px 0 12px}.toolbar label{font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:4px}.toolbar input,.toolbar select{padding:7px 9px;border:1px solid #cad7d2;border-radius:5px;background:white;max-width:220px}.toolbar input{min-width:240px}.toolbar button{background:#fff;border:1px solid #cad7d2;padding:7px 12px;border-radius:5px}.column-list{display:flex;gap:10px 20px;flex-wrap:wrap;padding:14px;max-height:220px;overflow:auto;border:1px solid var(--line);background:white}.column-list label{font-family:ui-monospace,monospace;font-size:11px}.table-wrap{overflow:auto;max-height:68vh;background:white;border:1px solid var(--line);border-radius:6px;margin:14px 0}table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:10px 14px;border-bottom:1px solid #e4ebe7;text-align:left;white-space:nowrap}th{position:sticky;top:0;background:#e9f0ed;font-weight:600;z-index:1;font-family:ui-monospace,monospace;font-size:11px}th button{background:transparent;border:0;padding:0;font:inherit;text-align:left}td{font-variant-numeric:tabular-nums;font-family:ui-monospace,monospace}tbody tr:nth-child(even){background:#f8faf9}tbody tr:hover{background:#eef5f1}.empty{padding:25px;color:var(--muted)}.document{background:#fff;border:1px solid var(--line);padding:26px 32px;border-radius:8px;max-width:1200px}.document h1{font-size:24px;line-height:1.5}.document h2{font-size:20px;margin:32px 0 10px}.document h3{font-size:16px;margin:24px 0 10px}.document p{margin:12px 0;white-space:pre-wrap}.document li{margin:7px 0}.document td{font-family:inherit;white-space:normal;min-width:160px;vertical-align:top}.document th{font-family:inherit;white-space:normal;min-width:150px}.document .table-wrap{max-height:none}.document pre{padding:16px;background:#f0f4f1;overflow:auto;font-size:12px;line-height:1.6}.document blockquote{margin:15px 0;padding:12px 18px;border-left:3px solid #9ab5a6;background:#f3f7f4}code{font-family:ui-monospace,monospace;font-size:.9em;background:#eef3f0;padding:1px 4px;border-radius:3px}details{margin:14px 0}summary{cursor:pointer;color:var(--muted);font-size:12px}.count{font-size:12px;color:var(--muted)}.error{padding:22px;border:1px solid #d0a47b;background:#fff7ef;border-radius:6px}.error p{margin:6px 0}@media(max-width:900px){.layout{grid-template-columns:1fr}aside{border-right:0;border-bottom:1px solid var(--line)}nav{display:flex;flex-wrap:wrap;gap:4px}nav h2{width:100%;margin:12px 10px 4px}nav a{font-size:12px}main{padding:22px 16px}header{padding:20px 16px}.document{padding:16px}.toolbar input{min-width:180px}}@media print{header,aside,.toolbar,details,.meta{display:none}.layout{display:block}main{padding:0}.table-wrap{max-height:none;overflow:visible}th{position:static}.document{border:0}}
+</style>
+</head>
+<body>
+<header><div class="eyebrow">SMART HOME BEHAVIOR PATTERN MINING</div><h1>研究結果・執筆ビュー</h1><p>評価を読む。条件を確認する。考察と論文につなげる。</p></header>
+<div class="layout"><aside><label for="nav-search">資料を探す</label><input id="nav-search" type="search" placeholder="評価6、実宅、考察…"><nav id="nav" aria-label="研究資料"></nav><p class="meta" id="catalog-date"></p><p class="meta">保存済み資料の閲覧専用<br>評価結果への書き込み・API呼び出しなし</p></aside><main id="main" aria-live="polite"><p>資料一覧を読み込んでいます…</p></main></div>
+<script>
+"use strict";
+const main=document.getElementById("main");
+let catalog, requestNumber=0;
+const columnLabels={
+  model:"モデル",method:"手法",num_runs:"run数",runs:"run数",paired_runs:"paired run数",
+  mode:"頻度区分",frequency_band:"頻度帯",rank:"順位",condition_id:"条件",sensor_representation:"センサ表現",
+  evaluation_role:"期間の用途",experiment:"実験",train_days:"train日数",test_days:"test日数",condition:"家屋条件",
+  seed:"seed",run_id:"run",run:"run",status:"状態",group:"区分",num_runs_with_patterns:"系列ありrun数",
+  num_patterns:"平均系列数",avg_num_patterns:"平均系列数",num_evaluable_patterns:"評価可能数",num_useful_non_redundant:"有用・非冗長数",
+  useful_non_redundant_pattern_rate:"有用・非冗長率",useful_non_redundant_pattern_rate_std:"同率SD",num_comparable_fragment_pairs:"断片化比較ペア数",
+  fragmentation_rate:"断片化率",contextless_useless_rate:"無文脈率",mean_multilabel_precision:"Precision平均",mean_multilabel_recall:"Recall平均",
+  mean_multilabel_f1:"F1平均（end-to-end）",std_multilabel_f1:"F1 SD",mean_jaccard:"Jaccard平均",mean_occurrence_coverage:"出現被覆率",occurrence_coverage:"出現被覆率",
+  weighted_multilabel_f1:"出現数重み付きF1",mean_paired_delta_f1:"paired ΔF1平均",sd_paired_delta_f1:"paired ΔF1 SD",
+  completed_rows:"完了行数",seeds:"seed一覧",f1_mean:"系列F1平均",f1_sd:"系列F1 SD",f1:"系列F1",
+  test_target_episode_coverage_mean:"test episode被覆率",test_target_episode_coverage:"test episode被覆率",fragmentation_rate_mean:"断片化率平均",
+  num_gold_patterns:"正解系列数",num_extracted_patterns:"抽出系列数",pattern_count_mean:"平均抽出数",pattern_count_sd:"抽出数SD",
+  supported_pattern_count_mean:"test再出現数平均",test_supported_pattern_fraction_mean:"FRR平均",test_supported_pattern_fraction_sd:"FRR SD",
+  mean_test_day_recurrence_mean:"日単位再現率平均",mean_test_day_recurrence_sd:"日単位再現率SD",pattern_count:"抽出数",supported_pattern_count:"test再出現数",
+  test_supported_pattern_fraction:"FRR",mean_test_day_recurrence:"日単位再現率",train_occurrences_total:"train総出現数",test_occurrences_total:"test総出現数",test_transition_coverage:"test遷移被覆率"
+};
+function element(tag,text,attrs={}){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;for(const [k,v] of Object.entries(attrs))e.setAttribute(k,v);return e;}
+function route(path,fragment=""){return "#source="+encodeURIComponent(path)+(fragment?"&anchor="+encodeURIComponent(fragment):"");}
+function inline(parent,text,path){
+  const expression=/`([^`]+)`|\[([^\]]+)\]\(([^)]+)\)|\*\*([^*]+)\*\*/g;let last=0,match;
+  while((match=expression.exec(text))){parent.append(document.createTextNode(text.slice(last,match.index)));
+    if(match[1]!==undefined)parent.append(element("code",match[1]));
+    else if(match[4]!==undefined)parent.append(element("strong",match[4]));
+    else{const link=element("a",match[2]);let target=match[3].replace(/^<|>$/g,"");
+      if(/^https?:\/\//.test(target)){link.href=target;link.rel="noreferrer";}
+      else{try{const resolved=new URL(target,"http://local/"+path),relative=decodeURIComponent(resolved.pathname.slice(1));if(catalog.sources.includes(relative)){if(relative.endsWith(".md"))link.href=route(relative,decodeURIComponent(resolved.hash.slice(1)));else link.href="/download/"+resolved.pathname.slice(1);}else{link.title=relative;link.style.color="inherit";}}catch{link.removeAttribute("href");}}
+      parent.append(link);
+    }last=expression.lastIndex;
+  }parent.append(document.createTextNode(text.slice(last)));
+}
+function markdown(text,path){
+  const container=element("article",undefined,{class:"document"});const lines=text.split(/\r?\n/);let i=0;const used=new Map();
+  const cells=line=>{const parts=[];let cell="",quoted=false,previous="";for(const char of line.trim().replace(/^\||\|$/g,"")){if(char==="`"&&previous!=="\\")quoted=!quoted;if(char==="|"&&previous!=="\\"&&!quoted){parts.push(cell.trim().replace(/\\\|/g,"|"));cell="";}else cell+=char;previous=char;}parts.push(cell.trim().replace(/\\\|/g,"|"));return parts;};
+  while(i<lines.length){const line=lines[i];if(!line.trim()){i++;continue;}
+    if(/^\s*```/.test(line)){const block=[];i++;while(i<lines.length&&!/^\s*```/.test(lines[i]))block.push(lines[i++]);container.append(element("pre",block.join("\n")));i++;continue;}
+    const heading=line.match(/^(#{1,6})\s+(.+)$/);if(heading){const h=element("h"+heading[1].length);inline(h,heading[2],path);let slug=h.textContent.toLowerCase().replace(/[^\p{L}\p{N}_\- ]/gu,"").replace(/ /g,"-");const n=used.get(slug)||0;used.set(slug,n+1);h.id=slug+(n?"-"+n:"");container.append(h);i++;continue;}
+    if(line.startsWith("|")&&i+1<lines.length&&cells(lines[i+1]).every(x=>/^:?-{3,}:?$/.test(x))){const table=element("table"),head=element("tr");for(const c of cells(line)){const th=element("th");inline(th,c,path);head.append(th);}table.append(element("thead"));table.firstChild.append(head);const body=element("tbody");i+=2;while(i<lines.length&&lines[i].startsWith("|")){const tr=element("tr");for(const c of cells(lines[i++])){const td=element("td");inline(td,c,path);tr.append(td);}body.append(tr);}table.append(body);const wrap=element("div",undefined,{class:"table-wrap"});wrap.append(table);container.append(wrap);continue;}
+    if(/^\s*(- |\d+\. )/.test(line)){const ordered=/^\s*\d+\. /.test(line),list=element(ordered?"ol":"ul");while(i<lines.length&&/^\s*(- |\d+\. )/.test(lines[i])){const li=element("li");inline(li,lines[i++].replace(/^\s*(- |\d+\. )/,""),path);list.append(li);}container.append(list);continue;}
+    if(line.startsWith(">")){const q=element("blockquote");inline(q,line.replace(/^>\s?/,""),path);container.append(q);i++;continue;}
+    if(/^---+$/.test(line.trim())){container.append(element("hr"));i++;continue;}
+    const p=element("p");inline(p,line,path);container.append(p);i++;
+  }return container;
+}
+function navigation(){const nav=document.getElementById("nav");nav.replaceChildren();const q=document.getElementById("nav-search").value.toLowerCase();const params=new URLSearchParams(location.hash.slice(1));const current=params.get("id")||"guide";
+  for(const [group,label] of [["writing","全体像・考察・執筆"],["results","評価結果"],["audit","出所・監査・未実施事項"]]){const items=catalog.items.filter(x=>x.group===group&&`${x.title} ${x.note}`.toLowerCase().includes(q));if(!items.length)continue;nav.append(element("h2",label));for(const item of items){const link=element("a",item.title,{href:"#id="+item.id});if(item.id===current&&!params.has("source"))link.setAttribute("aria-current","page");if(!item.available)link.append(element("small","参照ファイルが未配置"));nav.append(link);}}
+}
+function error(message){const box=element("div",undefined,{class:"error"});box.append(element("h2","資料を開けませんでした"),element("p",message),element("p","元の評価結果は変更されていません。資料一覧から別の結果を選べます。"));main.replaceChildren(box);}
+async function getJSON(url){const response=await fetch(url);const data=await response.json();if(!response.ok)throw Error(data.error||"読み取りに失敗しました");return data;}
+function grid(source,item){
+  const data=source.tables[0], headers=data.headers, rows=data.rows;
+  let visible=new Set(item.columns||headers), sortColumn=-1, direction=1;const filters=new Map();
+  const toolbar=element("div",undefined,{class:"toolbar"});const label=element("label","行の中を検索");const search=element("input",undefined,{type:"search",placeholder:"例: proposed / compact / 14"});label.append(search);toolbar.append(label);
+  for(const name of ["model","method","mode","train_days","condition"]){const index=headers.indexOf(name);if(index<0)continue;const values=[...new Set(rows.map(r=>r[index]))].sort();const field=element("label",name),select=element("select",undefined,{"aria-label":name});select.append(element("option","すべて",{value:"*"}));for(const v of values)select.append(element("option",v===""?"空欄":v,{value:v}));if(name==="mode"&&values.includes("fixed"))select.value="fixed";if(name==="train_days"&&values.includes("14"))select.value="14";field.append(select);toolbar.append(field);filters.set(index,select);select.addEventListener("change",render);}
+  const reset=element("button","条件をすべて解除",{type:"button"});reset.onclick=()=>{search.value="";for(const select of filters.values())select.value="*";render();};toolbar.append(reset);main.append(toolbar);
+  const details=element("details"),summary=element("summary","表示する列を選ぶ（元の列名を保持）"),options=element("div",undefined,{class:"column-list"});details.append(summary,options);
+  for(const name of headers){const lab=element("label"),box=element("input",undefined,{type:"checkbox"});box.checked=visible.has(name);box.addEventListener("change",()=>{if(box.checked)visible.add(name);else visible.delete(name);render();});lab.append(box,document.createTextNode(" "+name));options.append(lab);}main.append(details);
+  const count=element("p",undefined,{class:"count"}),wrap=element("div",undefined,{class:"table-wrap"});main.append(count,wrap);search.addEventListener("input",render);
+  function render(){const terms=search.value.toLowerCase().trim().split(/\s+/).filter(Boolean);const filtered=rows.filter(r=>[...filters].every(([idx,s])=>s.value==="*"||r[idx]===s.value)&&terms.every(term=>r.join(" ").toLowerCase().includes(term)));
+    if(sortColumn>=0)filtered.sort((a,b)=>{const av=a[sortColumn],bv=b[sortColumn];const unavailable=v=>v===""||["None","N/A","NA","null"].includes(v);if(unavailable(av)!==unavailable(bv))return unavailable(av)?1:-1;if(unavailable(av))return 0;const numeric=Number.isFinite(Number(av))&&Number.isFinite(Number(bv));return direction*(numeric?Number(av)-Number(bv):av.localeCompare(bv,"ja"));});
+    const selected=headers.map((h,i)=>visible.has(h)?i:-1).filter(i=>i>=0);count.textContent=`${filtered.length} / ${rows.length} 行 · ${selected.length} / ${headers.length} 列。セルの値は原表どおり。列名をクリックすると並べ替え。`;wrap.replaceChildren();
+    if(!selected.length||!filtered.length){wrap.append(element("p",selected.length?"該当する行がありません。条件を解除して確認してください。":"表示する列を選んでください。",{class:"empty"}));return;}
+    const table=element("table"),tr=element("tr"),head=element("thead"),body=element("tbody");for(const idx of selected){const th=element("th",undefined,{scope:"col"}),b=element("button",(columnLabels[headers[idx]]||headers[idx])+(sortColumn===idx?(direction===1?" ↑":" ↓"):""),{type:"button",title:headers[idx]});th.setAttribute("aria-sort",sortColumn===idx?(direction===1?"ascending":"descending"):"none");b.onclick=()=>{direction=sortColumn===idx?-direction:1;sortColumn=idx;render();};th.append(b);tr.append(th);}head.append(tr);table.append(head);
+    for(const row of filtered){const r=element("tr");for(const idx of selected)r.append(element("td",row[idx]));body.append(r);}table.append(body);wrap.append(table);
+  }render();
+}
+async function show(){const ticket=++requestNumber;navigation();const params=new URLSearchParams(location.hash.slice(1));const item=catalog.items.find(x=>x.id===(params.get("id")||"guide"));const path=params.get("source")||(item&&item.path);if(!path){error("資料が見つかりません。");return;}main.replaceChildren(element("p","資料を読み込んでいます…"));
+  try{const source=await getJSON("/api/source?path="+encodeURIComponent(path));if(ticket!==requestNumber)return;main.replaceChildren();const registered=!params.has("source")&&item;
+    if(registered){main.append(element("h2",item.title),element("p",item.note,{class:"note"}));}
+    const meta=element("p",undefined,{class:"meta"});meta.append(document.createTextNode("出所: "+source.path+" "));const raw=element("a","原文をダウンロード",{href:"/download/"+source.path});meta.append(raw);if(registered&&item.table){meta.append(document.createTextNode(" · "),element("a","既存CSV",{href:"/download/"+source.path.replace(/\.md$/,".csv")}));}if(registered&&item.spec)meta.append(document.createTextNode(" · "),element("a","指標と条件の定義",{href:route(item.spec)}));main.append(meta);
+    if(registered&&item.table&&source.tables.length)grid(source,item);else main.append(markdown(source.text,source.path));
+    const detail=element("details"),sum=element("summary","読み込んだ資料のSHA-256"),digest=element("p",source.sha256,{class:"meta"});detail.append(sum,digest);main.append(detail);
+    const anchor=params.get("anchor");if(anchor){const target=document.getElementById(anchor);if(target)target.scrollIntoView();}else window.scrollTo(0,0);
+  }catch(e){if(ticket===requestNumber)error(e.message);}
+}
+async function init(){try{catalog=await getJSON("/api/catalog");document.getElementById("catalog-date").textContent="結果案内の確認日: "+catalog.checked_on;document.getElementById("nav-search").addEventListener("input",navigation);window.addEventListener("hashchange",show);await show();}catch(e){error(e.message);}}
+init();
+</script>
+</body>
+</html>
