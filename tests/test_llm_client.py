@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 from src.behavior_pattern_mining.config import get_config_value, load_config
 from src.behavior_pattern_mining.llm import client as llm_client
 from src.behavior_pattern_mining.llm.client import (
+    bedrock_runtime_client_config,
     call_bedrock,
     call_llm,
     resolve_llm_runtime_config,
@@ -15,6 +16,42 @@ from src.behavior_pattern_mining.llm.client import (
 
 
 class LlmClientTests(unittest.TestCase):
+    def test_bedrock_runtime_client_config_defaults_are_long_and_bounded(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            config = bedrock_runtime_client_config()
+
+        self.assertEqual(config.read_timeout, 600)
+        self.assertEqual(config.connect_timeout, 60)
+        self.assertEqual(config.retries, {"mode": "standard", "total_max_attempts": 2})
+
+    def test_bedrock_runtime_client_config_allows_environment_overrides(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "BEDROCK_READ_TIMEOUT_SECONDS": "720",
+                "BEDROCK_CONNECT_TIMEOUT_SECONDS": "45",
+                "BEDROCK_RETRY_MODE": "adaptive",
+                "BEDROCK_MAX_ATTEMPTS": "3",
+            },
+            clear=True,
+        ):
+            config = bedrock_runtime_client_config()
+
+        self.assertEqual(config.read_timeout, 720)
+        self.assertEqual(config.connect_timeout, 45)
+        self.assertEqual(config.retries, {"mode": "adaptive", "total_max_attempts": 3})
+
+    def test_bedrock_runtime_client_config_rejects_invalid_environment_values(self) -> None:
+        for name, value in (
+            ("BEDROCK_READ_TIMEOUT_SECONDS", "0"),
+            ("BEDROCK_CONNECT_TIMEOUT_SECONDS", "many"),
+            ("BEDROCK_MAX_ATTEMPTS", "-1"),
+            ("BEDROCK_RETRY_MODE", "unbounded"),
+        ):
+            with self.subTest(name=name), patch.dict(os.environ, {name: value}, clear=True):
+                with self.assertRaisesRegex(RuntimeError, name):
+                    bedrock_runtime_client_config()
+
     def test_default_config_uses_bedrock_gpt_sol(self) -> None:
         config = load_config(Path(__file__).resolve().parents[1] / "configs" / "default.yaml")
         self.assertEqual(get_config_value(config, "llm.provider"), "bedrock")
@@ -162,8 +199,15 @@ class LlmClientTests(unittest.TestCase):
             {"prompt_tokens": 10, "response_tokens": 4, "total_tokens": 14},
         )
         self.assertGreaterEqual(duration, 0.0)
-        boto3_module.client.assert_called_once_with(
-            "bedrock-runtime", region_name="us-east-2"
+        boto3_module.client.assert_called_once()
+        client_args, client_kwargs = boto3_module.client.call_args
+        self.assertEqual(client_args, ("bedrock-runtime",))
+        self.assertEqual(client_kwargs["region_name"], "us-east-2")
+        self.assertEqual(client_kwargs["config"].read_timeout, 600)
+        self.assertEqual(client_kwargs["config"].connect_timeout, 60)
+        self.assertEqual(
+            client_kwargs["config"].retries,
+            {"mode": "standard", "total_max_attempts": 2},
         )
         bedrock_client.converse.assert_called_once_with(
             modelId="test.model-v1:0",
@@ -225,48 +269,28 @@ class LlmClientTests(unittest.TestCase):
             inferenceConfig={"maxTokens": 512},
         )
 
-    def test_bedrock_retries_transient_service_error(self) -> None:
-        transient_error = type("InternalServerException", (Exception,), {})(
-            "temporary failure"
-        )
-        transient_error.response = {
-            "Error": {
-                "Code": "InternalServerException",
-                "Message": "temporary failure",
-            }
-        }
+    def test_bedrock_read_timeout_is_not_retried_above_the_sdk(self) -> None:
+        timeout_error = type("ReadTimeoutError", (Exception,), {})("read timeout")
         bedrock_client = Mock()
-        bedrock_client.converse.side_effect = [
-            transient_error,
-            {
-                "output": {"message": {"content": [{"text": "ok"}]}},
-                "usage": {},
-            },
-        ]
+        bedrock_client.converse.side_effect = timeout_error
         boto3_module = Mock()
         boto3_module.client.return_value = bedrock_client
-        sleep_calls: list[float] = []
-        original_sleep = llm_client.time.sleep
-
-        llm_client.time.sleep = sleep_calls.append
-        try:
-            with patch(
-                "src.behavior_pattern_mining.llm.client.importlib.import_module",
-                return_value=boto3_module,
-            ):
-                text, _, _, _ = call_bedrock(
+        with patch(
+            "src.behavior_pattern_mining.llm.client.importlib.import_module",
+            return_value=boto3_module,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "応答待ちがread timeout"):
+                call_bedrock(
                     model_name="us.openai.gpt-5.6-sol",
                     user_message="prompt",
                     temperature=None,
                     region_name="us-east-2",
                     max_tokens=512,
                 )
-        finally:
-            llm_client.time.sleep = original_sleep
 
-        self.assertEqual(text, "ok")
-        self.assertEqual(bedrock_client.converse.call_count, 2)
-        self.assertEqual(sleep_calls, [1])
+        # The configured standard Botocore retry owns transient transport
+        # retries.  The adapter must not multiply it with another retry loop.
+        self.assertEqual(bedrock_client.converse.call_count, 1)
 
     def test_fable_retries_data_retention_routing_rejection(self) -> None:
         retention_error = type("ValidationException", (Exception,), {})(

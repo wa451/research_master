@@ -34,7 +34,13 @@ AWS_REGION=us-east-2
 BEDROCK_MODEL_ID=us.openai.gpt-5.6-sol
 # BEDROCK_MAX_TOKENS=8192
 # BEDROCK_ESTIMATED_OUTPUT_TOKENS=1000
+# BEDROCK_READ_TIMEOUT_SECONDS=600
+# BEDROCK_CONNECT_TIMEOUT_SECONDS=60
+# BEDROCK_RETRY_MODE=standard
+# BEDROCK_MAX_ATTEMPTS=2
 ```
+
+Bedrockの長時間推論は、既定のread timeoutを600秒、connect timeoutを60秒に設定します。`BEDROCK_MAX_ATTEMPTS=2` は初回を含む最大送信回数で、SDK標準retryを1回に制限します。read timeout後はBedrock側で推論が完了している可能性があるため、値を大きくしたり上位の再試行と組み合わせたりすると重複推論・料金増加につながることがあります。
 
 Bedrock実行でもコマンドは共通です。LLM成果物、checkpoint、usage metrics、評価5〜10の結果は、`.env` のprovider/modelから自動的に `results/<model>/` へ保存されます。
 

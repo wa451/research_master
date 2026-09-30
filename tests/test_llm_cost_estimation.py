@@ -89,6 +89,15 @@ class LlmCostEstimationTests(unittest.TestCase):
         self.assertTrue(result.exact)
         self.assertEqual(result.total_tokens, 7)
         self.assertEqual(result.method, "Bedrock CountTokens")
+        client_args, client_kwargs = boto3_module.client.call_args
+        self.assertEqual(client_args, ("bedrock-runtime",))
+        self.assertEqual(client_kwargs["region_name"], "us-east-2")
+        self.assertEqual(client_kwargs["config"].read_timeout, 600)
+        self.assertEqual(client_kwargs["config"].connect_timeout, 60)
+        self.assertEqual(
+            client_kwargs["config"].retries,
+            {"mode": "standard", "total_max_attempts": 2},
+        )
         bedrock_client.count_tokens.assert_has_calls(
             [
                 call(

@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, List, Optional, Sequence, Tuple
 
+from botocore.config import Config
+
 
 @dataclass(frozen=True)
 class LLMRuntimeConfig:
@@ -36,13 +38,15 @@ class BedrockInputTokenCount:
     warning: Optional[str] = None
 
 
-BEDROCK_CONVERSE_MAX_ATTEMPTS = 3
-FABLE_DATA_RETENTION_MAX_ATTEMPTS = 6
-BEDROCK_CONVERSE_RETRYABLE_ERROR_CODES = {
-    "InternalServerException",
-    "ServiceUnavailableException",
-    "ThrottlingException",
-}
+# Keep the SDK retry budget deliberately small.  A read timeout can be
+# ambiguous (the service may still finish the inference), and some callers
+# have checkpoint-aware resume logic above this layer.
+DEFAULT_BEDROCK_READ_TIMEOUT_SECONDS = 600
+DEFAULT_BEDROCK_CONNECT_TIMEOUT_SECONDS = 60
+DEFAULT_BEDROCK_RETRY_MODE = "standard"
+DEFAULT_BEDROCK_MAX_ATTEMPTS = 2
+SUPPORTED_BEDROCK_RETRY_MODES = {"legacy", "standard", "adaptive"}
+FABLE_DATA_RETENTION_MAX_ATTEMPTS = 3
 
 
 def bedrock_supports_temperature(model_name: str) -> bool:
@@ -57,6 +61,63 @@ def bedrock_supports_temperature(model_name: str) -> bool:
         "global.anthropic.claude-fable-5",
         "us.anthropic.claude-fable-5",
     }
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    """Read a positive integer timeout/retry setting without silent fallback."""
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} は1以上の整数で指定してください。") from exc
+    if value < 1:
+        raise RuntimeError(f"{name} は1以上の整数で指定してください。")
+    return value
+
+
+def bedrock_runtime_client_config() -> Config:
+    """Return the shared, bounded Botocore configuration for Bedrock calls.
+
+    ``total_max_attempts`` includes the first request.  The default of two
+    therefore permits one SDK-managed retry, with standard exponential backoff.
+    """
+    read_timeout = _positive_int_env(
+        "BEDROCK_READ_TIMEOUT_SECONDS", DEFAULT_BEDROCK_READ_TIMEOUT_SECONDS
+    )
+    connect_timeout = _positive_int_env(
+        "BEDROCK_CONNECT_TIMEOUT_SECONDS", DEFAULT_BEDROCK_CONNECT_TIMEOUT_SECONDS
+    )
+    max_attempts = _positive_int_env(
+        "BEDROCK_MAX_ATTEMPTS", DEFAULT_BEDROCK_MAX_ATTEMPTS
+    )
+    retry_mode = os.getenv("BEDROCK_RETRY_MODE", DEFAULT_BEDROCK_RETRY_MODE).strip().lower()
+    if retry_mode not in SUPPORTED_BEDROCK_RETRY_MODES:
+        supported = ", ".join(sorted(SUPPORTED_BEDROCK_RETRY_MODES))
+        raise RuntimeError(
+            f"BEDROCK_RETRY_MODE は次のいずれかを指定してください: {supported}"
+        )
+    return Config(
+        read_timeout=read_timeout,
+        connect_timeout=connect_timeout,
+        retries={"mode": retry_mode, "total_max_attempts": max_attempts},
+    )
+
+
+def create_bedrock_runtime_client(region_name: str) -> Any:
+    """Create the only Bedrock Runtime client used by execution and estimates."""
+    try:
+        boto3 = importlib.import_module("boto3")
+    except ImportError as exc:
+        raise RuntimeError(
+            "Bedrock実行には boto3 が必要です。uv sync または pip install boto3 を実行してください。"
+        ) from exc
+    return boto3.client(
+        "bedrock-runtime",
+        region_name=region_name,
+        config=bedrock_runtime_client_config(),
+    )
 
 
 def resolve_llm_runtime_config(
@@ -538,10 +599,16 @@ def _bedrock_error_message(exc: Exception, *, model_name: str, region_name: str)
             f"推論設定がモデル要件に合うか確認してください: modelId={model_name}, "
             f"region={region_name}: {detail}"
         )
+    if exception_name == "ReadTimeoutError":
+        return (
+            "Bedrock Runtimeからの応答待ちがread timeoutを超えました。"
+            "モデルが推論を完了している可能性もあるため、同じリクエストを無制限に再送しません。"
+            "BEDROCK_READ_TIMEOUT_SECONDS、入力サイズ、Bedrock側の一時的な遅延を確認してください: "
+            f"region={region_name}: {detail}"
+        )
     if exception_name in {
         "EndpointConnectionError",
         "ConnectTimeoutError",
-        "ReadTimeoutError",
         "UnknownEndpointError",
     }:
         return (
@@ -643,8 +710,7 @@ def count_bedrock_input_tokens(
         )
 
     try:
-        boto3 = importlib.import_module("boto3")
-        client = boto3.client("bedrock-runtime", region_name=region_name)
+        client = create_bedrock_runtime_client(region_name)
     except Exception as exc:
         total = sum(
             approximate_bedrock_input_tokens(messages) * repetitions
@@ -706,14 +772,7 @@ def call_bedrock(
 ) -> Tuple[str, str, dict, float]:
     """Call Amazon Bedrock Converse and return the shared response tuple."""
     try:
-        boto3 = importlib.import_module("boto3")
-    except ImportError as exc:
-        raise RuntimeError(
-            "Bedrock実行には boto3 が必要です。uv sync または pip install boto3 を実行してください。"
-        ) from exc
-
-    try:
-        client = boto3.client("bedrock-runtime", region_name=region_name)
+        client = create_bedrock_runtime_client(region_name)
         messages = build_bedrock_messages(user_message)
         inference_config: dict[str, int | float] = {"maxTokens": max_tokens}
         # GPT-5.6 profiles and Claude Fable 5 reject arbitrary ``temperature``.
@@ -735,19 +794,10 @@ def call_bedrock(
                 retention_routing_error = is_fable_data_retention_routing_error(
                     exc, model_name
                 )
-                max_attempts = (
-                    FABLE_DATA_RETENTION_MAX_ATTEMPTS
-                    if retention_routing_error
-                    else BEDROCK_CONVERSE_MAX_ATTEMPTS
-                )
-                if (
-                    (
-                        _bedrock_error_code(exc)
-                        in BEDROCK_CONVERSE_RETRYABLE_ERROR_CODES
-                        or retention_routing_error
-                    )
-                    and attempt < max_attempts
-                ):
+                # This validation rejection occurs before inference on the
+                # cross-region Fable profile.  It is the sole explicit retry
+                # here; ordinary transport retries belong to Botocore Config.
+                if retention_routing_error and attempt < FABLE_DATA_RETENTION_MAX_ATTEMPTS:
                     time.sleep(2 ** (attempt - 1))
                     continue
                 raise
