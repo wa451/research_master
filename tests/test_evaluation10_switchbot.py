@@ -402,6 +402,46 @@ class Evaluation10SwitchBotTests(unittest.TestCase):
             self.assertEqual(completed[1].read_text(encoding="utf-8"), "completed run 2")
             self.assertEqual(extractor.call_count, 1)
 
+    def test_resume_extract_retries_transport_error_and_reuses_completed_runs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "output"
+            preparation = self.prepare_snapshot(self.make_snapshot(root), output)
+            results = root / "results"
+            completed = [
+                llm_patterns_path(output, preparation, results, run)
+                for run in (1, 2)
+            ]
+            for run, path in enumerate(completed, start=1):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(f"completed run {run}", encoding="utf-8")
+
+            calls: list[list[int]] = []
+
+            def timeout_then_write_missing_runs(**kwargs):
+                calls.append(kwargs["run_ids"])
+                if len(calls) == 1:
+                    raise RuntimeError(
+                        "Bedrock Runtimeエンドポイントへ接続できません: Read timeout"
+                    )
+                for run in kwargs["run_ids"]:
+                    path = llm_patterns_path(output, preparation, results, run)
+                    path.write_text(f"new run {run}", encoding="utf-8")
+
+            with (
+                patch(
+                    "scripts.evaluate_10_switchbot.pattern_extractor.main",
+                    side_effect=timeout_then_write_missing_runs,
+                ),
+                patch("scripts.evaluate_10_switchbot.time.sleep") as sleep,
+            ):
+                resume_extract(output_dir=output, results_dir=results, runs=5)
+
+            self.assertEqual(calls, [[3, 4, 5], [3, 4, 5]])
+            self.assertEqual(completed[0].read_text(encoding="utf-8"), "completed run 1")
+            self.assertEqual(completed[1].read_text(encoding="utf-8"), "completed run 2")
+            sleep.assert_called_once_with(2)
+
     def test_llm_run_summary_uses_mean_and_sample_sd(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

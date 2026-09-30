@@ -7,6 +7,7 @@ import argparse
 import json
 from pathlib import Path
 import sys
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -29,6 +30,18 @@ from src.behavior_pattern_mining.evaluation.evaluation6_manifest import (  # noq
     load_evaluation7_best_condition_manifest,
 )
 from src.behavior_pattern_mining.llm import pattern_extractor  # noqa: E402
+
+
+# A request can time out after prior mode checkpoints have been persisted.  Retry
+# only transport failures here; parsing/validation errors must remain visible.
+EXTRACT_TRANSPORT_MAX_ATTEMPTS = 3
+RETRYABLE_TRANSPORT_ERROR_MARKERS = (
+    "bedrock runtimeエンドポイントへ接続できません",
+    "read timeout",
+    "connect timeout",
+    "endpointconnectionerror",
+    "connectionclosederror",
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -73,28 +86,58 @@ def _resolve(path: Path) -> Path:
     return (path if path.is_absolute() else ROOT / path).resolve()
 
 
+def _missing_run_ids(paths: list[Path]) -> list[int]:
+    return [run for run, path in enumerate(paths, start=1) if not path.is_file()]
+
+
+def _is_retryable_transport_error(exc: RuntimeError) -> bool:
+    message = str(exc).lower()
+    return any(marker in message for marker in RETRYABLE_TRANSPORT_ERROR_MARKERS)
+
+
 def resume_extract(
     *, output_dir: Path, results_dir: Path, runs: int
 ) -> list[Path]:
-    """Generate only missing run files, preserving completed LLM artifacts."""
+    """Generate only missing run files, preserving completed LLM artifacts.
+
+    A transient Bedrock transport timeout retries the extraction at most twice.
+    Each retry recomputes the missing runs, so final JSONs and per-mode
+    checkpoints saved before the timeout are reused rather than overwritten.
+    """
     preparation = verify_preparation(output_dir)
     params = preparation["parameters"]
     paths = [
         llm_patterns_path(output_dir, preparation, results_dir, run)
         for run in range(1, runs + 1)
     ]
-    missing_run_ids = [run for run, path in enumerate(paths, start=1) if not path.is_file()]
-    if not missing_run_ids:
-        return paths
-    pattern_extractor.main(
-        days=preparation["split"]["train_days"],
-        input_modes_dir=output_dir / "network",
-        output_dir=paths[0].parent,
-        runs=runs,
-        run_ids=missing_run_ids,
-        n_states=params["n_states"],
-        hamming_threshold=params["hamming_threshold"],
-    )
+    for attempt in range(1, EXTRACT_TRANSPORT_MAX_ATTEMPTS + 1):
+        missing_run_ids = _missing_run_ids(paths)
+        if not missing_run_ids:
+            return paths
+        try:
+            pattern_extractor.main(
+                days=preparation["split"]["train_days"],
+                input_modes_dir=output_dir / "network",
+                output_dir=paths[0].parent,
+                runs=runs,
+                run_ids=missing_run_ids,
+                n_states=params["n_states"],
+                hamming_threshold=params["hamming_threshold"],
+            )
+        except RuntimeError as exc:
+            if (
+                not _is_retryable_transport_error(exc)
+                or attempt == EXTRACT_TRANSPORT_MAX_ATTEMPTS
+            ):
+                raise
+            delay_sec = 2**attempt
+            print(
+                "Bedrock接続が一時的に失敗しました。"
+                f"保存済みcheckpointを再利用して{delay_sec}秒後に再試行します "
+                f"({attempt + 1}/{EXTRACT_TRANSPORT_MAX_ATTEMPTS})。"
+            )
+            time.sleep(delay_sec)
+
     missing = [path for path in paths if not path.is_file()]
     if missing:
         raise RuntimeError(
