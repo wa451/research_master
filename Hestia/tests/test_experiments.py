@@ -55,7 +55,11 @@ from smart_home_sim.experiments.plan import (
     default_conditions,
     load_plan,
 )
-from smart_home_sim.experiments.research import extraction_budget
+from smart_home_sim.experiments.research import (
+    _archive_invalid_llm_output,
+    _validate_llm_output,
+    extraction_budget,
+)
 from smart_home_sim.experiments.research_worker import main as research_worker_main
 from smart_home_sim.experiments.scenarios import build_scenario
 
@@ -924,3 +928,35 @@ def test_added_network_is_rejected_before_api_work(tmp_path: Path) -> None:
     write_json(run / "analysis/networks/state_transition_Unexpected.json", {})
     with pytest.raises(ValueError, match="unexpected files"):
         extraction_budget(run)
+
+
+def test_invalid_completed_llm_output_is_archived_by_affected_mode(tmp_path: Path) -> None:
+    prediction_dir = tmp_path / "artifacts/predictions/llm"
+    output = prediction_dir / "llm_sequences_modes_15_0_3days_1.json"
+    write_json(
+        output,
+        [
+            {
+                "sequence": ["state1", "state2", "state3", "state4", "state5"],
+                "time_band_interpretations": {
+                    "Morning": {"ADL系列ラベル": ["Meal"]}
+                },
+            }
+        ],
+    )
+    write_json(prediction_dir / "complete_1.json", {"files": {}})
+    for mode in ("Morning", "Night"):
+        write_json(
+            prediction_dir / "llm_mode_records_run1" / f"state_transition_{mode}.json",
+            [],
+        )
+
+    with pytest.raises(ValueError, match="prediction sequence must contain 2-4 state IDs"):
+        _validate_llm_output(output)
+    archive = _archive_invalid_llm_output(tmp_path / "artifacts", 1, output)
+
+    assert (archive / output.relative_to(prediction_dir)).is_file()
+    assert (archive / "complete_1.json").is_file()
+    assert not output.exists()
+    assert not (prediction_dir / "llm_mode_records_run1/state_transition_Morning.json").exists()
+    assert (prediction_dir / "llm_mode_records_run1/state_transition_Night.json").is_file()

@@ -94,6 +94,8 @@ Studioの `events.csv` / `casas_motion_door.txt` 単体には本評価が要求�
 
 評価9は一括実行の各前段を毎回CLIに渡して、既存成果物のhashを検証する。ファイルの存在だけで前段を飛ばさない。完了済みの生成・前処理・LLM反復は既存CLIが検証して再利用する。「全ステップを再実行」も強制上書きではない。計画・コードの変更や不完全な生成が検出された場合は停止するため、新しい実験ディレクトリと集計先を指定する。
 
+LLM出力がJSONとしては読めても、採点契約（状態列2〜4件・時間帯別ADLラベル）を満たさない場合は完了扱いにしない。再実行時は不正だった時間帯のcheckpointと出力を `predictions/llm/invalid_completed/` に退避し、その時間帯だけを再抽出する。正常な時間帯・反復・前処理成果物は再利用する。
+
 画面で確定した設定はsourceの`noise_free_pilot.yaml` / `noise_free.yaml`を上書きせず、全ExperimentPlan項目を保持したeffective planとして保存する。同じ内容は同じhashのファイルを再利用する。同じexperiment出力先へ異なるeffective planを適用すると、従来どおり`experiment.json`との一致検証で停止するため、設定変更時は新しい実験ディレクトリを使う。
 比較はHestia生成処理と同じraw snapshot一致で行う。旧snapshotが後から追加された既定項目を欠く場合も既存成果物を暗黙に書き換えず、画面が実行前に停止する。表示される **推奨する新しい出力先へ切り替える** を押すと、hash付きの生成先・集計先へ一度に変更できる。同じパスを使いたい場合は確認チェック後に **既存成果物をバックアップして同じ出力先を再利用** を押す。既存の生成・集計成果物は削除せず`output/<model>/logs/evaluation_dashboard/evaluation9_backups/`へ退避し、空いた元パスを新しいplanで再利用する。hash検証自体は無効化しない。
 

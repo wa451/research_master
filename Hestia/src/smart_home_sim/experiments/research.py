@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,78 @@ from smart_home_sim.experiments.artifacts import (
     verify_files,
     write_json,
 )
+from smart_home_sim.experiments.metrics import parse_predictions
+
+
+def _validate_llm_output(path: Path) -> None:
+    """Reject syntactically valid JSON that cannot be scored by evaluation."""
+    try:
+        parse_predictions(read_json(path), require_labels=True)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid completed LLM output: {path} ({exc})") from exc
+
+
+def _invalid_output_modes(payload: Any) -> set[str]:
+    """Return modes that contributed an invalid record, or all modes if unclear."""
+    all_modes = {"Midnight", "Morning", "Daytime", "Night"}
+    if not isinstance(payload, list):
+        return all_modes
+    invalid_modes: set[str] = set()
+    for record in payload:
+        if not isinstance(record, dict):
+            return all_modes
+        sequence = record.get("sequence", record.get("遷移のパターン"))
+        if (
+            not isinstance(sequence, list)
+            or not all(isinstance(item, str) for item in sequence)
+            or not 2 <= len(sequence) <= 4
+        ):
+            interpretations = record.get("time_band_interpretations")
+            if isinstance(interpretations, dict):
+                invalid_modes.update(mode for mode in interpretations if mode in all_modes)
+            else:
+                mode = record.get("mode")
+                if mode in all_modes:
+                    invalid_modes.add(mode)
+                else:
+                    return all_modes
+    return invalid_modes or all_modes
+
+
+def _archive_invalid_llm_output(
+    artifact_run: Path,
+    index: int,
+    output: Path,
+) -> Path:
+    """Preserve an unscorable response and clear only its affected mode checkpoints."""
+    payload = read_json(output) if output.is_file() else None
+    modes = _invalid_output_modes(payload)
+    prediction_dir = artifact_run / "predictions/llm"
+    attempts_root = prediction_dir / "invalid_completed"
+    attempt = 1
+    while (attempts_root / f"run_{index}_attempt_{attempt}").exists():
+        attempt += 1
+    archive = attempts_root / f"run_{index}_attempt_{attempt}"
+    archive.mkdir(parents=True)
+
+    paths = [output, prediction_dir / f"complete_{index}.json"]
+    # The output/metric filename parameters live in the experiment plan, so move
+    # the run-specific metrics file by glob instead of re-deriving its name here.
+    paths.extend(prediction_dir.glob(f"llm_modes_metrics_*_run{index}.csv"))
+    for mode in modes:
+        paths.extend(
+            [
+                prediction_dir / f"llm_mode_records_run{index}" / f"state_transition_{mode}.json",
+                prediction_dir / f"llm_mode_records_run{index}" / f"state_transition_{mode}_raw.txt",
+                prediction_dir / f"llm_mode_records_run{index}" / f"state_transition_{mode}_metrics.json",
+            ]
+        )
+    for path in paths:
+        if path.is_file():
+            destination = archive / path.relative_to(prediction_dir)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(path), str(destination))
+    return archive
 
 
 def research_provenance(root: Path) -> dict[str, Any]:
@@ -197,9 +270,16 @@ def extract(
     settings = read_json(run / "run.json")["plan"]
     for index in range(1, settings["llm_runs"] + 1):
         marker = artifact_run / f"predictions/llm/complete_{index}.json"
+        output = llm_output(run, index, artifact_run)
         if marker.exists():
             verify_files(artifact_run, read_json(marker)["files"])
-            continue
+            try:
+                _validate_llm_output(output)
+            except ValueError:
+                archive = _archive_invalid_llm_output(artifact_run, index, output)
+                print(f"Archived invalid LLM output for run {index}: {archive}")
+            else:
+                continue
         _worker(
             "extract",
             run,
@@ -207,9 +287,13 @@ def extract(
             index,
             artifact_run / "predictions/llm",
         )
-        output = llm_output(run, index, artifact_run)
-        if not output.is_file() or not isinstance(read_json(output), list):
+        if not output.is_file():
             raise ValueError(f"missing or invalid completed LLM output: {output}")
+        try:
+            _validate_llm_output(output)
+        except ValueError:
+            _archive_invalid_llm_output(artifact_run, index, output)
+            raise
         files = {output.relative_to(artifact_run).as_posix(): file_hash(output)}
         checkpoints = artifact_run / f"predictions/llm/llm_mode_records_run{index}"
         files.update(
