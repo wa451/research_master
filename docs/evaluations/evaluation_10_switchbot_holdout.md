@@ -9,7 +9,7 @@ output/<model>/10_real_home_temporal_generalization/<期間>/
 results/<model>/10_real_home_temporal_generalization/<期間>/
 ```
 
-既存成果物がある出力先への準備と評価は停止する。抽出では、同じ前処理fingerprint・モデルmetadataに紐付く完了済みrun JSONを上書きせず、未完了runだけを再開する。Bedrock接続の読取・接続タイムアウトだけは、保存済みの時間帯checkpointを再利用して最大3回（2秒、4秒の待機を挟む）再試行する。パース・入力検証などの研究上のエラーは再試行せず停止する。過去の実行を消去・上書きしてはならない。
+既存成果物がある出力先への準備と評価は停止する。抽出では、同じ前処理fingerprint・モデルmetadataに紐付く完了済みrun JSONを上書きせず、未完了runだけを再開する。Bedrock接続の読取・接続タイムアウトだけは、保存済みの時間帯checkpointを再利用して1回だけ再試行する。共有Bedrock clientの標準リトライと合わせ、未完了の同一時間帯への送信は最大4回に抑える。パース・入力検証などの研究上のエラーは再試行せず停止する。過去の実行を消去・上書きしてはならない。
 
 ## 入力と固定条件
 

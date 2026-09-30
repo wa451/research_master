@@ -34,7 +34,10 @@ from src.behavior_pattern_mining.llm import pattern_extractor  # noqa: E402
 
 # A request can time out after prior mode checkpoints have been persisted.  Retry
 # only transport failures here; parsing/validation errors must remain visible.
-EXTRACT_TRANSPORT_MAX_ATTEMPTS = 3
+# The shared Bedrock client also retries a transient request once.  Limit this
+# outer, checkpoint-aware resume to two attempts so an unresolved mode is not
+# sent more than four times in total.
+EXTRACT_TRANSPORT_MAX_ATTEMPTS = 2
 RETRYABLE_TRANSPORT_ERROR_MARKERS = (
     "bedrock runtimeエンドポイントへ接続できません",
     "read timeout",
@@ -100,7 +103,7 @@ def resume_extract(
 ) -> list[Path]:
     """Generate only missing run files, preserving completed LLM artifacts.
 
-    A transient Bedrock transport timeout retries the extraction at most twice.
+    A transient Bedrock transport timeout retries the extraction once.
     Each retry recomputes the missing runs, so final JSONs and per-mode
     checkpoints saved before the timeout are reused rather than overwritten.
     """
