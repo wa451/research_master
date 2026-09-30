@@ -101,6 +101,16 @@ from src.behavior_pattern_mining.data.sensor_representation import (  # noqa: E4
 
 DEFAULT_N_STATES = 10
 DEFAULT_HAMMING_THRESHOLD = 2
+FABLE5_MODEL_ID = "us.anthropic.claude-fable-5"
+
+# These paths hold the compatible artifacts produced in the current Fable 5
+# dashboard session. Keep their plan/provenance suffixes so Hestia can resume.
+FABLE5_EVALUATION9_ARTIFACT_DIRECTORIES = {
+    "本実験": "full_4d35fa98_e4a41f40",
+    "期間感度評価": "duration_54f94fee_e4a41f40",
+}
+EVALUATION9_DIRECTORY_DEFAULT_VERSION = "2026-09-30-fable5-artifacts"
+EVALUATION10_DIRECTORY_DEFAULT_VERSION = "2026-09-30-current-snapshot"
 
 
 def render_sensor_representation(scope: str) -> tuple[str, str, str]:
@@ -153,6 +163,28 @@ def model_output_relative(common: dict | None = None) -> str:
         else current_model_output_root()
     )
     return root.relative_to(PROJECT_ROOT).as_posix()
+
+
+def evaluation9_directory_defaults(common: dict, preset: str) -> tuple[str, str]:
+    """Return resume-safe Evaluation 9 directories for the selected preset."""
+    directory_name = preset_directory_name(preset)
+    if common.get("model_id") == FABLE5_MODEL_ID:
+        directory_name = FABLE5_EVALUATION9_ARTIFACT_DIRECTORIES.get(
+            preset, directory_name
+        )
+    return (
+        f"{model_output_relative(common)}/9_hestia/{directory_name}",
+        f"{model_results_relative(common)}/9_hestia/{directory_name}",
+    )
+
+
+def evaluation10_directory_defaults(common: dict, snapshot_name: str) -> tuple[str, str]:
+    """Keep Evaluation 10 pointed at the selected snapshot's formal namespace."""
+    directory_name = f"10_real_home_temporal_generalization/{snapshot_name}"
+    return (
+        f"{model_output_relative(common)}/{directory_name}",
+        f"{model_results_relative(common)}/{directory_name}",
+    )
 
 
 def log_root(settings: dict) -> Path:
@@ -1326,16 +1358,17 @@ def render_eval9_settings(common: dict) -> dict:
     duration = preset == DURATION_PRESET
     duration_train_days = DURATION_TRAIN_DAYS if duration else None
 
-    preset_token = f"{base_plan_path.resolve()}:{preset}:{common['model_id']}"
+    preset_token = (
+        f"{base_plan_path.resolve()}:{preset}:{common['model_id']}:"
+        f"{EVALUATION9_DIRECTORY_DEFAULT_VERSION}"
+    )
     if st.session_state.get("eval9_loaded_preset") != preset_token:
         st.session_state["eval9_loaded_preset"] = preset_token
         st.session_state["eval9_llm_runs"] = base_plan.llm_runs
         st.session_state["eval9_seeds"] = ", ".join(str(seed) for seed in base_plan.seeds)
-        suffix = preset_directory_name(preset)
-        st.session_state["eval9_experiment"] = f"{model_output_relative(common)}/9_hestia/{suffix}"
-        st.session_state["eval9_output_dir"] = (
-            f"{model_results_relative(common)}/9_hestia/{suffix}"
-        )
+        experiment_default, output_default = evaluation9_directory_defaults(common, preset)
+        st.session_state["eval9_experiment"] = experiment_default
+        st.session_state["eval9_output_dir"] = output_default
 
     st.caption(f"ベースplan: `{display_path(base_plan_path)}`")
     summary_columns = st.columns(4)
@@ -1557,13 +1590,22 @@ def render_eval10_settings(common: dict) -> dict:
         "data/switchbot/2026-08-19_2026-09-19",
     )
     snapshot_name = Path(snapshot.rstrip("/")).name or "snapshot"
+    output_default, results_default = evaluation10_directory_defaults(
+        common, snapshot_name
+    )
+    eval10_directory_token = (
+        f"{common['model_id']}:{snapshot_name}:{EVALUATION10_DIRECTORY_DEFAULT_VERSION}"
+    )
+    if st.session_state.get("eval10_loaded_snapshot") != eval10_directory_token:
+        st.session_state["eval10_loaded_snapshot"] = eval10_directory_token
+        st.session_state["eval10_output_dir"] = output_default
+        st.session_state["eval10_results_dir"] = results_default
     output_dir = st.text_input(
-        "中間成果物ディレクトリ", f"{model_output_relative(common)}/10_real_home_temporal_generalization/{snapshot_name}"
+        "中間成果物ディレクトリ", key="eval10_output_dir"
     )
     results_dir = st.text_input(
         "評価10の正式集計先",
-        f"{model_results_relative(common)}/10_real_home_temporal_generalization/{snapshot_name}",
-        key=f"eval10_results_dir_{common['model_id']}",
+        key="eval10_results_dir",
     )
     eval7_best_condition_manifest = FORMAL_EVALUATION7_BEST_CONDITION_MANIFEST.as_posix()
     st.caption(

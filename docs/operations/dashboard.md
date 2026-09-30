@@ -163,6 +163,8 @@ Streamlit画面は正式条件（14日・全28条件・各5 run）を固定で�
 
 一括実行でもLLM APIはチェックボックスを有効にした場合だけ呼ぶ。正式K/hの根拠は、実行モデルにかかわらず確定済みの`results/gpt-5.6-sol/7_param_search_14d_5runs_individual_holdout/evaluation7_best_condition_manifest.json`である。前処理の期待出力が揃っている場合、「不足ファイル生成 + 評価本体」はステップ1を再実行せず、LLM抽出から再開する。入力hashまたはこのmanifestのhashが準備時から変わっている場合、後段CLIは停止する。
 
+Claude Fable 5では、評価9の「本実験」と「期間感度評価」を選んだとき、画面はそれぞれ現在のhash付き中間成果物・集計先を初期表示する。評価10も現在のSwitchBot snapshotの正式namespaceを初期表示する。これらは再開用の既存成果物であり、別のモデル・snapshot・実験条件へ切り替える場合は対応する別ディレクトリを明示する。
+
 ## ログとコマンド履歴
 
 ログは以下に保存されます。

@@ -22,6 +22,8 @@ from app.streamlit_app import (
     DEFAULT_HAMMING_THRESHOLD,
     DEFAULT_N_STATES,
     batch_target_steps,
+    evaluation10_directory_defaults,
+    evaluation9_directory_defaults,
     eval5_condition_widget_key,
 )
 from app.model_selection import (
@@ -61,6 +63,40 @@ class DashboardModelSelectionTests(unittest.TestCase):
 
         self.assertNotEqual(default_key, selected_key)
         self.assertIn("aruba_individual_10_2_154days", selected_key)
+
+    def test_fable_evaluation9_defaults_resume_current_artifacts(self) -> None:
+        common = {
+            "model_id": "us.anthropic.claude-fable-5",
+            "model_output_root": PROJECT_ROOT / "output/claude-fable-5",
+            "model_results_root": PROJECT_ROOT / "results/claude-fable-5",
+        }
+        self.assertEqual(
+            evaluation9_directory_defaults(common, "本実験"),
+            (
+                "output/claude-fable-5/9_hestia/full_4d35fa98_e4a41f40",
+                "results/claude-fable-5/9_hestia/full_4d35fa98_e4a41f40",
+            ),
+        )
+        self.assertEqual(
+            evaluation9_directory_defaults(common, "期間感度評価"),
+            (
+                "output/claude-fable-5/9_hestia/duration_54f94fee_e4a41f40",
+                "results/claude-fable-5/9_hestia/duration_54f94fee_e4a41f40",
+            ),
+        )
+
+    def test_evaluation10_defaults_keep_current_snapshot_namespace(self) -> None:
+        common = {
+            "model_output_root": PROJECT_ROOT / "output/claude-fable-5",
+            "model_results_root": PROJECT_ROOT / "results/claude-fable-5",
+        }
+        self.assertEqual(
+            evaluation10_directory_defaults(common, "2026-08-19_2026-09-19"),
+            (
+                "output/claude-fable-5/10_real_home_temporal_generalization/2026-08-19_2026-09-19",
+                "results/claude-fable-5/10_real_home_temporal_generalization/2026-08-19_2026-09-19",
+            ),
+        )
 
     def test_fable_is_default_and_all_model_roots_are_distinct(self) -> None:
         self.assertEqual(
